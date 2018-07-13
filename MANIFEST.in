@@ -1,0 +1,2 @@
+include setup.cfg setup.py README.md LICENSE.txt CHANGELOG.md
+recursive-include codebraid *.py
