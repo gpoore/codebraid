@@ -9,6 +9,7 @@
 
 
 import json
+import os
 import pathlib
 import platform
 import re
@@ -32,14 +33,14 @@ class PandocConverter(Converter):
 
     Pandoc is used to parse input into a JSON-based AST.  Code nodes in the
     AST are located, processed, and then replaced with raw nodes.  Next, the
-    AST is converted back into the original input format (or another document
-    format), and reparsed into a new AST.  This allows code output to be
-    interpreted with the input document format, making possible things like
-    references that could be difficult to handle by parsing code output in
-    isolation.  Finally, the new AST is converted into the output format.
+    AST is converted back into the original input format (or possibly another
+    format), and reparsed into a new AST.  This allows raw code output to be
+    interpreted as markup.  Finally, the new AST is converted into the output
+    format.
     '''
-    def __init__(self,
+    def __init__(self, *,
                  pandoc_path: Optional[Union[str, pathlib.Path]]=None,
+                 from_format_extensions: Optional[str]=None,
                  expanduser: bool=False,
                  expandvars: bool=False,
                  **kwargs):
@@ -57,11 +58,15 @@ class PandocConverter(Converter):
             if not pandoc_path.exists():
                 raise ValueError
         self.pandoc_path = pandoc_path
+        if from_format_extensions is not None and not isinstance(from_format_extensions, str):
+            raise TypeError
+        self.from_format_extensions = from_format_extensions
         super().__init__(**kwargs, expanduser=expanduser, expandvars=expandvars)
 
 
-    from_formats = set(['json', 'markdown'])
-    to_formats = set(['json', 'markdown', 'html', 'latex', ])
+    from_formats = set(['markdown'])
+    to_formats = set(['json', 'markdown', 'html', 'latex'])
+    multi_source_formats = set(['markdown'])
 
 
     # Node sets are based on pandocfilters
@@ -85,15 +90,16 @@ class PandocConverter(Converter):
     _raw_node_types = set(['RawBlock', 'RawInline'])
 
 
-    _whitespace_lines_re = re.compile('(?:[\x20\t]*\r?\n)*')
-
-
     def _run_pandoc(self, *,
                     from_format: str,
                     to_format: str,
+                    from_format_extensions: Optional[str]=None,
+                    to_format_extensions: Optional[str]=None,
                     input: Optional[str]=None,
                     input_path: Optional[pathlib.Path]=None,
+                    input_name: Optional[str]=None,
                     output_path: Optional[pathlib.Path]=None,
+                    overwrite: bool=False,
                     standalone: bool=False,
                     trace: bool=False):
         '''
@@ -101,18 +107,19 @@ class PandocConverter(Converter):
 
         Communication with Pandoc is accomplished via pipes.
         '''
-        if from_format not in self.from_formats:
+        # Allow from_format == 'json' for intermediate AST transforms
+        if from_format not in self.from_formats and from_format != 'json':
             raise ValueError
         if to_format not in self.to_formats:
             raise ValueError
-
-        if from_format == 'markdown':
-            # Because line number tracebacks depend on parsing `--trace`
-            # output, some HTML features of pandoc markdown must be disabled
-            # to guarantee reliable results.  Since pandoc markdown supports
-            # fenced divs and bracketed spans, disabling the parsing of the
-            # HTML versions shouldn't be a significant limitation.
-            from_format += '-markdown_in_html_blocks-native_divs-native_spans'
+        if from_format_extensions is None:
+            from_format_extensions = ''
+        if to_format_extensions is None:
+            to_format_extensions = ''
+        if input and input_path:
+            raise TypeError
+        if output_path is not None and not overwrite and output_path.exists():
+            raise RuntimeError
 
         cmd_template_list = ['{pandoc}', '--from', '{from}', '--to', '{to}']
         if standalone:
@@ -124,7 +131,8 @@ class PandocConverter(Converter):
         if input_path:
             cmd_template_list.append('{input_path}')
         template_dict = {'pandoc': self.pandoc_path,
-                         'from': from_format, 'to': to_format,
+                         'from': from_format + from_format_extensions,
+                         'to': to_format + to_format_extensions,
                          'output': output_path, 'input_path': input_path}
         cmd_list = [x.format(**template_dict) for x in cmd_template_list]
 
@@ -144,7 +152,11 @@ class PandocConverter(Converter):
                                   encoding='utf8',
                                   startupinfo=startupinfo, check=True)
         except subprocess.CalledProcessError as e:
-            raise PandocError('Failed to run Pandoc:\n{0}'.format(e))
+            if input_name is None:
+                msg = 'Failed to run Pandoc:\n{0}'.format(e)
+            else:
+                msg = 'Failed to run Pandoc on source {0} :\n{1}'.format(input_name, e)
+            raise PandocError(msg)
         return proc.stdout
 
 
@@ -174,17 +186,17 @@ class PandocConverter(Converter):
             `isinstance()`.  However, the current approach is optimal for
             nodes like `Space` that have no content at all.  Since these are
             typically very common, the overall approach should at least on
-            average be very close to optimal.  Return nodes plus their
-            parent lists with indices.
+            average be very close to optimal.
+
+            Return nodes plus their parent lists with indices.
             '''
             for index, obj in enumerate(node_list):
                 if isinstance(obj, list):
                     yield from walk_node_list(obj)
                 elif isinstance(obj, dict):
                     yield (obj, node_list, index)
-                    if 'c' in obj:
-                        if isinstance(obj['c'], list):
-                            yield from walk_node_list(obj['c'])
+                    if 'c' in obj and isinstance(obj['c'], list):
+                        yield from walk_node_list(obj['c'])
 
         def walk_node_list_trace_blocks_with_context(node, node_type,
                                                      node_list, node_list_parent_list, node_list_parent_parent_list,
@@ -234,27 +246,20 @@ class PandocConverter(Converter):
 
 
     @staticmethod
-    def _get_traceback_span_node(line_number,
-                                 id=None, classes=None, attribute=None,
+    def _get_traceback_span_node(source_name, line_number,
                                  str=str):
         '''
-        Create an empty span node containing a line number as an attribute.
-        This is used to attach a source file line number to an AST location,
+        Create an empty span node containing source name and line number as
+        attributes.  This is used to attach source info to an AST location,
         and then track that location through AST transformations and
         conversions.
         '''
-        if id is None:
-            id = ''
-        if classes is None:
-            classes = ['codebraid', 'codebraid--code-line']
-        if attribute is None:
-            attribute = 'data-line'
         span_node = {'t': 'Span',
                      'c': [
                               [
-                                  id,
-                                  classes,
-                                  [[attribute, str(line_number)]]
+                                  '',  # id
+                                  ['codebraid--trace'],  # classes
+                                  [['trace', '{0}:{1}'.format(source_name, line_number)]]  # kv pairs
                               ],
                               []
                           ]
@@ -262,7 +267,8 @@ class PandocConverter(Converter):
         return span_node
 
 
-    def _convert_source_string_to_ast(self, id=id, int=int, next=next, str=str):
+    def _convert_source_string_to_ast(self, *, string, source_name,
+                                      id=id, int=int, next=next, str=str):
         '''
         Convert source string into a Pandoc AST and perform a number of
         operations on the AST.
@@ -275,8 +281,10 @@ class PandocConverter(Converter):
             These special code nodes are converted back into raw nodes in the
             final AST before the final format conversion.
         '''
-        stdout = self._run_pandoc(input=self.string,
+        stdout = self._run_pandoc(input=string,
+                                  input_name=source_name,
                                   from_format=self.from_format,
+                                  from_format_extensions=self.from_format_extensions,
                                   to_format='json',
                                   trace=True)
         stdout_lines = stdout.splitlines()
@@ -285,9 +293,8 @@ class PandocConverter(Converter):
         if 'pandoc-api-version' not in ast or ast['pandoc-api-version'][:2] != [1, 17]:
             raise PandocError('Incompatible Pandoc API version')
 
-        string_lines = self.string.splitlines(True)
-        first_line_number = self._whitespace_lines_re.match(self.string).group().count('\n') + 1
-        current_line_number = first_line_number
+        string_lines = string.splitlines(True)
+        current_line_number = 1
         left_trace_slice_index = len('[trace] Parsed [')
         right_trace_chunk_slice_index = len(' of chunk')
         ast_root_node_list = ast['blocks']
@@ -299,22 +306,84 @@ class PandocConverter(Converter):
         chunk_node_list_stack = []
         chunk_node_list_start_line_numbers = {}
 
+        (node, node_type,
+            parent_node, parent_node_type, parent_node_list, parent_node_list_parent_list, parent_node_list_parent_parent_list,
+            parent_chunk_node, parent_chunk_node_list) = (None,)*9
         for trace_line in stdout_lines[:-1]:
             trace_node_type = trace_line[left_trace_slice_index:].split(' ', 1)[0].rstrip(']')
-            if trace_node_type == '' and current_line_number > first_line_number:
-                current_line_number += 1
+            if trace_node_type == '':
+                if trace_line.endswith('chunk'):
+                    trace_chunk_line_number = int(trace_line.split('at line ', 1)[1][:-right_trace_chunk_slice_index])
+                    current_line_number = chunk_node_list_start_line_numbers[id(parent_chunk_node_list)] + trace_chunk_line_number - 1
+                else:
+                    trace_line_number = int(trace_line.split('at line ', 1)[1])
+                    current_line_number = trace_line_number
                 continue
             if trace_node_type not in trace_leaf_block_node_types:
                 if trace_line.endswith('chunk'):
-                    trace_chunk_line_number = int(trace_line.split('line ', 1)[1][:-right_trace_chunk_slice_index])
+                    trace_chunk_line_number = int(trace_line.split('at line ', 1)[1][:-right_trace_chunk_slice_index])
                     current_line_number = chunk_node_list_start_line_numbers[id(chunk_node_list_stack.pop())] + trace_chunk_line_number - 1
                 else:
-                    trace_line_number = int(trace_line.split('line ', 1)[1])
+                    trace_line_number = int(trace_line.split('at line ', 1)[1])
                     current_line_number = trace_line_number
                 continue
-            (node, node_type,
-                parent_node, parent_node_type, parent_node_list, parent_node_list_parent_list, parent_node_list_parent_parent_list,
-                parent_chunk_node, parent_chunk_node_list) = next(ast_trace_blocks_with_context_walker)
+            if trace_node_type != node_type and node_type is not None:
+                while True:
+                    if node_type in trace_leaf_block_node_types:
+                        if trace_node_type == node_type:
+                            break
+                       # elif node_type != 'RawBlock' or node['c'][0] != 'html':
+                       #     raise PandocError('Parsing trace failed {} {}'.format(trace_node_type, node_type))
+                    elif parent_chunk_node is not ast:
+                        chunk_node_list_stack.append(parent_chunk_node_list)
+                    (node, node_type,
+                        parent_node, parent_node_type, parent_node_list, parent_node_list_parent_list, parent_node_list_parent_parent_list,
+                        parent_chunk_node, parent_chunk_node_list) = next(ast_trace_blocks_with_context_walker)
+                    if parent_node_type == 'DefinitionList':
+                        # Definition lists need special treatment for two reasons.
+                        # First, terms being defined are not block nodes, so they
+                        # don't appear in trace output.  Line numbers must be adjusted
+                        # for this.  Second, the final chunk line number for each
+                        # definition is 1 larger than the equivalent for other chunk
+                        # blocks.  This must be corrected so that the same line number
+                        # formulas can be used for everything.
+                        #
+                        # parent_node_list contains nodes that make up a definition.
+                        # parent_node_list_parent_list is a list of definitions.
+                        # parent_node_list_parent_parent_list contains a term in index
+                        # 0 followed by a list of definitions in index 1.
+                        if parent_node_list[0] is node:
+                            if parent_node_list_parent_list[0] is not parent_node_list:
+                                # If not the first definition, correct overshoot.
+                                current_line_number -= 1
+                            else:
+                                # Adjust for first definition.
+                                if parent_node['c'][0] is not parent_node_list_parent_parent_list:
+                                    # If not the first term, correct overshoot.
+                                    current_line_number -= 1
+                                # Add traceback span to term
+                                parent_node_list_parent_parent_list[0].insert(0, get_traceback_span_node(source_name, current_line_number))
+                                # Determine line number for start of first definition
+                                current_line_number += 1
+                                if string_lines[current_line_number-1].isspace():
+                                    current_line_number += 1
+                    elif (parent_node_type == 'Div' and
+                            parent_node_list[0] is node and
+                            string_lines[current_line_number-1].lstrip().startswith(':::')):
+                        # If this is the beginning of the div, and this is a pandoc
+                        # markdown fenced div rather than an HTML div, go to the next
+                        # line, where the content actually begins
+                        current_line_number += 1
+                    if id(parent_chunk_node_list) not in chunk_node_list_start_line_numbers:
+                        chunk_node_list_start_line_numbers[id(parent_chunk_node_list)] = current_line_number
+                    if node_type in ('Plain', 'Para') and node['c']:
+                        node['c'].insert(0, get_traceback_span_node(source_name, current_line_number))
+            try:
+                (node, node_type,
+                    parent_node, parent_node_type, parent_node_list, parent_node_list_parent_list, parent_node_list_parent_parent_list,
+                    parent_chunk_node, parent_chunk_node_list) = next(ast_trace_blocks_with_context_walker)
+            except StopIteration:
+                break
             if parent_node_type == 'DefinitionList':
                 # Definition lists need special treatment for two reasons.
                 # First, terms being defined are not block nodes, so they
@@ -333,12 +402,12 @@ class PandocConverter(Converter):
                         # If not the first definition, correct overshoot.
                         current_line_number -= 1
                     else:
-                        # First definition
+                        # Adjust for first definition.
                         if parent_node['c'][0] is not parent_node_list_parent_parent_list:
                             # If not the first term, correct overshoot.
                             current_line_number -= 1
-                        # Add traceback span to term
-                        parent_node_list_parent_parent_list[0].insert(0, get_traceback_span_node(current_line_number))
+                        # Add traceback span to term's inline node list
+                        parent_node_list_parent_parent_list[0].insert(0, get_traceback_span_node(source_name, current_line_number))
                         # Determine line number for start of first definition
                         current_line_number += 1
                         if string_lines[current_line_number-1].isspace():
@@ -377,12 +446,12 @@ class PandocConverter(Converter):
                                 # If not the first definition, correct overshoot.
                                 current_line_number -= 1
                             else:
-                                # First definition
+                                # Adjust for first definition.
                                 if parent_node['c'][0] is not parent_node_list_parent_parent_list:
                                     # If not the first term, correct overshoot.
                                     current_line_number -= 1
                                 # Add traceback span to term
-                                parent_node_list_parent_parent_list[0].insert(0, get_traceback_span_node(current_line_number))
+                                parent_node_list_parent_parent_list[0].insert(0, get_traceback_span_node(source_name, current_line_number))
                                 # Determine line number for start of first definition
                                 current_line_number += 1
                                 if string_lines[current_line_number-1].isspace():
@@ -396,21 +465,20 @@ class PandocConverter(Converter):
                         current_line_number += 1
                     if id(parent_chunk_node_list) not in chunk_node_list_start_line_numbers:
                         chunk_node_list_start_line_numbers[id(parent_chunk_node_list)] = current_line_number
-            if node_type in ('Plain', 'Para'):
-                if node['c']:
-                    node['c'].insert(0, get_traceback_span_node(current_line_number))
+            if node_type in ('Plain', 'Para') and node['c']:
+                node['c'].insert(0, get_traceback_span_node(source_name, current_line_number))
             if trace_line.endswith('chunk'):
-                trace_chunk_line_number = int(trace_line.split('line ', 1)[1][:-right_trace_chunk_slice_index])
+                trace_chunk_line_number = int(trace_line.split('at line ', 1)[1][:-right_trace_chunk_slice_index])
                 current_line_number = chunk_node_list_start_line_numbers[id(parent_chunk_node_list)] + trace_chunk_line_number - 1
             else:
-                trace_line_number = int(trace_line.split('line ', 1)[1])
+                trace_line_number = int(trace_line.split('at line ', 1)[1])
                 current_line_number = trace_line_number
 
         return ast
 
 
     def _extract_code_chunks(self):
-        ast = self._convert_source_string_to_ast()
+        ast = self._convert_source_string_to_ast(string=self.strings[0], source_name='name')
         for node, *_ in self._walk_ast(ast):
             node_type = node['t']
             if node_type in self._code_node_types:
