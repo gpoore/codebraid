@@ -27,6 +27,12 @@ class PandocError(err.CodebraidError):
 
 
 
+class PandocCodeChunk(object):
+    pass
+
+
+
+
 class PandocConverter(Converter):
     '''
     Converter based on Pandoc (https://pandoc.org/).
@@ -210,15 +216,15 @@ class PandocConverter(Converter):
             all child block nodes as well, with the exception of nodes that do
             not appear in trace output (those within tables).  Return each
             node along with its node type, parent node, parent node type, and
-            current parent node list.  If the current parent list is itself
-            nested in one or more lists, also return the lists up to two
-            levels up.  The nearest ancestor node with chunk-based line
+            current parent node list and index.  If the current parent list is
+            itself nested in one or more lists, also return the lists up to
+            two levels up.  The nearest ancestor node with chunk-based line
             counting (parent chunk node) and the nearest node list within it
             (parent chunk node list) are returned as well.  All of this
             contextual information provides what is needed to parse `--trace`
             output.
             '''
-            for obj in node_list:
+            for index, obj in enumerate(node_list):
                 if isinstance(obj, list):
                     if parent_chunk_node is node:
                         parent_chunk_node_list = obj
@@ -229,7 +235,7 @@ class PandocConverter(Converter):
                     child_node_type = obj['t']
                     if child_node_type in block_node_types:
                         yield (obj, child_node_type,
-                               node, node_type, node_list, node_list_parent_list, node_list_parent_parent_list,
+                               node, node_type, node_list, index, node_list_parent_list, node_list_parent_parent_list,
                                parent_chunk_node, parent_chunk_node_list)
                         if child_node_type not in trace_leaf_block_node_types:
                             if child_node_type in trace_chunk_block_node_types:
@@ -262,12 +268,50 @@ class PandocConverter(Converter):
                               [
                                   '',  # id
                                   ['codebraid--trace'],  # classes
-                                  [['trace', '{0}:{1}'.format(source_name, line_number)]]  # kv pairs
+                                  [['codebraid_trace', '{0}:{1}'.format(source_name, line_number)]]  # kv pairs
                               ],
                               []
                           ]
                     }
         return span_node
+
+    @staticmethod
+    def _freeze_raw_node(node, source_name, line_number,
+                         type_translation_dict={'RawBlock': 'CodeBlock', 'RawInline': 'Code'}):
+        '''
+        Convert a raw node into a special code node.  This prevents the
+        raw node from being prematurely interpreted/discarded during
+        intermediate AST transformations.
+        '''
+        node['t'] = type_translation_dict[node['t']]
+        raw_format, raw_content = node['c']
+        if raw_format in ('markdown', 'tex', 'latex', 'beamer'):
+            # Patch markdown writer to guarantees that the raw
+            # block won't merge with a following block.
+            # https://github.com/jgm/pandoc/issues/4629
+            raw_content += '\n'
+        node['c'] = [
+                        [
+                            '',  # id
+                            ['codebraid--frozen-raw'],  # classes
+                            [['format', raw_format], ['codebraid_trace', '{0}:{1}'.format(source_name, line_number)]]  # kv pairs
+                        ],
+                        raw_content
+                    ]
+
+    @staticmethod
+    def _thaw_raw_node(node, source_name, line_number,
+                       type_translation_dict={'CodeBlock': 'RawBlock', 'Code': 'RawInline'}):
+        '''
+        Convert a special code node back into its original form as a raw node.
+        '''
+        node['t'] = type_translation_dict[node['t']]
+        for k, v in node['c'][0][2]:
+            if k == 'format':
+                raw_format = k
+                break
+        raw_content = node['c'][1]
+        node['c'] = [raw_format, raw_content]
 
 
     def _convert_source_string_to_ast(self, *, source_string, source_name,
@@ -313,12 +357,15 @@ class PandocConverter(Converter):
         trace.append((None, None, None))
         del stdout_lines
 
-        source_string_lines = source_string.splitlines(True)  # Need to keep newlines for `.isspace()`
+        source_string_lines = source_string.splitlines()
         current_line_number = 1
         ast_root_node_list = ast['blocks']
         block_node_types = self._block_node_types
+        walk_node_list = self._walk_node_list
         trace_leaf_block_node_types = self._trace_leaf_block_node_types
         get_traceback_span_node = self._get_traceback_span_node
+        freeze_raw_node = self._freeze_raw_node
+        code_chunks = self._code_chunks
         parent_chunk_node_list_stack = []
         chunk_node_list_start_line_numbers = {}
         last_trace_iter = iter(trace)
@@ -344,7 +391,7 @@ class PandocConverter(Converter):
                                                                          ast_root_node_list, None, None,
                                                                          ast, ast_root_node_list):
             (node, node_type,
-                parent_node, parent_node_type, parent_node_list, parent_node_list_parent_list, parent_node_list_parent_parent_list,
+                parent_node, parent_node_type, parent_node_list, parent_node_list_index, parent_node_list_parent_list, parent_node_list_parent_parent_list,
                 parent_chunk_node, parent_chunk_node_list) = walk_tuple
             if parent_node_type == 'DefinitionList':
                 # Definition lists need special treatment for two reasons.
@@ -370,9 +417,22 @@ class PandocConverter(Converter):
                             current_line_number -= 1
                         # Add traceback span to term's inline node list
                         parent_node_list_parent_parent_list[0].insert(0, get_traceback_span_node(source_name, current_line_number))
+                        # Deal with code and raw nodes in the term's node
+                        # list.  Unlike the Para and Plain case later on,
+                        # there is no possibility of having SoftBreak nodes,
+                        # so processing is simpler.
+                        for inline_walk_tuple in walk_node_list(parent_node_list_parent_parent_list[0]):
+                            inline_node, inline_parent_node_list, inline_parent_node_list_index = inline_walk_tuple
+                            inline_node_type = inline_node['t']
+                            if inline_node_type == 'Code':
+                                if 'codebraid' in inline_node['c'][0][1]:  # classes
+                                    code_chunk = PandocCodeChunk(inline_node, source_name, current_line_number, inline_parent_node_list, inline_parent_node_list_index)
+                                    code_chunks.append(code_chunk)
+                            elif inline_node_type == 'RawInline':
+                                freeze_raw_node(inline_node, source_name, current_line_number)
                         # Determine line number for start of first definition
                         current_line_number += 1
-                        if source_string_lines[current_line_number-1].isspace():
+                        if source_string_lines[current_line_number-1].strip() == '':
                             current_line_number += 1
             elif (parent_node_type == 'Div' and
                     parent_node_list[0] is node and
@@ -420,8 +480,59 @@ class PandocConverter(Converter):
                     continue
                 else:
                     raise PandocError('Parsing trace failed')
-            if node_type in ('Plain', 'Para') and node['c']:
-                node['c'].insert(0, get_traceback_span_node(source_name, current_line_number))
+            if node_type in ('Plain', 'Para'):
+                if node['c']:
+                    node['c'].insert(0, get_traceback_span_node(source_name, current_line_number))
+                    # Find inline code nodes and determine their line numbers.
+                    # Incrementing `current_line_number` here won't throw off
+                    # the overall line numbering if there are errors in the
+                    # numbering calculations, because `current_line_number` is
+                    # reset after each Plain or Para node based on the trace.
+                    for inline_walk_tuple in walk_node_list(node['c']):
+                        inline_node, inline_parent_node_list, inline_parent_node_list_index = inline_walk_tuple
+                        inline_node_type = inline_node['t']
+                        if inline_node_type == 'SoftBreak':
+                            current_line_number += 1
+                        elif inline_node_type == 'Code':
+                            if 'codebraid' in inline_node['c'][0][1]:  # classes
+                                code_chunk = PandocCodeChunk(inline_node, source_name, current_line_number, inline_parent_node_list, inline_parent_node_list_index)
+                                code_chunks.append(code_chunk)
+                            # For the unlikely case of a code span that is
+                            # broken over multiple lines, make a basic attempt
+                            # at correcting the line numbering.  This won't
+                            # detect a broken span in all cases since that
+                            # would require full parsing (for example, there
+                            # could be multiple code spans with similar or
+                            # identical content), but it will work in the vast
+                            # majority of cases.  It's possible that the
+                            # current line number is off so that the code
+                            # can't be found.  In that case, don't change the
+                            # numbering.
+                            code_content = inline_node['c'][1]
+                            if ' ' in code_content:
+                                line = source_string_lines[current_line_number-1]
+                                if code_content not in line:
+                                    lookahead_line_number = current_line_number
+                                    while True:
+                                        lookahead_line_number += 1
+                                        try:
+                                            next_line = source_string_lines[lookahead_line_number-1]
+                                        except IndexError:
+                                            break
+                                        if next_line.strip() == '':
+                                            break
+                                        line += ' ' + next_line.lstrip()
+                                        if code_content in line:
+                                            current_line_number = lookahead_line_number
+                                            break
+                        elif inline_node_type == 'RawInline':
+                            freeze_raw_node(inline_node, source_name, current_line_number)
+            elif node_type == 'CodeBlock':
+                if 'codebraid' in node[0][1]:  # classes
+                    code_chunk = PandocCodeChunk(node, source_name, current_line_number, parent_node_list, parent_node_list_index)
+                    code_chunks.append(code_chunk)
+            elif node_type == 'RawBlock':
+                freeze_raw_node(node, source_name, current_line_number)
             last_trace_node_type, last_trace_line_number, last_trace_in_chunk = next(last_trace_iter)
             current_trace_node_type, current_trace_line_number, current_trace_in_chunk = next(current_trace_iter)
             if current_trace_node_type not in trace_leaf_block_node_types:
@@ -443,11 +554,13 @@ class PandocConverter(Converter):
 
 
     def _extract_code_chunks(self):
-        ast = self._convert_source_string_to_ast(string=self.strings[0], source_name='name')
+        ast = self._convert_source_string_to_ast(source_string=self.strings[0], source_name='name')
         for node, *_ in self._walk_ast(ast):
             node_type = node['t']
             if node_type in self._code_node_types:
-                node['c'][1] = str(eval(node['c'][1]))
+                pass
+                #print(node)
+                #ode['c'][1] = str(eval(node['c'][1]))
 
         self._ast = ast
 

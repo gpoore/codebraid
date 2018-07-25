@@ -114,7 +114,7 @@ class Converter(object):
         else:
             raise TypeError
 
-        self._code_chunks = {}
+        self._code_chunks = []
         self._extract_code_chunks()
         self._process_code_chunks()
 
