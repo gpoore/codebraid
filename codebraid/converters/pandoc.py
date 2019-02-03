@@ -8,6 +8,7 @@
 #
 
 
+import collections
 import json
 import os
 import pathlib
@@ -16,7 +17,7 @@ import re
 import subprocess
 from typing import Optional, Union
 import warnings
-from .base import Converter
+from .base import Converter, CodeChunk
 from .. import err
 
 
@@ -28,8 +29,152 @@ class PandocError(err.CodebraidError):
 
 
 
-class PandocCodeChunk(object):
-    pass
+class PandocCodeChunk(CodeChunk):
+    def __init__(self, node, parent_node_list, parent_node_list_index, source_name, start_line_number):
+        self.node = node
+        self.parent_node_list = parent_node_list
+        self.parent_node_list_index = parent_node_list_index
+
+        options = {}
+        pandoc_classes = []
+        pandoc_kvpairs = {}
+        node_id, node_classes, node_kvpairs = node['c'][0]
+        code = node['c'][1]
+
+        # Once design stabilizes, it may be worth converting this in to a set
+        # of class and attribute processing functions, to guarantee consistent
+        # handling
+        if node_id:
+            options['label'] = node_id
+        inline = node['t'] == 'Code'
+        codebraid_command = None
+        for n, c in enumerate(node_classes):
+            if c.startswith('cb.'):
+                if codebraid_command is not None:
+                    raise err.SourceError('Only one Codebraid command can be applied per code chunk', source_name, start_line_number)
+                codebraid_command = c.split('.', 1)[1]
+            elif c in ('lineAnchors', 'line-anchors', 'line_anchors'):
+                if 'lineAnchors' in pandoc_classes:
+                    raise err.SourceError('Duplicate line anchor class for code chunk', source_name, start_line_number)
+                pandoc_classes.append('lineAnchors')
+            elif c in ('line_numbers', 'numberLines', 'number-lines', 'number_lines'):
+                if 'line_numbers' in options:
+                    raise err.SourceError('Duplicate line numbering class for code chunk', source_name, start_line_number)
+                options['line_numbers'] = True
+            else:
+                if n > 0:
+                    raise err.SourceError('The language/format must be the first class for code chunk', source_name, start_line_number)
+                if 'lang' in options:
+                    raise err.SourceError('Unknown non-Codebraid class', source_name, start_line_number)
+                options['lang'] = c
+        for k, v in node_kvpairs:
+            if k == 'hide':
+                if 'hide' in options:
+                    raise err.SourceError('Duplicate "hide" attribute for code chunk', source_name, start_line_number)
+                options['hide'] = v
+            elif k in ('first_number', 'startFrom', 'start-from', 'start_from'):
+                if 'first_number' in options:
+                    raise err.SourceError('Duplicate first line number attribute for code chunk', source_name, start_line_number)
+                try:
+                    v = int(v)
+                except ValueError:
+                    pass
+                options['first_number'] = v
+            elif k in ('label', 'name'):
+                if 'label' in options:
+                    if node_id:
+                        raise err.SourceError('Code chunk can have only one label/name; already have #<id>', source_name, start_line_number)
+                    raise err.SourceError('Code chunk can have only one label/name', source_name, start_line_number)
+                if not self._pandoc_id_re.match(v):
+                    raise err.SourceError('Code chunk label/name must be valid Pandoc identifier: <letter>(<alphanum>|"-_:.")*', source_name, start_line_number)
+                options['label'] = v
+            elif k == 'lang':
+                if 'lang' in options:
+                    raise err.SourceError('Duplicate lang for code chunk', source_name, start_line_number)
+                options['lang'] = v
+            elif k in ('lineAnchors', 'line-anchors', 'line_anchors'):
+                if 'lineAnchors' in pandoc_classes:
+                    raise err.SourceError('Duplicate line anchor attribute for code chunk', source_name, start_line_number)
+                pandoc_classes.append('lineAnchors')
+            elif k in ('line_numbers', 'numberLines', 'number-lines', 'number_lines'):
+                if 'line_numbers' in options:
+                    raise err.SourceError('Duplicate line numbering attribute for code chunk', source_name, start_line_number)
+                if v not in ('true', 'false'):
+                    raise err.SourceError('Invalid line numbering attribute for code chunk; must be true or false', source_name, start_line_number)
+                options['line_numbers'] = v == 'true'
+            elif k == 'session':
+                if 'session' in options:
+                    raise err.SourceError('Duplicate "session" attribute for code chunk', source_name, start_line_number)
+                options['session'] = v
+            elif k == 'show':
+                if 'show' in options:
+                    raise err.SourceError('Duplicate "show" attribute for code chunk', source_name, start_line_number)
+                options['show'] = v
+            else:
+                raise err.SourceError('Unknown or currently unsupported attribute {0}="{1}"'.format(k, v), source_name, start_line_number)
+
+        super().__init__(codebraid_command, code, options, source_name, start_line_number=start_line_number, inline=inline)
+
+    # identifier approximation for Pandoc/Readers/Markdown.hs
+    _pandoc_id_re = re.compile(r'(?!\d|_)(?:\w+|[-:.]+)+')
+
+
+
+def walk_node_list(node_list):
+    '''
+    Walk all AST nodes in a list, recursively descending to walk all
+    child nodes as well.  The walk function is written so that it is
+    only ever called on lists, reducing recursion depth and reducing
+    the number of times the walk function is called.  Thus, it is
+    never called on `Str` nodes and other leaf nodes, which will
+    typically make up the vast majority of nodes.
+
+    DefinitionLists are handled specially to wrap terms in fake Plain
+    nodes.  This simplifies processing.
+
+    Returns nodes plus their parent lists with indices.
+    '''
+    for index, obj in enumerate(node_list):
+        if isinstance(obj, list):
+            yield from walk_node_list(obj)
+        elif isinstance(obj, dict):
+            yield (obj, node_list, index)
+            obj_contents = obj.get('c', None)
+            if obj_contents is not None and isinstance(obj_contents, list):
+                if obj['t'] != 'DefinitionList':
+                    yield from walk_node_list(obj_contents)
+                else:
+                    for elem in obj_contents:
+                        term, definition = elem
+                        yield ({'t':'Plain', 'c':term}, elem, 0)
+                        yield from walk_node_list(term)
+                        yield from walk_node_list(definition)
+
+
+def walk_node_list_less_note_contents(node_list):
+    '''
+    Like `walk_node_list()`, except that it will return a `Note` node
+    but not iterate through it.  It can be useful to process `Note`
+    contents separately since they are typically located in another
+    part of the document and may contain block nodes.
+    '''
+    for index, obj in enumerate(node_list):
+        if isinstance(obj, list):
+            yield from walk_node_list_less_note_contents(obj)
+        elif isinstance(obj, dict):
+            yield (obj, node_list, index)
+            if obj['t'] == 'Note':
+                continue
+            obj_contents = obj.get('c', None)
+            if obj_contents is not None and isinstance(obj_contents, list):
+                if obj['t'] != 'DefinitionList':
+                    yield from walk_node_list_less_note_contents(obj_contents)
+                else:
+                    for elem in obj_contents:
+                        term, definition = elem
+                        yield ({'t':'Plain', 'c':term}, elem, 0)
+                        yield from walk_node_list_less_note_contents(term)
+                        yield from walk_node_list_less_note_contents(definition)
 
 
 
@@ -51,7 +196,6 @@ class PandocConverter(Converter):
                  expanduser: bool=False,
                  expandvars: bool=False,
                  **kwargs):
-        super().__init__(**kwargs, expanduser=expanduser, expandvars=expandvars)
         if pandoc_path is None:
             pandoc_path = pathlib.Path('pandoc')
         else:
@@ -61,7 +205,7 @@ class PandocConverter(Converter):
             if expanduser:
                 pandoc_path = pandoc_path.expanduser()
         try:
-            proc = subprocess.run([pandoc_path, '--version'], capture_output=True)
+            proc = subprocess.run([str(pandoc_path), '--version'], capture_output=True)
         except FileNotFoundError:
             raise RuntimeError('Pandoc path "{0}" does not exist'.format(pandoc_path))
         pandoc_version_match = re.search(rb'\d+\.\d+', proc.stdout)
@@ -73,7 +217,10 @@ class PandocConverter(Converter):
         if (from_format_pandoc_extensions is not None and
                 not isinstance(from_format_pandoc_extensions, str)):
             raise TypeError
-        self.from_format_pandoc_extensions = from_format_pandoc_extensions
+        self.from_format_pandoc_extensions = from_format_pandoc_extensions or ''
+        self._asts = {}
+        self._para_plain_nodes_and_line_numbers = collections.defaultdict(list)
+        super().__init__(**kwargs, expanduser=expanduser, expandvars=expandvars)
 
 
     from_formats = set(['json', 'markdown'])
@@ -84,32 +231,10 @@ class PandocConverter(Converter):
     # Node sets are based on pandocfilters
     # https://github.com/jgm/pandocfilters/blob/master/pandocfilters.py
     _null_block_node_type = set([''])
-    _plain_or_para_block_node_types = set(['Plain', 'Para'])
     _block_node_types = set(['Plain', 'Para', 'CodeBlock', 'RawBlock',
                              'BlockQuote', 'OrderedList', 'BulletList',
                              'DefinitionList', 'Header', 'HorizontalRule',
                              'Table', 'Div']) | _null_block_node_type
-    # Block nodes that appear in `--trace` output and are internal block
-    # nodes.  Note that this does NOT include Table.
-    _trace_internal_block_node_types = set(['BlockQuote', 'OrderedList',
-                                            'BulletList', 'DefinitionList',
-                                            'Div'])
-    # Block nodes that appear in `--trace` output and are leaf block nodes as
-    # far as that is concerned (these nodes may contain block nodes, but those
-    # nodes don't appear in the trace output).  Sets are provided with and
-    # without the Null node (trace node with the empty string as its name).
-    # Nulls contain no nodes of any type (block or inline) and so are
-    # technically leaf block nodes, but they are similar to internal block
-    # nodes because they require no additional processing like a normal leaf
-    # block node.
-    _trace_leaf_block_node_types_with_null = _block_node_types - _trace_internal_block_node_types
-    _trace_leaf_block_node_types_without_null = _trace_leaf_block_node_types_with_null - _null_block_node_type
-    # Block nodes that appear in `--trace` output that initiate chunk-based
-    # line counting (for lists, this is on a per-item basis)
-    _trace_chunk_block_node_types = set(t for t in _block_node_types if t.endswith('Quote') or t.endswith('List'))
-    # Nodes that may require special processing
-    _code_node_types = set(['CodeBlock', 'Code'])
-    _raw_node_types = set(['RawBlock', 'RawInline'])
 
 
     def _run_pandoc(self, *,
@@ -183,88 +308,8 @@ class PandocConverter(Converter):
         return proc.stdout
 
 
-    def _get_walk_closures(block_node_types=_block_node_types,
-                           trace_chunk_block_node_types=_trace_chunk_block_node_types,
-                           trace_leaf_block_node_types_without_null=_trace_leaf_block_node_types_without_null,
-                           dict=dict, enumerate=enumerate, isinstance=isinstance, list=list):
-        '''
-        Define recursive closures that walk the AST in various ways.  These
-        ultimately become static methods for the class.  Recursive functions
-        can't be defined directly as static methods, hence the current
-        approach.  Performance is maximized by eliminating all non-local
-        functions, and minimizing recursive function calls via walk functions
-        that are only ever called on lists.
-        '''
-
-        def walk_node_list(node_list):
-            '''
-            Walk all AST nodes in a list, recursively descending to walk all
-            child nodes as well.  The walk function is written so that it is
-            only ever called on lists, reducing recursion depth and reducing
-            the number of times the walk function is called.  Thus, it is
-            never called on `Str` nodes and other leaf nodes, which will
-            typically make up the vast majority of nodes.
-
-            Returns nodes plus their parent lists with indices.
-            '''
-            for index, obj in enumerate(node_list):
-                if isinstance(obj, list):
-                    yield from walk_node_list(obj)
-                elif isinstance(obj, dict):
-                    yield (obj, node_list, index)
-                    obj_contents = obj.get('c', None)
-                    if obj_contents is not None and isinstance(obj_contents, list):
-                        yield from walk_node_list(obj_contents)
-
-        def walk_node_list_trace_blocks_with_context(node, node_type, node_depth,
-                                                     node_list, node_list_parent_list, node_list_parent_parent_list,
-                                                     parent_chunk_node, parent_chunk_node_list):
-            '''
-            Walk all AST block nodes in a list, recursively descending to walk
-            all child block nodes as well, with the exception of nodes that do
-            not appear in trace output (those within tables).  Retain enough
-            contextual information for parsing `--trace` output.
-
-            Returns each node along with its node type, node depth, parent
-            node, parent node type, and current parent node list and index.
-            If the current parent list is itself nested in one or more lists,
-            these are returned up to two levels up.  The nearest ancestor node
-            with chunk-based line counting (parent chunk node) and the nearest
-            node list within it (parent chunk node list) are returned as well.
-
-            Node depth is defined as the number of nodes between a node and
-            the Root node.  For example, nodes in the Root node list are at a
-            depth of 0.  This definition simplifies later operations.  For
-            example, it allows a list representing the AST node path to a node
-            to omit Root, with node depth corresponding to list index.  As a
-            result of this definition, the effective depth of Root is -1.
-            '''
-            for index, obj in enumerate(node_list):
-                if isinstance(obj, list):
-                    if parent_chunk_node is node:
-                        parent_chunk_node_list = obj
-                    yield from walk_node_list_trace_blocks_with_context(node, node_type, node_depth,
-                                                                        obj, node_list, node_list_parent_list,
-                                                                        parent_chunk_node, parent_chunk_node_list)
-                elif isinstance(obj, dict):
-                    child_node_type = obj['t']
-                    if child_node_type in block_node_types:
-                        yield (obj, child_node_type, node_depth+1,
-                               node, node_type, node_list, index,
-                               node_list_parent_list, node_list_parent_parent_list,
-                               parent_chunk_node, parent_chunk_node_list)
-                        if child_node_type not in trace_leaf_block_node_types_with_null:
-                            if child_node_type in trace_chunk_block_node_types:
-                                yield from walk_node_list_trace_blocks_with_context(obj, child_node_type, node_depth+1,
-                                                                                    obj['c'], None, None,
-                                                                                    obj, obj['c'])
-                            else:
-                                yield from walk_node_list_trace_blocks_with_context(obj, child_node_type, node_depth+1,
-                                                                                    obj['c'], None, None,
-                                                                                    parent_chunk_node, parent_chunk_node_list)
-        return (walk_node_list, walk_node_list_trace_blocks_with_context)
-
-    _walk_node_list, _walk_node_list_trace_blocks_with_context = (staticmethod(x) for x in _get_walk_closures())
+    _walk_node_list = staticmethod(walk_node_list)
+    _walk_node_list_less_note_contents = staticmethod(walk_node_list_less_note_contents)
 
     def _walk_ast(self, ast):
         '''
@@ -273,22 +318,12 @@ class PandocConverter(Converter):
         ast_root_node_list = ast['blocks']
         yield from self._walk_node_list(ast_root_node_list)
 
-    def _walk_ast_trace_blocks_with_context(self, ast):
+    def _walk_ast_less_note_contents(self, ast):
         '''
-        Walk all AST block nodes, with the exception of nodes that do not
-        appear in trace output (those within tables).
-
-        The AST does not contain an actual Root node; there is only a
-        Root-level node list.  As a result, the AST dict itself is treated as
-        the Root node for the purpose of starting the walk.  Because node
-        depth is defined as the number of nodes between the current node and
-        Root, Root has an effective depth of -1 to get the walk algorithm
-        started correctly.
+        Walk all nodes in AST, except those in Notes.
         '''
         ast_root_node_list = ast['blocks']
-        yield from self._walk_node_list_trace_blocks_with_context(ast, 'Root', -1,
-                                                                  ast_root_node_list, None, None,
-                                                                  ast, ast_root_node_list)
+        yield from self._walk_node_list_less_note_contents(ast_root_node_list)
 
 
     @staticmethod
@@ -353,14 +388,14 @@ class PandocConverter(Converter):
     _footnote_re = re.compile(r' {0,3}\[\^[^ \t]+?\]:')
 
 
-    def _convert_source_string_to_ast(self, *, source_string, source_name,
-                                      any=any, id=id, int=int, len=len,
-                                      next=next, reversed=reversed):
+    def _load_and_process_initial_ast(self, *, source_string, source_name,
+                                      any=any, int=int, len=len, next=next):
         '''
         Convert source string into a Pandoc AST and perform a number of
         operations on the AST.
-          * Parse `--trace` output so that source line numbers can be assigned
-            to arbitrary nodes.
+          * Assign source line numbers to some nodes.  This is needed later
+            for syncing error messages and is also needed for SyncTeX when the
+            output is LaTeX.
           * Locate all code nodes for further processing.
           * Convert all raw nodes into specially marked code nodes.  This
             allows them to pass through later Pandoc conversions without
@@ -368,547 +403,242 @@ class PandocConverter(Converter):
             These special code nodes are converted back into raw nodes in the
             final AST before the final format conversion.
         '''
+        # Determining line numbers currently uses a brute force approach by
+        # walking the AST, and then searching the source each time a Str node,
+        # etc. is encountered, starting at the end of the last string that was
+        # located.  This isn't guaranteed to give correct results in all
+        # cases, since not all AST information like attributes is used in
+        # searching, but it will usually give exact results.  Since syncing is
+        # a usability feature, an occasional small loss of precision isn't
+        # critical.  Pandoc's `--trace` output is used to simplify this
+        # process.  The trace can be used to determine the exact start of
+        # root-level nodes, so it periodicall corrects any errors that have
+        # accumulated.  It can also be used to locate and skip over footnotes
+        # and link definitions.  These do not appear in the AST except in
+        # processed form, so they would be a primary source of sync errors
+        # otherwise.
+        #
+        # The original attempt at implementing line number syncing used only
+        # the trace plus AST, with no string searching.  That might have had
+        # much better performance had it worked.  Unfortunately, the data in
+        # the trace is typically only sufficient to give approximate locations
+        # at best.  The Pandoc markdown extension markdown_in_html_blocks can
+        # produce markdown nodes preceded and followed by HTML RawBlocks, but
+        # only the following RawBlock appears in the trace.  Similarly, HTML
+        # RawBlocks can appear out of order in the trace (at the end of the
+        # current chunk, rather than where they appear relative to other leaf
+        # nodes; for example, `<hr/>`).  The trace data for DefinitionList
+        # follows different rules (line numbers typically larger by 1),
+        # presumably because of how Pandoc's parsing works.  Empty elements,
+        # such as might occur in an incomplete bullet list, are difficult to
+        # deal with.
+
         # Convert source string to trace plus AST with Pandoc
+        from_format_pandoc_extensions = self.from_format_pandoc_extensions
+        if self.from_format == 'markdown':
+            from_format_pandoc_extensions += '-latex_macros-smart'
         stdout_lines = self._run_pandoc(input=source_string,
                                         input_name=source_name,
                                         from_format=self.from_format,
-                                        from_format_pandoc_extensions=self.from_format_pandoc_extensions,
+                                        from_format_pandoc_extensions=from_format_pandoc_extensions,
                                         to_format='json',
                                         trace=True).splitlines()
+        raw_ast = stdout_lines.pop()
         try:
-            ast = json.loads(stdout_lines.pop())
-        except Exception:
-            raise PandocError('Incompatible Pandoc version; failed to load AST')
+            ast = json.loads(raw_ast)
+        except Exception as e:
+            raise PandocError('Failed to load AST (incompatible Pandoc version?):\n{0}'.format(e))
         if not (isinstance(ast, dict) and
                 'pandoc-api-version' in ast and 'blocks' in ast):
             raise PandocError('Incompatible Pandoc API version')
-        if ast['pandoc-api-version'][0:2] != [1, 17]):
-            warnings.warn('Pandoc API is {0}, but Codebraid is designed for 1.17; this might cause issues depending on what has changed'.format(ast['pandoc-api-version'][0:2]))
-        ast_root_node_list = ast['blocks']
+        if ast['pandoc-api-version'][0:2] != [1, 17]:
+            warnings.warn('Pandoc API is {0}.{1}, but Codebraid is designed for 1.17; this might cause issues'.format(*ast['pandoc-api-version'][0:2]))
+        self._asts[source_name] = ast
 
-        # Will need to index source by line number later
         source_string_lines = source_string.splitlines()
 
-        # Process trace into a list of tuples of the form
-        # (<node type>, <raw node format>, <line number>, <in chunk>)
+        # Process trace to determine location of footnotes and link
+        # definitions, and mark those line numbers as invalid
+        invalid_line_numbers = set()
         left_trace_type_slice_index = len('[trace] Parsed [')
         right_trace_chunk_slice_index = len(' of chunk')
         footnote_re = self._footnote_re
-        initial_trace = ('', None, 1, False)
-        traces = [initial_trace]
         in_footnote = False
-        trace = initial_trace
+        trace = ('', 1, False)  # (<node type>, <line number>, <in chunk>)
         try:
             for trace_line in stdout_lines:
-                last_trace_node_type, last_trace_node_format, last_trace_line_number, last_trace_in_chunk = trace
+                if trace_line.startswith('[WARNING]'):
+                    continue
+                last_trace_node_type, last_trace_line_number, last_trace_in_chunk = trace
                 trace_line = trace_line[left_trace_type_slice_index:]
                 trace_node_type, trace_line = trace_line.split(' ', 1)
                 trace_node_type = trace_node_type.rstrip(']')
-                if trace_node_type != 'RawBlock':
-                    trace_node_format = None
-                else:
-                    trace_line = trace_line.split('(Format "', 1)[1]
-                    trace_node_format, trace_line = trace_line.split('")', 1)
-                    trace_node_format = trace_node_format.lower()
                 if trace_line.endswith('chunk'):
                     trace_in_chunk = True
                     trace_line_number = int(trace_line.split('at line ', 1)[1][:-right_trace_chunk_slice_index])
                 else:
                     trace_in_chunk = False
                     trace_line_number = int(trace_line.split('at line ', 1)[1])
-                trace = (trace_node_type, trace_node_format, trace_line_number, trace_in_chunk)
-                # Filter out footnote traces.  Since footnotes must be at root
-                # level in the AST, line numbers are guaranteed to be correct
-                # for their start location (no chunk numbering involved), so
-                # this will always detect and skip them correctly.  There
-                # shouldn't be any indentation before the `[^<identifier>]:`,
-                # but a regex is used to cover all cases that the parser will
-                # accept.  A footnote is always followed by a Null at root
-                # level.
+                trace = (trace_node_type, trace_line_number, trace_in_chunk)
+                # Since footnotes must be at root level in the AST, line
+                # numbers are guaranteed to be correct for their start
+                # locations (no chunk numbering involved), so this will always
+                # detect and skip them correctly.  There shouldn't be any
+                # indentation before the `[^<identifier>]:`, but a regex is
+                # used to cover all cases that the parser will accept.  A
+                # footnote is always followed by a Null at root level.
                 if (trace_in_chunk and not last_trace_in_chunk and
-                        footnote_re.match(string_lines[last_trace_line_number-1])):
+                        footnote_re.match(source_string_lines[last_trace_line_number-1])):
                     in_footnote = True
+                    invalid_line_number = last_trace_line_number
                     continue
                 if in_footnote:
                     if trace_in_chunk:
                         continue
                     in_footnote = False
-                traces.append(trace)
+                    while invalid_line_number < trace_line_number:
+                        invalid_line_numbers.add(invalid_line_number)
+                        invalid_line_number += 1
+                # Link definitions must be at root level and produce Nulls
+                if not trace_node_type and not last_trace_in_chunk and not trace_in_chunk:
+                    invalid_line_number = last_trace_line_number
+                    while invalid_line_number < trace_line_number:
+                        invalid_line_numbers.add(invalid_line_number)
+                        invalid_line_number += 1
         except Exception as e:
             raise PandocError('Incompatible Pandoc version or trace; cannot parse trace format:\n{0}'.format(e))
-        # The trace always goes beyond the actual length of the source.  Add
-        # empty lines to prevent index errors/avoid correcting the trace.
-        # The final trace values are discarded, so this has no effect on
-        # determining line numbers.
-        source_string_lines.extend(['']*(trace_line_number-len(source_string_lines)))
 
-        # Walk AST and trace simultaneously to associate trace line numbers
-        # with AST nodes
-        code_chunks = self._code_chunks
-        line_number = 1
-        lookahead_traces_iter = iter(traces)
-        lookahead_trace_tuple = next(lookahead_traces_iter)  # == initial_trace
-        traces_iter = iter(traces)
-        trace_tuple = next(traces_iter)
-        trace_node_type, trace_node_format, trace_line_number, trace_in_chunk = trace_tuple
-        plain_or_para_block_node_types = self._plain_or_para_block_node_types
+        # Iterator for source lines and line numbers that skips invalid lines
+        line_and_number_iter = ((line, n+1) for (n, line) in enumerate(source_string.splitlines()) if n+1 not in invalid_line_numbers)
+
+        # Walk AST to associate line numbers with AST nodes
+        para_plain_nodes_and_line_numbers = self._para_plain_nodes_and_line_numbers[source_name]
+        line, line_number = next(line_and_number_iter)
+        line_index = 0
         block_node_types = self._block_node_types
-        trace_leaf_block_node_types_without_null = self._trace_leaf_block_node_types_without_null
-        trace_leaf_block_node_types_with_null = self._trace_leaf_block_node_types_with_null
-        walk_node_list = self._walk_node_list
-        get_traceback_span_node = self._get_traceback_span_node
         freeze_raw_node = self._freeze_raw_node
-        ast_trace_nodes_iter = self._walk_ast_trace_blocks_with_context(ast)
-        chunk_node_list_start_line_numbers = {id(ast_root_node_list): 1}
-        parent_chunk_node_list_stack = []
-        untraced_html_node_stack = []
-        untraced_html_parent_chunk_node_list_stack = []
-        out_of_order_html_node = False
-        left_strip_chars = '\t *+->|:'
-        left_strip_chars_less_colon = left_strip_chars.replace(':', '')
-
-        while True:
-            # Look ahead to find the next leaf node in the trace.  This is
-            # useful in handling leaf nodes in the AST that do not appear in
-            # the trace.  The Pandoc markdown extension
-            # markdown_in_html_blocks can produce markdown nodes preceded and
-            # followed by HTML RawBlocks, but only the following RawBlock
-            # appears in the trace, so the preceding block must be skipped
-            # (with a basic attempt at correcting line numbers).  A similar
-            # approach is used to deal with HTML RawBlocks that appear out of
-            # order in the trace (at the end of the current chunk, rather than
-            # where they appear relative to other leaf nodes; for example,
-            # `<hr/>`).
-            try:
-                (last_lookahead_trace_node_type, last_lookahead_trace_node_format,
-                    last_lookahead_trace_line_number, last_lookahead_trace_in_chunk) = lookahead_trace_tuple
-                lookahead_trace_tuple = next(lookahead_traces_iter)
-                (lookahead_trace_node_type, lookahead_trace_node_format,
-                    lookahead_trace_line_number, lookahead_trace_in_chunk) = lookahead_trace_tuple
-            except StopIteration:
-                break
-            if lookahead_trace_node_type not in trace_leaf_block_node_types_without_null:
-                try:
-                    while lookahead_trace_node_type not in trace_leaf_block_node_types_without_null:
-                        (last_lookahead_trace_node_type, last_lookahead_trace_node_format,
-                            last_lookahead_trace_line_number, last_lookahead_trace_in_chunk) = lookahead_trace_tuple
-                        lookahead_trace_tuple = next(lookahead_traces_iter)
-                        (lookahead_trace_node_type, lookahead_trace_node_format,
-                            lookahead_trace_line_number, lookahead_trace_in_chunk) = lookahead_trace_tuple
-                except StopIteration:
-                    break
-
-            # Get the next leaf node in the AST while creating a list of
-            # internal nodes whose order corresponds to that in which they
-            # will appear in the trace.  StopIteration checks are needed
-            # because some HTML RawBlocks appear in the trace out of order,
-            # after nodes they actually precede.  When these nodes are
-            # encountered in the AST, they are skipped (with a basic attempt
-            # at correcting line numbers).  When these nodes appear in the
-            # trace, there isn't a corresponding leaf node in the AST since it
-            # has already been skipped, so looking for a corresponding node in
-            # the AST can result in StopIteration.
-            if out_of_order_html_node:
-                # If a prior trace node was an out-of-order HTML RawBlock,
-                # keep advancing through the trace until it catches up with
-                # the current AST location.  Note that the node types being
-                # different isn't necessarily an issue, because node type can
-                # change between being reported in the trace and inserted in
-                # the AST.
-                if node_type != lookahead_trace_node_type:
-                    if (lookahead_trace_node_type == 'RawBlock' and
-                            lookahead_trace_node_format == 'html'):
-                        continue
-                    elif (node_type not in plain_or_para_block_node_types or
-                            lookahead_trace_node_type not in plain_or_para_block_node_types):
-                        # If unexpected type mismatch, give up
-                        break
-                out_of_order_html_node = False
-            else:
-                # Get the next AST leaf node
-                try:
-                    (node, node_type, node_depth,
-                        parent_node, parent_node_type, parent_node_list, parent_node_list_index,
-                        parent_node_list_parent_list, parent_node_list_parent_parent_list,
-                        parent_chunk_node, parent_chunk_node_list) = next(ast_trace_nodes_iter)
-                except StopIteration:
-                    break
-                if (node_type not in trace_leaf_block_node_types_without_null or
-                        (node_type != lookahead_trace_node_type and
-                            node_type == 'RawBlock' and node['c'][0].lower() == 'html')):
-                    # Skip internal nodes, and skip HTML RawBlocks that only
-                    # appear in the AST or appear out-of-order in the trace
-                    # (while maintaining a list of these nodes for making a
-                    # basic attempt at correcting line numbers)
-                    try:
-                        while True:
-                            if node_type not in trace_leaf_block_node_types_without_null:
-                                parent_chunk_node_list_stack.insert(node_depth, parent_chunk_node_list)
-                                (node, node_type, node_depth,
-                                    parent_node, parent_node_type, parent_node_list, parent_node_list_index,
-                                    parent_node_list_parent_list, parent_node_list_parent_parent_list,
-                                    parent_chunk_node, parent_chunk_node_list) = next(ast_trace_nodes_iter)
-                            elif (node_type != lookahead_trace_node_type and
-                                    node_type == 'RawBlock' and node['c'][0].lower() == 'html'):
-                                untraced_html_node_stack.append(node)
-                                untraced_html_parent_chunk_node_list_stack.append(parent_chunk_node_list)
-                                (node, node_type, node_depth,
-                                    parent_node, parent_node_type, parent_node_list, parent_node_list_index,
-                                    parent_node_list_parent_list, parent_node_list_parent_parent_list,
-                                    parent_chunk_node, parent_chunk_node_list) = next(ast_trace_nodes_iter)
-                            else:
-                                break
-                    except StopIteration:
-                        break
-                if node_type != lookahead_trace_node_type:
-                    if (lookahead_trace_node_type == 'RawBlock' and
-                            lookahead_trace_node_format == 'html'):
-                        out_of_order_html_node = True
-                        continue
-                    elif (node_type not in plain_or_para_block_node_types or
-                            lookahead_trace_node_type not in plain_or_para_block_node_types):
-                        # If unexpected type mismatch, give up
-                        break
-
-            # Get the next leaf node in the trace again, this time while
-            # calculating line numbers.  No StopIteration checks are needed;
-            # the previous lookahead in the trace guarantees node existence.
-            if parent_chunk_node_list is ast_root_node_list:
-                # Right below root level in AST.  traces_iter needs to catch
-                # up with lookahead_traces_iter, but all needed information is
-                # already available in the lookahead variables.
-                new_node_lists = False
-                trace_tuple = next(traces_iter)
-                if trace_tuple is not lookahead_trace_tuple:
-                    while trace_tuple is not lookahead_trace_tuple:
-                        trace_tuple = next(traces_iter)
-                accurate_node_line_number = True
-                accurate_ancestor_line_number = True
-                line_number = last_lookahead_trace_line_number
-                if parent_chunk_node_list_stack:
-                    parent_chunk_node_list_stack = []
-            elif id(parent_chunk_node_list) in chunk_node_list_start_line_numbers:
-                # Continue in the AST at a level that has already been
-                # visited.  While this is in the same chunk block node as one
-                # or more previous leaf nodes, it isn't necessarily within the
-                # same block node (for example, Div doesn't start a chunk).
-                # Because this AST level has already been visited, and is not
-                # Root, getting to it will not involve going to a lower chunk
-                # level or passing through Root.  Since Null nodes or nodes
-                # containing only Nulls can be skipped, they can't cause line
-                # number errors in this case.
-                #
-                # The line number is only incremented if that can be done
-                # accurately.  Otherwise it remains at the last known good
-                # value.
-                new_node_lists = False
-                trace_tuple = next(traces_iter)
-                if trace_tuple is not lookahead_trace_tuple:
-                    while trace_tuple is not lookahead_trace_tuple:
-                        trace_node_type = trace_tuple[0]
-                        if trace_node_type not in trace_leaf_block_node_types_with_null:
-                            parent_chunk_node_list_stack.pop()
-                        trace_tuple = next(traces_iter)
-                chunk_offset = chunk_node_list_start_line_numbers[id(parent_chunk_node_list)]
-                if chunk_offset is None:
-                    accurate_node_line_number = False
+        for node_tuple in self._walk_ast_less_note_contents(ast):
+            node, parent_node_list, parent_node_list_index = node_tuple
+            node_type = node['t']
+            if node_type == 'Str':
+                node_contents = node['c']
+                line_index = line.find(node_contents, line_index)
+                if line_index >= 0:
+                    line_index += len(node_contents)
                 else:
-                    accurate_node_line_number = True
-                    accurate_ancestor_line_number = True
-                    line_number = chunk_offset + last_lookahead_trace_line_number - 1
-            else:
-                # Visiting deeper levels in the AST for the first time.
-                # Traveling to the leaf node may involve passing through Root.
-                new_node_lists = True
-                null_count = 0
-                last_null_offset = 0
-                null_backtrack = False
-                (last_trace_node_type, last_trace_node_format,
-                    last_trace_line_number, last_trace_in_chunk) = trace_tuple
-                trace_tuple = next(traces_iter)
-                if trace_tuple is not lookahead_trace_tuple:
-                    while trace_tuple is not lookahead_trace_tuple:
-                        if last_trace_node_type not in trace_leaf_block_node_types_with_null:
-                            current_trace_parent_chunk_node_list = parent_chunk_node_list_stack.pop()
-                            if not last_trace_in_chunk:
-                                line_number = trace_line_number
-                                null_count = 0
-                                last_null_offset = 0
-                                null_backtrack = False
-                            elif id(current_trace_parent_chunk_node_list) in chunk_node_list_start_line_numbers:
-                                chunk_offset = chunk_node_list_start_line_numbers[id(current_trace_parent_chunk_node_list)]
-                                if chunk_offset is not None:
-                                    line_number = chunk_offset + last_trace_line_number - 1
-                                    null_count = 0
-                                    last_null_offset = 0
-                                    null_backtrack = False
-                            elif null_count > 0:
-                                null_backtrack = True
-                        elif last_trace_node_type == '':
-                            if not last_trace_in_chunk:
-                                line_number = last_trace_line_number
-                                null_count = 0
-                                last_null_offset = 0
-                                null_backtrack = False
-                            else:
-                                null_count += 1
-                                last_null_offset = last_trace_line_number - 1
-                        # Leaf nodes are possible here, but require no special
-                        # handling.  There could be an out-of-order HTML
-                        # RawBlock, which should be ignored since it would be
-                        # at the end of the chunk and thus followed in the
-                        # trace by an internal node that would reset line
-                        # numbering.
-                        (last_trace_node_type, last_trace_node_format,
-                            last_trace_line_number, last_trace_in_chunk) = trace_tuple
-                        trace_tuple = next(traces_iter)
-                if any(chunk_node_list_start_line_numbers.get(id(node_list), ()) is None
-                        for node_list in parent_chunk_node_list_stack):
-                    # At least one ancestor has inaccurate line numbering
-                    accurate_node_line_number = False
-                elif untraced_html_node_stack:
-                    accurate_node_line_number = True
-                    if any(node_list is not parent_chunk_node_list
-                            for node_list in untraced_html_parent_chunk_node_list_stack)):
-                        # There are untraced HTML nodes at one or more AST
-                        # levels above the current one
-                        accurate_ancestor_line_number = False
-                    else:
-                        accurate_ancestor_line_number = True
-                elif null_count <= 1:
-                    # No Nulls to worry about, or only a single one
-                    accurate_node_line_number = True
-                    accurate_ancestor_line_number = True
-                elif (not null_backtrack and
-                        id(parent_chunk_node_list_stack[-1]) in chunk_node_list_start_line_numbers):
-                    # Multiple Nulls, but all at the same level, so the last
-                    # Null gives the desired value
-                    accurate_node_line_number = True
-                    accurate_ancestor_line_number = True
+                    line, line_number = next(line_and_number_iter)
+                    line_index = line.find(node_contents)
+                    if line_index < 0:
+                        while line_index < 0:
+                            line, line_number = next(line_and_number_iter)
+                            line_index = line.find(node_contents)
+                    line_index += len(node_contents)
+                if para_plain_node is not None:
+                    para_plain_nodes_and_line_numbers.append((para_plain_node, line_number))
+                    para_plain_node = None
+            elif node_type in ('Code', 'RawInline'):
+                node_contents = node['c'][1]
+                last_line_index = line_index
+                line_index = line.find(node_contents, line_index)
+                if line_index >= 0:
+                    line_index += len(node_contents)
                 else:
-                    # Ancestors are accurate, but multiple Nulls at multiple
-                    # levels
-                    accurate_node_line_number = True
-                    accurate_ancestor_line_number = False
-
-            if not accurate_node_line_number:
-                # If line numbering can't be accurate, record that and reset
-                # for the next loop
-                if new_node_lists:
-                    for node_list in reversed(parent_chunk_node_list_stack):
-                        if id(node_list) in chunk_node_list_start_line_numbers:
-                            break
-                        chunk_node_list_start_line_numbers[id(node_list)] = None
-                    chunk_node_list_start_line_numbers[id(parent_chunk_node_list)] = None
-                if untraced_html_node_stack:
-                    untraced_html_node_stack = []
-                    untraced_html_parent_chunk_node_list_stack = []
-            else:
-                # If line numbering can be accurate, attempt various
-                # corrections
-                uncorrected_line_number = line_number
-                if untraced_html_node_stack:
-                    # For node lists that have already had their starting line
-                    # number determined, there's no need to check for empty
-                    # lines between or after HTML RawBlocks, because those
-                    # would introduce Nulls, which would automatically cause
-                    # any preceding HTML RawBlocks to be irrelevant in
-                    # calculating line numbers.  For node lists that still do
-                    # need to have their starting line number determined,
-                    # empty lines may occur anywhere if there are Nulls.
-                    for html_node in untraced_html_node_stack:
-                        line_stripped = source_string_lines[line_number-1].lstrip(left_strip_chars).rstrip()
-                        if new_node_lists and null_count > 0 and line_stripped == '':
-                            while line_stripped == '':
-                                line_number += 1
-                                line_stripped = source_string_lines[line_number-1].lstrip(left_strip_chars).rstrip()
-                        html = html_node['c'][1]
-                        if html == line_stripped or (html in line_stripped and line_stripped.split(html, 1)[1] == ''):
-                            line_number += 1
-                    if new_node_lists and null_count > 0:
-                        line_stripped = source_string_lines[line_number-1].lstrip(left_strip_chars).rstrip()
-                        if new_node_lists and null_count > 0 and line_stripped == '':
-                            while line_stripped == '':
-                                line_number += 1
-                                line_stripped = source_string_lines[line_number-1].lstrip(left_strip_chars).rstrip()
-                    untraced_html_node_stack = []
-                    untraced_html_parent_chunk_node_list_stack = []
-                elif new_node_lists and null_count > 0:
-                    if null_count == 1:
-                        line_number += last_null_offset
-                    else:
-                        line_stripped = source_string_lines[line_number-1].lstrip(left_strip_chars).rstrip()
-                        if line_stripped == '':
-                            while line_stripped == '':
-                                line_number += 1
-                                line_stripped = source_string_lines[line_number-1].lstrip(left_strip_chars).rstrip()
-
-                if parent_node_type == 'DefinitionList':
-                    # Definition lists need special treatment for two reasons.
-                    # First, terms being defined are not block nodes, so they
-                    # don't appear in trace output.  Line numbers must be adjusted
-                    # for this.  Second, the final chunk line number for each
-                    # definition is 1 larger than the equivalent for other chunk
-                    # blocks.  This must be corrected so that the same line number
-                    # formulas can be used for everything.
-                    #
-                    # parent_node_list contains nodes that make up a definition.
-                    # parent_node_list_parent_list is a list of definitions.
-                    # parent_node_list_parent_parent_list contains a term in index
-                    # 0 followed by a list of definitions in index 1.
-                    if parent_node_list[0] is node:
-                        if parent_node_list_parent_list[0] is not parent_node_list:
-                            # If not the first definition, correct overshoot.
-                            line_number -= 1
+                    line_index = last_line_index
+                    for node_contents_elem in node_contents.split(' '):
+                        line_index = line.find(node_contents_elem, line_index)
+                        if line_index >= 0:
+                            line_index += len(node_contents_elem)
                         else:
-                            # Adjust for first definition.
-                            if parent_node['c'][0] is not parent_node_list_parent_parent_list:
-                                # If not the first term, correct overshoot.
-                                line_number -= 1
-                            # Add traceback span to term's inline node list
-                            parent_node_list_parent_parent_list[0].insert(0, get_traceback_span_node(source_name, line_number))
-                            # Deal with code and raw nodes in the term's node
-                            # list.  Unlike the Para and Plain case later on,
-                            # there is no possibility of having SoftBreak nodes,
-                            # so processing is simpler.
-                            for inline_walk_tuple in walk_node_list(parent_node_list_parent_parent_list[0]):
-                                inline_node, inline_parent_node_list, inline_parent_node_list_index = inline_walk_tuple
-                                inline_node_type = inline_node['t']
-                                if inline_node_type == 'Code':
-                                    if 'codebraid' in inline_node['c'][0][1]:  # classes
-                                        code_chunk = PandocCodeChunk(inline_node, source_name, line_number, inline_parent_node_list, inline_parent_node_list_index)
-                                        code_chunks.append(code_chunk)
-                                elif inline_node_type == 'RawInline':
-                                    freeze_raw_node(inline_node, source_name, line_number)
-                            # Determine line number for start of first definition
-                            line_number += 1
-                            if source_string_lines[line_number-1].strip() == '':
-                                line_number += 1
-                elif (parent_node_type == 'Div' and
-                        parent_node_list[0] is node and
-                        source_string_lines[line_number-1].lstrip().startswith(':::')):
-                    # If this is the beginning of the div, and this is a pandoc
-                    # markdown fenced div rather than an HTML div, go to the next
-                    # line, where the content actually begins
-                    line_number += 1
-
-
-
-
-
-
-            # Check that node types are consistent
-            if node_type != trace_node_type:
-                if node_type == 'Plain' and trace_node_type == 'Para':
-                    # Nodes that appear as Para in the trace can become Plain
-                    # once parsing proceeds and they are inserted into the
-                    # AST.  This can happen for example in BulletList.
-                    pass
-                elif node_type == 'RawBlock' and node['c'][0] == 'html':
-                    # When the markdown extension markdown_in_html_blocks is
-                    # enabled (default for pandoc markdown), text that is
-                    # wrapped in block-level html tags will result in a Para
-                    # or Plain node that is preceded and followed by one
-                    # RawBlock per block-level tag.  However, only the
-                    # following RawBlock(s) will appear in the trace.
-                    #
-                    # Trying to correct line numbers to account for this in
-                    # the general case might be difficult, but it is simple
-                    # for the case of tags on lines by themselves.  There is
-                    # no need to handle the case of empty lines between the
-                    # opening tag and the text, because that will result in
-                    # Null nodes that will automatically adjust line numbers.
-
-                    if not last_trace_in_chunk or chunk_offset is not None:
-                        #
-                    if source_string_lines[line_number-1].strip() == node['c'][1]:
-                        line_number += 1
-                    continue
+                            line, line_number = next(line_and_number_iter)
+                            line_index = line.find(node_contents_elem)
+                            if line_index < 0:
+                                while line_index < 0:
+                                    line, line_number = next(line_and_number_iter)
+                                    line_index = line.find(node_contents_elem)
+                            line_index += len(node_contents_elem)
+                if node_type == 'Code':
+                    if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb' in classes
+                        code_chunk = PandocCodeChunk(node, parent_node_list, parent_node_list_index,
+                                                     source_name, line_number)
+                        self._code_chunks.append(code_chunk)
                 else:
-                    raise PandocError('Parsing trace failed')
-            if node_type in ('Plain', 'Para'):
-                if node['c']:
-                    node['c'].insert(0, get_traceback_span_node(source_name, line_number))
-                    # Find inline code nodes and determine their line numbers.
-                    # Incrementing `line_number` here won't throw off
-                    # the overall line numbering if there are errors in the
-                    # numbering calculations, because `line_number` is
-                    # reset after each Plain or Para node based on the trace.
-                    for inline_walk_tuple in walk_node_list(node['c']):
-                        inline_node, inline_parent_node_list, inline_parent_node_list_index = inline_walk_tuple
-                        inline_node_type = inline_node['t']
-                        if inline_node_type == 'SoftBreak':
-                            line_number += 1
-                        elif inline_node_type == 'Code':
-                            if 'codebraid' in inline_node['c'][0][1]:  # classes
-                                code_chunk = PandocCodeChunk(inline_node, source_name, line_number, inline_parent_node_list, inline_parent_node_list_index)
-                                code_chunks.append(code_chunk)
-                            # For the unlikely case of a code span that is
-                            # broken over multiple lines, make a basic attempt
-                            # at correcting the line numbering.  This won't
-                            # detect a broken span in all cases since that
-                            # would require full parsing (for example, there
-                            # could be multiple code spans with similar or
-                            # identical content), but it will work in the vast
-                            # majority of cases.  It's possible that the
-                            # current line number is off so that the code
-                            # can't be found.  In that case, don't change the
-                            # numbering.
-                            code_content = inline_node['c'][1]
-                            if ' ' in code_content:
-                                line = source_string_lines[line_number-1]
-                                if code_content not in line:
-                                    lookahead_line_number = line_number
-                                    while True:
-                                        lookahead_line_number += 1
-                                        try:
-                                            next_line = source_string_lines[lookahead_line_number-1]
-                                        except IndexError:
-                                            break
-                                        if next_line.strip() == '':
-                                            break
-                                        line += ' ' + next_line.lstrip()
-                                        if code_content in line:
-                                            line_number = lookahead_line_number
-                                            break
-                        elif inline_node_type == 'RawInline':
-                            freeze_raw_node(inline_node, source_name, line_number)
+                    freeze_raw_node(node, source_name, line_number)
+                if para_plain_node is not None:
+                    para_plain_nodes_and_line_numbers.append((para_plain_node, line_number))
+                    para_plain_node = None
             elif node_type == 'CodeBlock':
-                if 'codebraid' in node[0][1]:  # classes
-                    code_chunk = PandocCodeChunk(node, source_name, line_number, parent_node_list, parent_node_list_index)
-                    code_chunks.append(code_chunk)
+                node_contents_lines = node['c'][1].splitlines()
+                for node_contents_line in node_contents_lines:
+                    if node_contents_line not in line:
+                        # Move forward a line at a time until match
+                        line, line_number = next(line_and_number_iter)
+                        if node_contents_line not in line:
+                            while node_contents_line not in line:
+                                line, line_number = next(line_and_number_iter)
+                    # Once there's a match, move forward one line per loop
+                    line, line_number = next(line_and_number_iter)
+                line_index = 0
+                if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb' in classes
+                    code_chunk = PandocCodeChunk(node, parent_node_list, parent_node_list_index,
+                                                 source_name, line_number - len(node_contents_lines))
+                    self._code_chunks.append(code_chunk)
+                para_plain_node = None
             elif node_type == 'RawBlock':
-                freeze_raw_node(node, source_name, line_number)
-
-
-
-
-
-        if trace_node_type is not None:
-            raise PandocError('Parsing trace failed; unused trace for {0}'.format(trace_node_type))
-
-        return ast
+                # Note that HTML RawBlock can be inline, so use `.find()`
+                # rather than `in` to guarantee results.  The
+                # `len(node_contents_line) or 1` guarantees that multiple
+                # empty `node_contents_line` won't keep matching the same
+                # `line`.
+                node_contents_lines = node['c'].splitlines()
+                for node_contents_line in node_contents_lines:
+                    line_index = line.find(node_contents_line)
+                    if line_index >= 0:
+                        line_index += len(node_contents_line) or 1
+                    else:
+                        line, line_number = next(line_and_number_iter)
+                        line_index = line.find(node_contents_line)
+                        if line_index < 0:
+                            while line_index < 0:
+                                line, line_number = next(line_and_number_iter)
+                                line_index = line.find(node_contents_line)
+                        line_index += len(node_contents_line) or 1
+                freeze_raw_node(node, source_name, line_number - len(node_contents_lines) + 1)
+                para_plain_node = None
+            elif node_type == 'Note':
+                for note_node_tuple in self._walk_node_list(node['c']):
+                    note_node, note_parent_node_list, note_parent_node_list_index = note_node_tuple
+                    note_node_type = node['t']
+                    if note_node_type in ('Code', 'CodeBlock'):
+                        if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb' in classes
+                            code_chunk = PandocCodeChunk(note_node, note_parent_node_list, note_parent_node_list_index,
+                                                         source_name, line_number)
+                            self._code_chunks.append(code_chunk)
+                    elif note_node_type in ('RawInline', 'RawBlock'):
+                        freeze_raw_node(note_node, source_name, line_number)
+            elif node_type in ('Para', 'Plain'):
+                para_plain_node = node
+            elif node_type in block_node_types:
+                para_plain_node = None
 
 
     def _extract_code_chunks(self):
-        ast = self._convert_source_string_to_ast(source_string=self.strings[0], source_name='name')
-        for node, *_ in self._walk_ast(ast):
-            node_type = node['t']
-            if node_type in self._code_node_types:
-                pass
-                #print(node)
-                #ode['c'][1] = str(eval(node['c'][1]))
+        for source_string, source_name in zip(self.source_strings, self.source_names):
+            self._load_and_process_initial_ast(source_string=source_string, source_name=source_name)
 
-        self._ast = ast
 
-    def _process_code_chunks(self):
-        ...
+    def _postprocess_code_chunks(self):
+        for code_chunk in reversed(self._code_chunks):
+            code_chunk.parent_node_list.insert(code_chunk.parent_node_list_index+1, {'t': 'CodeBlock', 'c': [['', ['stdout'], []], code_chunk.stdout[:-1]]})
+        for source_name in self.source_names:
+            for node, line_number in self._para_plain_nodes_and_line_numbers[source_name]:
+                node['c'].insert(0, self._get_traceback_span_node(source_name, line_number))
+
 
     def convert(self, *, to_format):
         if to_format not in self.to_formats:
             raise ValueError
-        stdout = self._run_pandoc(input=json.dumps(self._ast),
-                                  from_format='json',
-                                  to_format=to_format,
-                                  standalone=True)
+        stdout = '\n'.join(self._run_pandoc(input=json.dumps(v),
+                                          from_format='json',
+                                          to_format=to_format,
+                                          standalone=True) for v in self._asts.values())
         return stdout

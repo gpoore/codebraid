@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2018, Geoffrey M. Poore
+# Copyright (c) 2018-2019, Geoffrey M. Poore
 # All rights reserved.
 #
 # Licensed under the BSD 3-Clause License:
@@ -12,6 +12,83 @@ import os
 import collections
 import pathlib
 import typing; from typing import Optional, Sequence, Union
+from .. import err
+from .. import codeprocessors
+
+
+
+
+class CodeChunk(object):
+    '''
+    Base class for code chunks.
+    '''
+    def __init__(self,
+                 command: str,
+                 code: str,
+                 options: dict,
+                 source_name: str, *,
+                 start_line_number: Optional[int]=None,
+                 inline: Optional[bool]=None):
+        if command not in ('code', 'run'):
+            raise err.SourceError('Unknown Codebraid command "{0}"'.format(command), source_name, start_line_number)
+        self.command = command
+        code_lines = code.splitlines()
+        if len(code_lines) > 1 and inline:
+            raise err.SourceError('Inline code cannot be longer that 1 line', source_name, start_line_number)
+        if not inline:
+            code_lines[-1] += '\n'
+        self.code = '\n'.join(code_lines)
+        for k, v in options.items():
+            try:
+                v_func = self._options_schema[k]
+            except KeyError:
+                raise err.SourceError('Unknown option "{0}"'.format(k), source_name, start_line_number)
+            if not v_func(v):
+                raise err.SourceError('Option "{0}" has incorrect value "{1}"'.format(k, v), source_name, start_line_number)
+        final_options = self._default_options.copy()
+        final_options.update(options)
+        self.options = final_options
+        self.source_name = source_name
+        self.start_line_number = start_line_number
+        self.inline = inline
+
+        self.stdout = []
+        self.stderr = []
+
+    @staticmethod
+    def _option_show_schema(x):
+        if not isinstance(x, str):
+            return False
+        if x == 'notebook':
+            return True
+        x = x.replace(' ', '')
+        for output_and_format in x.split('+'):
+            if ':' not in output_and_format:
+                output = output_and_format
+                format = None
+            else:
+                output, format = output_and_format.split(':', 1)
+            if output == 'code':
+                if format is not None:
+                    return False
+            elif output not in ('stdout', 'stderr') or format not in (None, 'verbatim', 'raw'):
+                return False
+        return True
+
+    # Once design stabilizes, it may be worth merging schema with any option
+    # postprocessing that is needed
+    _options_schema = {'hide': lambda x: x in ('code', 'stdout', 'stderr'),
+                       'first_number': lambda x: x == 'next' or (isinstance(x, int) and x > 0),
+                       'label': lambda x: isinstance(x, str),
+                       'lang': lambda x: isinstance(x, str),
+                       'line_numbers': lambda x: isinstance(x, bool),
+                       'session': lambda x: isinstance(x, str),
+                       'show': _option_show_schema}
+
+    _default_options = {'first_number': 'next',
+                        'line_numbers': True,
+                        'session': None,
+                        'show': 'notebook'}
 
 
 
@@ -77,7 +154,7 @@ class Converter(object):
             if expanduser:
                 paths = [p.expanduser() for p in paths]
             self.expanded_source_paths = paths
-            self.strings = [p.read_text(encoding='utf_8_sig') for p in paths]
+            self.source_strings = [p.read_text(encoding='utf_8_sig') for p in paths]
             if from_format is None:
                 try:
                     from_formats = set([self._file_extension_to_format_dict[p.suffix] for p in paths])
@@ -99,7 +176,7 @@ class Converter(object):
             elif not (isinstance(strings, collections.abc.Sequence) and
                       strings and all(isinstance(x, str) for x in strings)):
                 raise TypeError
-            self.strings = strings
+            self.source_strings = strings
             if len(strings) == 1:
                 self.source_names = ['<string>']
             else:
@@ -115,8 +192,10 @@ class Converter(object):
             raise TypeError
 
         self._code_chunks = []
+        self._code_options = {}
         self._extract_code_chunks()
         self._process_code_chunks()
+        self._postprocess_code_chunks()
 
     from_formats = set()
     to_formats = set()
@@ -129,22 +208,11 @@ class Converter(object):
         raise NotImplementedError
 
     def _process_code_chunks(self):
+        codeprocessors.CodeProcessor(code_chunks=self._code_chunks,
+                                     code_options=self._code_options)
+
+    def _postprocess_code_chunks(self):
         raise NotImplementedError
 
     def convert(self, *, to_format):
         raise NotImplementedError
-
-
-
-
-class CodeChunk(object):
-    '''
-    Base class for code chunks.
-    '''
-    def __init__(self, *,
-                 code: str,
-                 kwargs: dict,
-                 converter: Converter,
-                 first_line_number: Optional[int]):
-        pass
-

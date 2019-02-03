@@ -1,0 +1,66 @@
+# Index of all supported languages, in bespon format (https://bespon.org/).
+# This maps languages to the files in which they are defined.
+# The definition files contain maps of language names to definitions.
+#
+# General form of language definition:
+# ----------------------------------------------------------------------------
+# |=== <name>
+# language =
+#     optional string, default <name>
+#     for when <name> is really a custom task rather than language, etc.
+#
+# executable =
+#     string, default <name>
+#     program that is called to process source
+#
+# extension =
+#     string
+#     file extension without leading period
+#
+# pre_run_commands =
+#     optional string or list of strings
+#     commands run before code
+#
+# run_command =
+#     optional string, default '{executable} {source}'
+#
+# post_run_commands =
+#     optional string or list of strings
+#     commands run after code
+#
+# source_start =
+#     optional string
+#     start of source template
+#
+# source_end =
+#     optional string
+#     end of source template
+#
+# chunk_wrapper =
+#     string
+#     template for code chunk
+#     must contain fields {stdoutdelim}, {stderrdelim}, {code}
+#     must write delims to output streams with a single leading and trailing \n
+#
+# inline_formatter =
+#     string
+#     converts inline expressions into strings
+#     must contain field {code}
+#
+# error_patterns =
+#     string or list of strings
+#     literal patterns used to identify errors in stderr
+#
+# warning_patterns =
+#     string or list of strings
+#     literal patterns used to identify warnings in stderr
+#
+# line_number_patterns =
+#     string or list of strings
+#     used to identify line numbers in stderr
+#     must contain field {number}; otherwise treated as literal patterns
+#-----------------------------------------------------------------------------
+#
+
+python = "python.bespon"
+
