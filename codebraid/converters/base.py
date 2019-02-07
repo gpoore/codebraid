@@ -27,7 +27,7 @@ class CodeChunk(object):
                  code: str,
                  options: dict,
                  source_name: str, *,
-                 start_line_number: Optional[int]=None,
+                 source_start_line_number: Optional[int]=None,
                  inline: Optional[bool]=None):
         if command not in ('code', 'run'):
             raise err.SourceError('Unknown Codebraid command "{0}"'.format(command), source_name, start_line_number)
@@ -36,59 +36,127 @@ class CodeChunk(object):
         if len(code_lines) > 1 and inline:
             raise err.SourceError('Inline code cannot be longer that 1 line', source_name, start_line_number)
         if not inline:
+            # Inline code automatically won't contribute to line count
             code_lines[-1] += '\n'
         self.code = '\n'.join(code_lines)
+        if inline:
+            final_options = self._default_inline_options.copy()
+        else:
+            final_options = self._default_options.copy()
         for k, v in options.items():
             try:
-                v_func = self._options_schema[k]
+                v_func = self._options_schema_process[k]
             except KeyError:
                 raise err.SourceError('Unknown option "{0}"'.format(k), source_name, start_line_number)
-            if not v_func(v):
+            v_isvalid, v_processed = v_func(v, inline, final_options)
+            if not v_isvalid:
                 raise err.SourceError('Option "{0}" has incorrect value "{1}"'.format(k, v), source_name, start_line_number)
-        final_options = self._default_options.copy()
-        final_options.update(options)
+            if v_processed is not None:
+                final_options[k] = v_processed
         self.options = final_options
         self.source_name = source_name
-        self.start_line_number = start_line_number
+        self.source_start_line_number = source_start_line_number
         self.inline = inline
 
-        self.stdout = []
-        self.stderr = []
+        self.stdout = None
+        self.stderr = None
+        if inline:
+            self.expression = None
+        self.code_start_line_number = None
+
 
     @staticmethod
-    def _option_show_schema(x):
+    def _option_first_number_schema_process(x, inline, opts):
+        if isinstance(x, int) and x > 0:
+            return (True, x)
+        elif isinstance(x, str):
+            if x == 'next':
+                return (True, x)
+            try:
+                x = int(x)
+            except ValueError:
+                return (False, x)
+            return (True, x)
+        return (False, x)
+
+    @staticmethod
+    def _option_hide_schema_process(x, inline, opts):
         if not isinstance(x, str):
-            return False
+            return (False, None)
+        vals = x.replace(' ', '').split('+')
+        if not all(val in ('code', 'stdout', 'stderr') for val in vals):
+            return (False, None)
+        for val in vals:
+            opts['show'].pop(val, None)
+        return (True, None)
+
+    _show_notebook = collections.OrderedDict([('code', 'verbatim'),
+                                              ('stdout', 'autoverbatim'),
+                                              ('stderr', 'verbatim')])
+    _show_inline_notebook = collections.OrderedDict([('expression', 'raw'),
+                                                     ('stderr', 'verbatim')])
+
+    def _option_show_schema_process(self, x, inline, opts):
+        if not isinstance(x, str):
+            return (False, x)
         if x == 'notebook':
-            return True
-        x = x.replace(' ', '')
-        for output_and_format in x.split('+'):
+            if inline:
+                return (True, self._show_inline_notebook.copy())
+            return (True, self._show_notebook.copy())
+        v_processed = collections.OrderedDict()
+        vals = x.replace(' ', '').split('+')
+        for output_and_format in vals:
             if ':' not in output_and_format:
                 output = output_and_format
                 format = None
             else:
                 output, format = output_and_format.split(':', 1)
+            if output in v_processed:
+                return (False, x)
             if output == 'code':
-                if format is not None:
-                    return False
-            elif output not in ('stdout', 'stderr') or format not in (None, 'verbatim', 'raw'):
-                return False
-        return True
+                if format is None:
+                    format = 'verbatim'
+                elif format != 'verbatim':
+                    return (False, x)
+            elif output == 'expression':
+                if not inline:
+                    return (False, x)
+                if format is None:
+                    format = 'raw'
+                elif format not in ('verbatim', 'autoverbatim', 'raw'):
+                    return (False, x)
+            elif output in ('stdout', 'stderr'):
+                if format not in (None, 'verbatim', 'autoverbatim', 'raw'):
+                    return (False, x)
+                if format is None:
+                    format = 'verbatim'
+            else:
+                return (False, x)
+            v_processed[output] = format
+        return (True, v_processed)
 
-    # Once design stabilizes, it may be worth merging schema with any option
-    # postprocessing that is needed
-    _options_schema = {'hide': lambda x: x in ('code', 'stdout', 'stderr'),
-                       'first_number': lambda x: x == 'next' or (isinstance(x, int) and x > 0),
-                       'label': lambda x: isinstance(x, str),
-                       'lang': lambda x: isinstance(x, str),
-                       'line_numbers': lambda x: isinstance(x, bool),
-                       'session': lambda x: isinstance(x, str),
-                       'show': _option_show_schema}
+    @staticmethod
+    def _option_line_numbers_schema_process(x, inline, opts):
+        if isinstance(x, bool):
+            return (True, x)
+        if x in ('true', 'false'):
+            return (True, x == 'true')
+        return (False, x)
+
+
+    _options_schema_process = {'hide': _option_hide_schema_process,
+                               'first_number': _option_first_number_schema_process,
+                               'label': lambda x, inline, opts: (isinstance(x, str), x),
+                               'lang': lambda x, inline, opts: (isinstance(x, str), x),
+                               'line_numbers': _option_line_numbers_schema_process,
+                               'session': lambda x, inline, opts: (isinstance(x, str), x),
+                               'show': _option_show_schema_process}
 
     _default_options = {'first_number': 'next',
                         'line_numbers': True,
                         'session': None,
-                        'show': 'notebook'}
+                        'show': _show_notebook}
+    _default_inline_options = {'session': None, 'show': _show_inline_notebook}
 
 
 
@@ -111,7 +179,7 @@ class MetaConverter(type):
                 raise TypeError
             if not all(isinstance(attr, set) and attr and
                        all(isinstance(x, str) for x in attr)
-                       for attr in [cls.from_formats, cls.to_formats, cls.multi_source_formats]):
+                       for attr in [cls.from_formats, cls.to_formats]):
                 raise TypeError
             if cls.multi_source_formats - cls.from_formats:
                 raise ValueError
@@ -129,9 +197,16 @@ class Converter(object):
     def __init__(self, *,
                  strings: Optional[Union[str, Sequence[str]]]=None,
                  paths: Optional[Union[str, Sequence[str], pathlib.Path, Sequence[pathlib.Path]]]=None,
+                 cache_path: Optional[Union[str, pathlib.Path]]=None,
+                 cross_source_sessions: bool=True,
                  expanduser: bool=False,
                  expandvars: bool=False,
                  from_format: Optional[str]=None):
+        if not all(isinstance(x, bool) for x in (cross_source_sessions, expanduser, expandvars)):
+            raise TypeError
+        self.cross_source_sessions = cross_source_sessions
+        self.expanduser = expanduser
+        self.expandvars = expandvars
         if paths is not None and strings is None:
             if isinstance(paths, str):
                 paths = [pathlib.Path(paths)]
@@ -150,21 +225,27 @@ class Converter(object):
             if not all(isinstance(x, bool) for x in (expanduser, expandvars)):
                 raise TypeError
             if expandvars:
-                paths = [pathlib.Path(os.path.expandvars(p)) for p in paths]
+                paths = [pathlib.Path(os.path.expandvars(str(p))) for p in paths]
             if expanduser:
                 paths = [p.expanduser() for p in paths]
             self.expanded_source_paths = paths
-            self.source_strings = [p.read_text(encoding='utf_8_sig') for p in paths]
+            source_strings = []
+            for p in paths:
+                source_string = p.read_text(encoding='utf_8_sig')
+                if not source_string:
+                    source_string = '\n'
+                source_strings.append(source_string)
+            self.source_strings = source_strings
             if from_format is None:
                 try:
                     from_formats = set([self._file_extension_to_format_dict[p.suffix] for p in paths])
                 except KeyError:
-                    raise TypeError
+                    raise TypeError('Cannot determine document format from file extensions, or unsupported format')
                 from_format = from_formats.pop()
                 if from_formats:
-                    raise TypeError
+                    raise TypeError('Cannot determine unambiguous document format from file extensions')
             if from_format not in self.from_formats:
-                raise ValueError
+                raise ValueError('Unsupported document format {0}'.format(from_format))
             self.from_format = from_format
         elif strings is not None and paths is None:
             if not all(x is False for x in (expanduser, expandvars)):
@@ -184,18 +265,44 @@ class Converter(object):
             self.raw_source_paths = None
             self.expanded_source_paths = None
             if from_format is None:
-                raise TypeError
+                raise TypeError('Document format is required')
             if from_format not in self.from_formats:
-                raise ValueError
+                raise ValueError('Unsupported document format {0}'.format(from_format))
             self.from_format = from_format
         else:
             raise TypeError
+        if len(self.source_strings) > 1 and from_format not in self.multi_source_formats:
+            raise TypeError('Multiple sources are not supported for format {0}'.format(from_format))
+        if cache_path is None:
+            if paths is not None:
+                cache_path = self.expanded_source_paths[0].parent()
+        else:
+            if isinstance(cache_path, str):
+                cache_path = pathlib.Path(cache_path)
+            elif not isinstance(cache_path, pathlib.Path):
+                raise TypeError
+        self.cache_path = cache_path
+        if cache_path is None:
+            self.cache_root_path = None
+            self.cache_stream_path = None
+            self.cache_temp_path = None
+        else:
+            cache_root_path = cache_path / '_codebraid'
+            if not cache_root_path.is_dir():
+                cache_root_path.mkdir(parents=True)
+            self.cache_root_path = cache_root_path
+            cache_stream_path = cache_root_path / 'stream_cache'
+            if not cache_stream_path.is_dir():
+                cache_stream_path.mkdir()
+            self.cache_stream_path = cache_stream_path
+            cache_temp_path = cache_root_path / 'temp'
+            if not cache_temp_path.is_dir():
+                cache_temp_path.mkdir()
+            self.cache_temp_path = cache_temp_path
 
-        self._code_chunks = []
-        self._code_options = {}
-        self._extract_code_chunks()
-        self._process_code_chunks()
-        self._postprocess_code_chunks()
+        self.code_chunks = []
+        self.code_options = {}
+
 
     from_formats = set()
     to_formats = set()
@@ -204,12 +311,17 @@ class Converter(object):
     _file_extension_to_format_dict = {'.md': 'markdown', '.markdown': 'markdown',
                                       '.tex': 'latex', '.ltx': 'latex'}
 
+
+    def code_braid(self):
+        self._extract_code_chunks()
+        self._process_code_chunks()
+        self._postprocess_code_chunks()
+
     def _extract_code_chunks(self):
         raise NotImplementedError
 
     def _process_code_chunks(self):
-        codeprocessors.CodeProcessor(code_chunks=self._code_chunks,
-                                     code_options=self._code_options)
+        codeprocessors.CodeProcessor(converter=self).process()
 
     def _postprocess_code_chunks(self):
         raise NotImplementedError

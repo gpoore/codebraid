@@ -18,4 +18,4 @@ class SourceError(CodebraidError):
             message = 'In "{0}" near line {1}:\n  {2}'.format(source_name, start_line_number, message)
         elif source_name is not None:
             message = 'In "{0}":\n  {1}'.format(source_name, message)
-        super.__init__(message)
+        super().__init__(message)

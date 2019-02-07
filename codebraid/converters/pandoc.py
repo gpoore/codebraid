@@ -15,7 +15,8 @@ import pathlib
 import platform
 import re
 import subprocess
-from typing import Optional, Union
+import tempfile
+from typing import Optional, Sequence, Union
 import warnings
 from .base import Converter, CodeChunk
 from .. import err
@@ -30,14 +31,20 @@ class PandocError(err.CodebraidError):
 
 
 class PandocCodeChunk(CodeChunk):
-    def __init__(self, node, parent_node_list, parent_node_list_index, source_name, start_line_number):
+    def __init__(self,
+                 node: dict,
+                 parent_node_list: list,
+                 parent_node_list_index: int,
+                 source_name: str,
+                 source_start_line_number: int):
         self.node = node
         self.parent_node_list = parent_node_list
         self.parent_node_list_index = parent_node_list_index
 
         options = {}
+        pandoc_id = ''
         pandoc_classes = []
-        pandoc_kvpairs = {}
+        pandoc_kvpairs = []
         node_id, node_classes, node_kvpairs = node['c'][0]
         code = node['c'][1]
 
@@ -46,6 +53,7 @@ class PandocCodeChunk(CodeChunk):
         # handling
         if node_id:
             options['label'] = node_id
+            pandoc_id = node_id
         inline = node['t'] == 'Code'
         codebraid_command = None
         for n, c in enumerate(node_classes):
@@ -61,12 +69,14 @@ class PandocCodeChunk(CodeChunk):
                 if 'line_numbers' in options:
                     raise err.SourceError('Duplicate line numbering class for code chunk', source_name, start_line_number)
                 options['line_numbers'] = True
+                pandoc_classes.append('numberLines')
             else:
                 if n > 0:
                     raise err.SourceError('The language/format must be the first class for code chunk', source_name, start_line_number)
                 if 'lang' in options:
                     raise err.SourceError('Unknown non-Codebraid class', source_name, start_line_number)
                 options['lang'] = c
+                pandoc_classes.insert(0, c)
         for k, v in node_kvpairs:
             if k == 'hide':
                 if 'hide' in options:
@@ -75,10 +85,6 @@ class PandocCodeChunk(CodeChunk):
             elif k in ('first_number', 'startFrom', 'start-from', 'start_from'):
                 if 'first_number' in options:
                     raise err.SourceError('Duplicate first line number attribute for code chunk', source_name, start_line_number)
-                try:
-                    v = int(v)
-                except ValueError:
-                    pass
                 options['first_number'] = v
             elif k in ('label', 'name'):
                 if 'label' in options:
@@ -88,10 +94,12 @@ class PandocCodeChunk(CodeChunk):
                 if not self._pandoc_id_re.match(v):
                     raise err.SourceError('Code chunk label/name must be valid Pandoc identifier: <letter>(<alphanum>|"-_:.")*', source_name, start_line_number)
                 options['label'] = v
+                pandoc_id = v
             elif k == 'lang':
                 if 'lang' in options:
                     raise err.SourceError('Duplicate lang for code chunk', source_name, start_line_number)
                 options['lang'] = v
+                pandoc_classes.insert(0, v)
             elif k in ('lineAnchors', 'line-anchors', 'line_anchors'):
                 if 'lineAnchors' in pandoc_classes:
                     raise err.SourceError('Duplicate line anchor attribute for code chunk', source_name, start_line_number)
@@ -99,9 +107,8 @@ class PandocCodeChunk(CodeChunk):
             elif k in ('line_numbers', 'numberLines', 'number-lines', 'number_lines'):
                 if 'line_numbers' in options:
                     raise err.SourceError('Duplicate line numbering attribute for code chunk', source_name, start_line_number)
-                if v not in ('true', 'false'):
-                    raise err.SourceError('Invalid line numbering attribute for code chunk; must be true or false', source_name, start_line_number)
-                options['line_numbers'] = v == 'true'
+                options['line_numbers'] = v
+                pandoc_classes.append('numberLines')
             elif k == 'session':
                 if 'session' in options:
                     raise err.SourceError('Duplicate "session" attribute for code chunk', source_name, start_line_number)
@@ -112,15 +119,78 @@ class PandocCodeChunk(CodeChunk):
                 options['show'] = v
             else:
                 raise err.SourceError('Unknown or currently unsupported attribute {0}="{1}"'.format(k, v), source_name, start_line_number)
-
-        super().__init__(codebraid_command, code, options, source_name, start_line_number=start_line_number, inline=inline)
+        self.pandoc_id = pandoc_id
+        self.pandoc_classes = pandoc_classes
+        self.pandoc_kvpairs = pandoc_kvpairs
+        super().__init__(codebraid_command, code, options, source_name, source_start_line_number=source_start_line_number, inline=inline)
 
     # identifier approximation for Pandoc/Readers/Markdown.hs
     _pandoc_id_re = re.compile(r'(?!\d|_)(?:\w+|[-:.]+)+')
 
 
+    def output_nodes(self):
+        if not self.inline and self.options['line_numbers']:
+            first_num = self.options['first_number']
+            if first_num == 'next':
+                first_num = str(self.code_start_line_number)
+            else:
+                first_num = str(first_num)
+            self.pandoc_kvpairs.append(['startFrom', first_num])
+        t_code = 'Code' if self.inline else 'CodeBlock'
+        t_raw = 'RawInline' if self.inline else 'RawBlock'
+        nodes = []
+        for display, format in self.options['show'].items():
+            if display == 'code':
+                code = self.code
+                if not self.inline:
+                    code = code[:-1]
+                nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], code]})
+            elif display == 'expression':
+                if format in ('verbatim', 'autoverbatim'):
+                    expression = self.expression
+                    if (format == 'verbatim' and expression is not None) or format == 'autoverbatim':
+                        if expression is None:
+                            expression = ''
+                        nodes.append({'t': t_code, 'c': [['', [], []], expression]})
+                elif format == 'raw':
+                    if self.expression is not None:
+                        nodes.append({'t': t_raw, 'c': ['markdown', self.expression]})
+                else:
+                    raise ValueError
+            elif display == 'stdout':
+                if format in ('verbatim', 'autoverbatim'):
+                    stdout = self.stdout
+                    if (format == 'verbatim' and stdout is not None) or format == 'autoverbatim':
+                        if stdout is None:
+                            stdout = ''
+                        if not self.inline:
+                            stdout = stdout[:-1]
+                        nodes.append({'t': t_code, 'c': [['', ['stdout'], []], stdout]})
+                elif format == 'raw':
+                    if self.stdout is not None:
+                        nodes.append({'t': t_raw, 'c': ['markdown', self.stdout]})
+                else:
+                    raise ValueError
+            elif display == 'stderr':
+                if format in ('verbatim', 'autoverbatim'):
+                    stderr = self.stderr
+                    if (format == 'verbatim' and stderr is not None) or format == 'autoverbatim':
+                        if stderr is None:
+                            stderr = ''
+                        if not self.inline:
+                            stderr = stderr[:-1]
+                        nodes.append({'t': t_code, 'c': [['', ['stderr'], []], stderr]})
+                elif format == 'raw':
+                    if self.stderr is not None:
+                        nodes.append({'t': t_raw, 'c': ['markdown', self.stderr]})
+                else:
+                    raise ValueError
+        return nodes
 
-def walk_node_list(node_list):
+
+
+
+def walk_node_list(node_list, enumerate=enumerate, isinstance=isinstance):
     '''
     Walk all AST nodes in a list, recursively descending to walk all
     child nodes as well.  The walk function is written so that it is
@@ -146,12 +216,12 @@ def walk_node_list(node_list):
                 else:
                     for elem in obj_contents:
                         term, definition = elem
-                        yield ({'t':'Plain', 'c':term}, elem, 0)
+                        yield ({'t': 'Plain', 'c': term}, elem, 0)
                         yield from walk_node_list(term)
                         yield from walk_node_list(definition)
 
 
-def walk_node_list_less_note_contents(node_list):
+def walk_node_list_less_note_contents(node_list, enumerate=enumerate, isinstance=isinstance):
     '''
     Like `walk_node_list()`, except that it will return a `Note` node
     but not iterate through it.  It can be useful to process `Note`
@@ -172,7 +242,7 @@ def walk_node_list_less_note_contents(node_list):
                 else:
                     for elem in obj_contents:
                         term, definition = elem
-                        yield ({'t':'Plain', 'c':term}, elem, 0)
+                        yield ({'t': 'Plain', 'c': term}, elem, 0)
                         yield from walk_node_list_less_note_contents(term)
                         yield from walk_node_list_less_note_contents(definition)
 
@@ -184,28 +254,30 @@ class PandocConverter(Converter):
     Converter based on Pandoc (https://pandoc.org/).
 
     Pandoc is used to parse input into a JSON-based AST.  Code nodes in the
-    AST are located, processed, and then replaced with raw nodes.  Next, the
-    AST is converted back into the original input format (or possibly another
-    format), and reparsed into a new AST.  This allows raw code output to be
-    interpreted as markup.  Finally, the new AST is converted into the output
-    format.
+    AST are located, processed, and then replaced.  Next, the AST is converted
+    back into the original input format (or possibly another format), and
+    reparsed into a new AST.  This allows raw code output to be interpreted as
+    markup.  Finally, the new AST can be converted into the output format.
     '''
     def __init__(self, *,
                  pandoc_path: Optional[Union[str, pathlib.Path]]=None,
+                 pandoc_file_scope: Optional[bool]=False,
                  from_format_pandoc_extensions: Optional[str]=None,
-                 expanduser: bool=False,
-                 expandvars: bool=False,
+                 scroll_sync: bool=False,
+                 synctex: bool=False,
                  **kwargs):
+        super().__init__(**kwargs)
+
         if pandoc_path is None:
             pandoc_path = pathlib.Path('pandoc')
         else:
             pandoc_path = pathlib.Path(pandoc_path)
-            if expandvars:
+            if self.expandvars:
                 pandoc_path = pathlib.Path(os.path.expandvars(pandoc_path))
-            if expanduser:
+            if self.expanduser:
                 pandoc_path = pandoc_path.expanduser()
         try:
-            proc = subprocess.run([str(pandoc_path), '--version'], capture_output=True)
+            proc = subprocess.run([str(pandoc_path), '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         except FileNotFoundError:
             raise RuntimeError('Pandoc path "{0}" does not exist'.format(pandoc_path))
         pandoc_version_match = re.search(rb'\d+\.\d+', proc.stdout)
@@ -214,13 +286,47 @@ class PandocConverter(Converter):
         elif float(pandoc_version_match.group()) < 2.4:
             raise RuntimeError('Pandoc at "{0}" is version {1}, but >= 2.4 is required'.format(pandoc_path, float(pandoc_version_match.group())))
         self.pandoc_path = pandoc_path
+
+        if not isinstance(pandoc_file_scope, bool):
+            raise TypeError
+        if pandoc_file_scope and self.cache_path is None:
+            raise ValueError('pandoc_file_scope=True requires specifying cache_path')
+        if pandoc_file_scope and kwargs.get('cross_source_sessions') is None:
+            self.cross_source_sessions = False
+        self.pandoc_file_scope = pandoc_file_scope
+        if self.from_format == 'markdown' and not pandoc_file_scope and len(self.source_strings) > 1:
+            # If multiple files are being passed to Pandoc for concatenated
+            # processing, ensure sufficient whitespace to prevent elements in
+            # different files from merging, and insert a comment to prevent
+            # indented elements from merging.  This means that the original
+            # sources cannot be passed to Pandoc directly.
+            for n, source_string in enumerate(self.source_strings):
+                if source_string[-1] == '\n':
+                    source_string += '\n<!--codebraid.eof-->\n\n'
+                else:
+                    source_string += '\n\n<!--codebraid.eof-->\n\n'
+                self.source_strings[n] = source_string
+            self.concat_source_string = ''.join(self.source_strings)
+
         if (from_format_pandoc_extensions is not None and
                 not isinstance(from_format_pandoc_extensions, str)):
             raise TypeError
         self.from_format_pandoc_extensions = from_format_pandoc_extensions or ''
+
+        if not all(isinstance(x, bool) for x in (scroll_sync, synctex)):
+            raise TypeError
+        self.scroll_sync = scroll_sync
+        if scroll_sync:
+            raise NotImplementedError
+        self.synctex = synctex
+        if scroll_sync or synctex:
+            self._io_map = True
+        else:
+            self._io_map = False
+
         self._asts = {}
-        self._para_plain_nodes_and_line_numbers = collections.defaultdict(list)
-        super().__init__(**kwargs, expanduser=expanduser, expandvars=expandvars)
+        self._para_plain_source_name_node_line_number = []
+        self._processed_markup = {}
 
 
     from_formats = set(['json', 'markdown'])
@@ -242,8 +348,9 @@ class PandocConverter(Converter):
                     to_format: str,
                     from_format_pandoc_extensions: Optional[str]=None,
                     to_format_pandoc_extensions: Optional[str]=None,
+                    file_scope=False,
                     input: Optional[str]=None,
-                    input_path: Optional[pathlib.Path]=None,
+                    input_paths: Optional[Union[pathlib.Path, Sequence[pathlib.Path]]]=None,
                     input_name: Optional[str]=None,
                     output_path: Optional[pathlib.Path]=None,
                     overwrite: bool=False,
@@ -262,31 +369,32 @@ class PandocConverter(Converter):
             from_format_pandoc_extensions = ''
         if to_format_pandoc_extensions is None:
             to_format_pandoc_extensions = ''
-        if input and input_path:
+        if input and input_paths:
             raise TypeError
         if output_path is not None and not overwrite and output_path.exists():
             raise RuntimeError('Output path {0} exists, but overwrite=False'.format(output_path))
 
-        cmd_template_list = ['{pandoc}', '--from', '{from}', '--to', '{to}']
+        cmd_list = [str(self.pandoc_path),
+                    '--from', from_format + from_format_pandoc_extensions,
+                    '--to', to_format + to_format_pandoc_extensions]
         if standalone:
-            cmd_template_list.append('--standalone')
+            cmd_list.append('--standalone')
         if trace:
-            cmd_template_list.append('--trace')
+            cmd_list.append('--trace')
+        if file_scope:
+            cmd_list.append('--file-scope')
         if output_path:
-            cmd_template_list.extend(['--output', '{output}'])
-        if input_path:
-            cmd_template_list.append('{input_path}')
-        template_dict = {'pandoc': self.pandoc_path,
-                         'from': from_format + from_format_pandoc_extensions,
-                         'to': to_format + to_format_pandoc_extensions,
-                         'output': output_path, 'input_path': input_path}
-        cmd_list = [x.format(**template_dict) for x in cmd_template_list]
+            cmd_list.extend(['--output', output_path.as_posix()])
+        if input_paths is not None:
+            if isinstance(input_paths, pathlib.Path):
+                cmd_list.append(input_paths.as_posix())
+            else:
+                cmd_list.extend([p.as_posix() for p in input_paths])
 
         if platform.system() == 'Windows':
             # Prevent console from appearing for an instant
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
         else:
             startupinfo = None
 
@@ -298,10 +406,10 @@ class PandocConverter(Converter):
                                   encoding='utf8',
                                   startupinfo=startupinfo, check=True)
         except subprocess.CalledProcessError as e:
-            if input_path is not None and input_name is None:
-                input_name = input_path
+            if isinstance(input_paths, pathlib.Path) and input_name is None:
+                input_name = input_paths.as_posix()
             if input_name is None:
-                msg = 'Failed to run Pandoc:\n{0}'.format(e)
+                msg = 'Failed to run Pandoc:\n{0}'.format(e.stdout)
             else:
                 msg = 'Failed to run Pandoc on source {0}:\n{1}'.format(input_name, e)
             raise PandocError(msg)
@@ -327,7 +435,7 @@ class PandocConverter(Converter):
 
 
     @staticmethod
-    def _get_traceback_span_node(source_name, line_number):
+    def _io_map_span_node(source_name, line_number):
         '''
         Create an empty span node containing source name and line number as
         attributes.  This is used to attach source info to an AST location,
@@ -388,7 +496,8 @@ class PandocConverter(Converter):
     _footnote_re = re.compile(r' {0,3}\[\^[^ \t]+?\]:')
 
 
-    def _load_and_process_initial_ast(self, *, source_string, source_name,
+    def _load_and_process_initial_ast(self, *,
+                                      source_string, single_source_name=None,
                                       any=any, int=int, len=len, next=next):
         '''
         Convert source string into a Pandoc AST and perform a number of
@@ -403,8 +512,8 @@ class PandocConverter(Converter):
             These special code nodes are converted back into raw nodes in the
             final AST before the final format conversion.
         '''
-        # Determining line numbers currently uses a brute force approach by
-        # walking the AST, and then searching the source each time a Str node,
+        # Currently, a brute-force approach is used to determine line numbers:
+        # walk the AST, and then search the source each time a Str node,
         # etc. is encountered, starting at the end of the last string that was
         # located.  This isn't guaranteed to give correct results in all
         # cases, since not all AST information like attributes is used in
@@ -412,7 +521,7 @@ class PandocConverter(Converter):
         # a usability feature, an occasional small loss of precision isn't
         # critical.  Pandoc's `--trace` output is used to simplify this
         # process.  The trace can be used to determine the exact start of
-        # root-level nodes, so it periodicall corrects any errors that have
+        # root-level nodes, so it periodically corrects any errors that have
         # accumulated.  It can also be used to locate and skip over footnotes
         # and link definitions.  These do not appear in the AST except in
         # processed form, so they would be a primary source of sync errors
@@ -438,10 +547,11 @@ class PandocConverter(Converter):
         if self.from_format == 'markdown':
             from_format_pandoc_extensions += '-latex_macros-smart'
         stdout_lines = self._run_pandoc(input=source_string,
-                                        input_name=source_name,
+                                        input_name=single_source_name,
                                         from_format=self.from_format,
                                         from_format_pandoc_extensions=from_format_pandoc_extensions,
                                         to_format='json',
+                                        file_scope=self.pandoc_file_scope,
                                         trace=True).splitlines()
         raw_ast = stdout_lines.pop()
         try:
@@ -453,7 +563,7 @@ class PandocConverter(Converter):
             raise PandocError('Incompatible Pandoc API version')
         if ast['pandoc-api-version'][0:2] != [1, 17]:
             warnings.warn('Pandoc API is {0}.{1}, but Codebraid is designed for 1.17; this might cause issues'.format(*ast['pandoc-api-version'][0:2]))
-        self._asts[source_name] = ast
+        self._asts[single_source_name] = ast
 
         source_string_lines = source_string.splitlines()
 
@@ -509,11 +619,23 @@ class PandocConverter(Converter):
             raise PandocError('Incompatible Pandoc version or trace; cannot parse trace format:\n{0}'.format(e))
 
         # Iterator for source lines and line numbers that skips invalid lines
-        line_and_number_iter = ((line, n+1) for (n, line) in enumerate(source_string.splitlines()) if n+1 not in invalid_line_numbers)
+        if self.pandoc_file_scope or len(self.source_strings) == 1:
+            source_name_line_and_number_iter = ((single_source_name, line, n+1) for (n, line) in enumerate(source_string_lines) if n+1 not in invalid_line_numbers)
+        else:
+            def make_source_name_line_and_number_iter():
+                line_and_concat_line_number_iter = ((line, n+1) for (n, line) in enumerate(source_string_lines))
+                for source_name, source_string in zip(self.source_names, self.source_strings):
+                    for line_number in range(1, source_string.count('\n')+1):
+                        line, concat_line_number = next(line_and_concat_line_number_iter)
+                        if concat_line_number in invalid_line_numbers:
+                            continue
+                        yield (source_name, line, line_number)
+            source_name_line_and_number_iter = make_source_name_line_and_number_iter()
+
 
         # Walk AST to associate line numbers with AST nodes
-        para_plain_nodes_and_line_numbers = self._para_plain_nodes_and_line_numbers[source_name]
-        line, line_number = next(line_and_number_iter)
+        para_plain_source_name_node_line_number = self._para_plain_source_name_node_line_number
+        source_name, line, line_number = next(source_name_line_and_number_iter)
         line_index = 0
         block_node_types = self._block_node_types
         freeze_raw_node = self._freeze_raw_node
@@ -526,15 +648,15 @@ class PandocConverter(Converter):
                 if line_index >= 0:
                     line_index += len(node_contents)
                 else:
-                    line, line_number = next(line_and_number_iter)
+                    source_name, line, line_number = next(source_name_line_and_number_iter)
                     line_index = line.find(node_contents)
                     if line_index < 0:
                         while line_index < 0:
-                            line, line_number = next(line_and_number_iter)
+                            source_name, line, line_number = next(source_name_line_and_number_iter)
                             line_index = line.find(node_contents)
                     line_index += len(node_contents)
                 if para_plain_node is not None:
-                    para_plain_nodes_and_line_numbers.append((para_plain_node, line_number))
+                    para_plain_source_name_node_line_number.append((source_name, para_plain_node, line_number))
                     para_plain_node = None
             elif node_type in ('Code', 'RawInline'):
                 node_contents = node['c'][1]
@@ -549,39 +671,39 @@ class PandocConverter(Converter):
                         if line_index >= 0:
                             line_index += len(node_contents_elem)
                         else:
-                            line, line_number = next(line_and_number_iter)
+                            source_name, line, line_number = next(source_name_line_and_number_iter)
                             line_index = line.find(node_contents_elem)
                             if line_index < 0:
                                 while line_index < 0:
-                                    line, line_number = next(line_and_number_iter)
+                                    source_name, line, line_number = next(source_name_line_and_number_iter)
                                     line_index = line.find(node_contents_elem)
                             line_index += len(node_contents_elem)
                 if node_type == 'Code':
-                    if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb' in classes
+                    if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb.*' in classes
                         code_chunk = PandocCodeChunk(node, parent_node_list, parent_node_list_index,
                                                      source_name, line_number)
-                        self._code_chunks.append(code_chunk)
+                        self.code_chunks.append(code_chunk)
                 else:
                     freeze_raw_node(node, source_name, line_number)
                 if para_plain_node is not None:
-                    para_plain_nodes_and_line_numbers.append((para_plain_node, line_number))
+                    para_plain_source_name_node_line_number.append((source_name, para_plain_node, line_number))
                     para_plain_node = None
             elif node_type == 'CodeBlock':
                 node_contents_lines = node['c'][1].splitlines()
                 for node_contents_line in node_contents_lines:
                     if node_contents_line not in line:
                         # Move forward a line at a time until match
-                        line, line_number = next(line_and_number_iter)
+                        source_name, line, line_number = next(source_name_line_and_number_iter)
                         if node_contents_line not in line:
                             while node_contents_line not in line:
-                                line, line_number = next(line_and_number_iter)
+                                source_name, line, line_number = next(source_name_line_and_number_iter)
                     # Once there's a match, move forward one line per loop
-                    line, line_number = next(line_and_number_iter)
+                    source_name, line, line_number = next(source_name_line_and_number_iter)
                 line_index = 0
-                if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb' in classes
+                if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb.*' in classes
                     code_chunk = PandocCodeChunk(node, parent_node_list, parent_node_list_index,
                                                  source_name, line_number - len(node_contents_lines))
-                    self._code_chunks.append(code_chunk)
+                    self.code_chunks.append(code_chunk)
                 para_plain_node = None
             elif node_type == 'RawBlock':
                 # Note that HTML RawBlock can be inline, so use `.find()`
@@ -589,30 +711,35 @@ class PandocConverter(Converter):
                 # `len(node_contents_line) or 1` guarantees that multiple
                 # empty `node_contents_line` won't keep matching the same
                 # `line`.
-                node_contents_lines = node['c'].splitlines()
+                node_format, node_contents = node['c']
+                node_contents_lines = node_contents.splitlines()
                 for node_contents_line in node_contents_lines:
                     line_index = line.find(node_contents_line)
                     if line_index >= 0:
                         line_index += len(node_contents_line) or 1
                     else:
-                        line, line_number = next(line_and_number_iter)
+                        source_name, line, line_number = next(source_name_line_and_number_iter)
                         line_index = line.find(node_contents_line)
                         if line_index < 0:
                             while line_index < 0:
-                                line, line_number = next(line_and_number_iter)
+                                source_name, line, line_number = next(source_name_line_and_number_iter)
                                 line_index = line.find(node_contents_line)
                         line_index += len(node_contents_line) or 1
-                freeze_raw_node(node, source_name, line_number - len(node_contents_lines) + 1)
+                if node_format == 'html' and node_contents == '<!--codebraid.eof-->':
+                    node['t'] = 'Null'
+                    del node['c']
+                else:
+                    freeze_raw_node(node, source_name, line_number - len(node_contents_lines) + 1)
                 para_plain_node = None
             elif node_type == 'Note':
                 for note_node_tuple in self._walk_node_list(node['c']):
                     note_node, note_parent_node_list, note_parent_node_list_index = note_node_tuple
                     note_node_type = node['t']
                     if note_node_type in ('Code', 'CodeBlock'):
-                        if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb' in classes
+                        if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb.*' in classes
                             code_chunk = PandocCodeChunk(note_node, note_parent_node_list, note_parent_node_list_index,
                                                          source_name, line_number)
-                            self._code_chunks.append(code_chunk)
+                            self.code_chunks.append(code_chunk)
                     elif note_node_type in ('RawInline', 'RawBlock'):
                         freeze_raw_node(note_node, source_name, line_number)
             elif node_type in ('Para', 'Plain'):
@@ -622,23 +749,53 @@ class PandocConverter(Converter):
 
 
     def _extract_code_chunks(self):
-        for source_string, source_name in zip(self.source_strings, self.source_names):
-            self._load_and_process_initial_ast(source_string=source_string, source_name=source_name)
+        if self.pandoc_file_scope or len(self.source_strings) == 1:
+            for source_string, source_name in zip(self.source_strings, self.source_names):
+                self._load_and_process_initial_ast(source_string=source_string, single_source_name=source_name)
+        else:
+            self._load_and_process_initial_ast(source_string=self.concat_source_string)
 
 
     def _postprocess_code_chunks(self):
-        for code_chunk in reversed(self._code_chunks):
-            code_chunk.parent_node_list.insert(code_chunk.parent_node_list_index+1, {'t': 'CodeBlock', 'c': [['', ['stdout'], []], code_chunk.stdout[:-1]]})
-        for source_name in self.source_names:
-            for node, line_number in self._para_plain_nodes_and_line_numbers[source_name]:
-                node['c'].insert(0, self._get_traceback_span_node(source_name, line_number))
+        for code_chunk in reversed(self.code_chunks):
+            # Substitute code output into AST in reversed order to preserve
+            # indices
+            index = code_chunk.parent_node_list_index
+            code_chunk.parent_node_list[index:index+1] = code_chunk.output_nodes()
+        if self._io_map:
+            for source_name, node, line_number in self._para_plain_source_name_node_line_number:
+                node['c'].insert(0, self._io_map_span_node(source_name, line_number))
+        for source_name, ast in self._asts.items():
+            self._processed_markup[source_name] = self._run_pandoc(input=json.dumps(ast),
+                                                                   from_format='json',
+                                                                   to_format='markdown',
+                                                                   to_format_pandoc_extensions=self.from_format_pandoc_extensions+'-latex_macros-smart',
+                                                                   standalone=True)
 
-
-    def convert(self, *, to_format):
+    def convert(self, *, to_format, to_format_pandoc_extensions=None, standalone=False):
         if to_format not in self.to_formats:
             raise ValueError
-        stdout = '\n'.join(self._run_pandoc(input=json.dumps(v),
-                                          from_format='json',
-                                          to_format=to_format,
-                                          standalone=True) for v in self._asts.values())
-        return stdout
+        if not self.pandoc_file_scope or len(self.source_strings) == 1:
+            for markup in self._processed_markup.values():
+                converted = self._run_pandoc(input=markup,
+                                             from_format='markdown',
+                                             from_format_pandoc_extensions=self.from_format_pandoc_extensions,
+                                             to_format=to_format,
+                                             to_format_pandoc_extensions=to_format_pandoc_extensions,
+                                             standalone=standalone)
+        else:
+            # No need to check for cache_path is not None; done in __init__
+            tempfile_paths = []
+            for n, markup in enumerate(self._processed_markup.values()):
+                tempfile_path = self.cache_temp_path / 'codebraid_intermediate_{0}.txt'.format(n)
+                tempfile_path.write_text(markup, encoding='utf8')
+                tempfile_paths.append(tempfile_path)
+            converted = self._run_pandoc(input_paths=tempfile_paths,
+                                         from_format='markdown',
+                                         from_format_pandoc_extensions=self.from_format_pandoc_extensions,
+                                         to_format=to_format,
+                                         to_format_pandoc_extensions=to_format_pandoc_extensions,
+                                         standalone=standalone)
+            for tempfile_path in tempfile_paths:
+                tempfile_path.unlink()
+        return converted

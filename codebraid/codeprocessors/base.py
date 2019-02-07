@@ -20,6 +20,9 @@ import shlex
 import tempfile
 import zipfile
 from .. import err
+from .. import converters
+
+
 
 
 class Language(object):
@@ -43,7 +46,7 @@ class Language(object):
         self.source_start = definition.pop('source_start', '')
         self.source_end = definition.pop('source_end', '')
         self.chunk_wrapper = definition['chunk_wrapper']
-        self.inline_formatter = definition['inline_formatter']
+        self.inline_expression_formatter = definition['inline_expression_formatter']
         error_patterns = definition['error_patterns']
         if not isinstance(error_patterns, list):
             error_patterns = [error_patterns]
@@ -62,20 +65,27 @@ class Language(object):
 
 class CodeProcessor(object):
     '''
-    Process code chunks
+    Process code chunks.  This can involve executing code, extracting code
+    from files for inclusion, or a combination of the two.
     '''
-    def __init__(self, *, code_chunks, code_options):
+    def __init__(self, *, converter):
+        self.code_chunks = converter.code_chunks
+        self.code_options = converter.code_options
+        self.cross_source_sessions = converter.cross_source_sessions
+        self.cache_stream_path = converter.cache_stream_path
+
         raw_language_index = pkgutil.get_data('codebraid', 'languages/index.bespon')
         if raw_language_index is None:
             raise err.CodebraidError('Failed to find "codebraid/languages/index.bespon"')
         language_index = bespon.loads(raw_language_index)
         language_definitions = {}
-        for lang in set(cc.options['lang'] for cc in code_chunks):
+        required_langs = set(cc.options['lang'] for cc in self.code_chunks if cc.command != 'code')
+        for lang in required_langs:
             try:
-                lang_def_file = language_index[lang]
+                lang_def_fname = language_index[lang]
             except KeyError:
                 raise err.CodebraidError('Language definition for "{0}" does not exist, or is not indexed'.format(lang))
-            raw_lang_def = pkgutil.get_data('codebraid', 'languages/{0}'.format(lang_def_file))
+            raw_lang_def = pkgutil.get_data('codebraid', 'languages/{0}'.format(lang_def_fname))
             if raw_lang_def is None:
                 raise err.CodebraidError('Language definition for "{0}" does not exist'.format(lang))
             lang_def = bespon.loads(raw_lang_def)
@@ -83,30 +93,36 @@ class CodeProcessor(object):
         self._language_definitions = language_definitions
 
         session_chunk_lists = collections.defaultdict(list)
-        for cc in code_chunks:
-            if cc.command == 'run':
-                session_chunk_lists[(cc.source_name, cc.options['lang'], cc.options['session'])].append(cc)
-        self._session_chunk_lists = session_chunk_lists
+        if self.cross_source_sessions:
+            for cc in self.code_chunks:
+                if cc.command == 'run':
+                    session_chunk_lists[(cc.options['lang'], cc.options['session'])].append(cc)
+        else:
+            for cc in self.code_chunks:
+                if cc.command == 'run':
+                    session_chunk_lists[(cc.options['lang'], cc.options['session'], cc.source_name)].append(cc)
+        # Now that sessions are sorted, assign line numbers for first_number=next
+        for session_chunk_list in session_chunk_lists.values():
+            code_start_line_number = 1
+            for cc in session_chunk_list:
+                if not cc.inline:
+                    cc.code_start_line_number = code_start_line_number
+                    code_start_line_number += cc.code.count('\n')
+        self.session_chunk_lists = session_chunk_lists
 
-        cache_path = pathlib.Path('_codebraid', 'cache')
-        if not cache_path.is_dir():
-            cache_path.mkdir(parents=True)
-        self._cache_path = cache_path
-        self._cache = {}
-        self._used_cache_files = set()
+        self._stream_cache = {}
+        self._used_stream_cache_files = set()
         self._updated_cache_hash_roots = []
 
-        self._process()
 
-
-    def _process(self):
-        for key, session_chunk_list in self._session_chunk_lists.items():
-            source_name, lang, session = key
-            self._run(source_name, lang, session, session_chunk_list)
+    def process(self):
+        for key, session_chunk_list in self.session_chunk_lists.items():
+            lang, session = key[:2]
+            self._run(lang, session, session_chunk_list)
         self._update_cache()
 
 
-    def _run(self, source_name, lang, session, session_chunk_list):
+    def _run(self, lang, session, session_chunk_list):
         h = hashlib.blake2b()
         for cc in session_chunk_list:
             h.update(cc.code.encode('utf8'))
@@ -114,18 +130,20 @@ class CodeProcessor(object):
             h.update(h.digest())
         session_hash = h.hexdigest()
         session_hash_root = session_hash[:32]
-        self._used_cache_files.add('{0}.zip'.format(session_hash_root))
-        if session_hash in self._cache:
-            cache = self._cache[session_hash]
-        else:
-            session_cache_path = self._cache_path / '{0}.zip'.format(session_hash_root)
+        self._used_stream_cache_files.add('{0}.zip'.format(session_hash_root))
+        if session_hash in self._stream_cache:
+            cache = self._stream_cache[session_hash]
+        elif self.cache_stream_path is not None:
+            session_cache_path = self.cache_stream_path / '{0}.zip'.format(session_hash_root)
             if session_cache_path.exists():
                 with zipfile.ZipFile(str(session_cache_path)) as zf:
                     with zf.open('cache.json') as f:
-                        self._cache.update(json.load(f))
-                cache = self._cache[session_hash]
+                        self._stream_cache.update(json.load(f))
+                cache = self._stream_cache[session_hash]
             else:
                 cache = None
+        else:
+            cache = None
 
         if cache is None:
             lang_def = self._language_definitions[lang]
@@ -201,7 +219,7 @@ class CodeProcessor(object):
             stderr_list.extend([None]*(len(session_chunk_list)-len(stdout_list)))
 
             cache = {'stdout': stdout_list, 'stderr': stderr_list}
-            self._cache[session_hash] = cache
+            self._stream_cache[session_hash] = cache
             self._updated_cache_hash_roots.append(session_hash_root)
 
         for cc, stdout, stderr in zip(session_chunk_list, cache['stdout'], cache['stderr']):
@@ -210,11 +228,12 @@ class CodeProcessor(object):
 
 
     def _update_cache(self):
-        for fname in os.listdir(self._cache_path):
-            if fname not in self._used_cache_files:
-                pathlib.Path(self._cache_path / fname).unlink()
-        for hash_root in self._updated_cache_hash_roots:
-            hash_root_cache_path = self._cache_path / '{0}.zip'.format(hash_root)
-            with zipfile.ZipFile(str(hash_root_cache_path), 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-                data = {k: v for k, v in self._cache.items() if k.startswith(hash_root)}
-                zf.writestr('cache.json', json.dumps(data))
+        if self.cache_stream_path is not None:
+            for cache_path in self.cache_stream_path.glob('*.zip'):
+                if cache_path.name not in self._used_stream_cache_files:
+                    cache_path.unlink()
+            for hash_root in self._updated_cache_hash_roots:
+                cache_path = self.cache_stream_path / '{0}.zip'.format(hash_root)
+                with zipfile.ZipFile(str(cache_path), 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+                    data = {k: v for k, v in self._stream_cache.items() if k.startswith(hash_root)}
+                    zf.writestr('cache.json', json.dumps(data))

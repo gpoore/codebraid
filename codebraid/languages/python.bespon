@@ -18,7 +18,13 @@ chunk_wrapper =
     {code}
     |```/
 
-inline_formatter = 'str({code})'
+inline_expression_formatter =
+    |```
+    _codebraid_temp_{tempsuffix} = str({code})
+    print('\n{stdoutdelim}')
+    sys.stderr.write('\n{stderrdelim}\n')
+    print(_codebraid_temp_{suffix})
+    |```/
 
 error_patterns = 'Error:'
 warning_patterns = 'Warning:'

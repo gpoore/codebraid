@@ -42,10 +42,19 @@
 #     must contain fields {stdoutdelim}, {stderrdelim}, {code}
 #     must write delims to output streams with a single leading and trailing \n
 #
-# inline_formatter =
+# inline_expression_formatter =
 #     string
-#     converts inline expressions into strings
-#     must contain field {code}
+#     converts inline expressions into strings when show='expression'
+#     must contain fields {stdoutdelim}, {stderrdelim}, {code}
+#     must perform these tasks (or tasks that result in identical output):
+#         1.  convert {code} to a string
+#         2.  store the string in a tempory variable (to avoid collisions and
+#             prevent user code from accessing the variable, its name can end
+#             in {tempsuffix}, which will be replaced by a lowercase ASCII
+#             alphanumeric sequence derived from a hash of the current session)
+#         3.  write delims to output streams with a single leading and
+#             trailing \n (this allows any output that occurs during string
+#             conversion to be distinguished from the string itself)
 #
 # error_patterns =
 #     string or list of strings
