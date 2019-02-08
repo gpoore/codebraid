@@ -20,7 +20,6 @@ import shlex
 import tempfile
 import zipfile
 from .. import err
-from .. import converters
 
 
 
@@ -72,7 +71,7 @@ class CodeProcessor(object):
         self.code_chunks = converter.code_chunks
         self.code_options = converter.code_options
         self.cross_source_sessions = converter.cross_source_sessions
-        self.cache_stream_path = converter.cache_stream_path
+        self.cache_path = converter.cache_path
 
         raw_language_index = pkgutil.get_data('codebraid', 'languages/index.bespon')
         if raw_language_index is None:
@@ -110,12 +109,28 @@ class CodeProcessor(object):
                     code_start_line_number += cc.code.count('\n')
         self.session_chunk_lists = session_chunk_lists
 
-        self._stream_cache = {}
-        self._used_stream_cache_files = set()
+        # Cached stdout and stderr, plus any other relevant data.  Each
+        # session has a key based on a BLAKE2b hash of its code plus the
+        # length in bytes of the code when encoded with UTF8.
+        self._cache = {}
+        # Used files from the cache.  By default, these will be in
+        # `<doc directory>/_codebraid` and will have names of the form
+        # `<first 16 chars of hex session hash>.zip`.  They contain
+        # `cache.json`, which is a dict mapping session keys to dicts that
+        # contain lists of stdout and stderr, among other things.  While
+        # each cache file will typically contain only a single session, it is
+        # possible for a file to contain multiple sessions since the cache
+        # file name is based on a truncated session hash.
+        self._used_cache_files = set()
+        # All session hash roots (<first 16 chars of hex session hash>) that
+        # correspond to sessions with new or updated caches.
         self._updated_cache_hash_roots = []
 
 
     def process(self):
+        '''
+        Execute code and update cache.
+        '''
         for key, session_chunk_list in self.session_chunk_lists.items():
             lang, session = key[:2]
             self._run(lang, session, session_chunk_list)
@@ -124,58 +139,63 @@ class CodeProcessor(object):
 
     def _run(self, lang, session, session_chunk_list):
         h = hashlib.blake2b()
+        code_len = 0
         for cc in session_chunk_list:
-            h.update(cc.code.encode('utf8'))
-            # Hash needs to depend on code plus how it's divided into chunks
+            code_bytes = cc.code.encode('utf8')
+            h.update(code_bytes)
+            code_len += len(code_bytes)
+            # Hash needs to depend on code plus how it's divided into chunks.
+            # Updating hash based on its current value at the end of each
+            # chunk accomplishes this.
             h.update(h.digest())
-        session_hash = h.hexdigest()
-        session_hash_root = session_hash[:32]
-        self._used_stream_cache_files.add('{0}.zip'.format(session_hash_root))
-        if session_hash in self._stream_cache:
-            cache = self._stream_cache[session_hash]
-        elif self.cache_stream_path is not None:
-            session_cache_path = self.cache_stream_path / '{0}.zip'.format(session_hash_root)
-            if session_cache_path.exists():
+        session_blake2b = h.hexdigest()
+        session_hash = '{0}_{1}'.format(session_blake2b, code_len)
+        session_hash_root = session_hash[:16]
+
+        cache = self._cache.get(session_hash, None)
+        if cache is None and self.cache_path is not None:
+            session_cache_path = self.cache_path / '{0}.zip'.format(session_hash_root)
+            if session_cache_path.is_file():
                 with zipfile.ZipFile(str(session_cache_path)) as zf:
                     with zf.open('cache.json') as f:
-                        self._stream_cache.update(json.load(f))
-                cache = self._stream_cache[session_hash]
-            else:
-                cache = None
-        else:
-            cache = None
+                        self._cache.update(json.load(f))
+                cache = self._cache.get(session_hash, None)
+                self._used_cache_files.add(session_stream_cache_path.name)
 
         if cache is None:
             lang_def = self._language_definitions[lang]
-            delim = 'Codebraid(hash="{0}")'.format(session_hash)
-            source_list = []
-            source_line_number = 0
-            code_line_number = 0
-            source_to_code_map = {}
-            chunk_wrapper_lines_before, chunk_wrapper_lines_after = lang_def.chunk_wrapper.split('{code}')
-            chunk_wrapper_lines_before = chunk_wrapper_lines_before.count('\n')
-            chunk_wrapper_lines_after = chunk_wrapper_lines_after.count('\n')
+            delim = 'Codebraid(hash="{0}")'.format(session_blake2b)
+            run_code_list = []
+            run_code_line_number = 1
+            user_code_line_number = 1
+            run_code_to_user_code_dict = {}
+            chunk_wrapper_lines_before, chunk_wrapper_lines_after = [x.count('\n') for x in lang_def.chunk_wrapper.split('{code}')]
 
-            source_list.append(lang_def.source_start.encode('utf8'))
-            source_line_number += lang_def.source_start.count('\n')
+            run_code_list.append(lang_def.source_start.encode('utf8'))
+            run_code_line_number += lang_def.source_start.count('\n')
             for cc in session_chunk_list:
-                source_line_number += chunk_wrapper_lines_before
+                run_code_line_number += chunk_wrapper_lines_before
                 for _ in range(cc.code.count('\n')):
-                    code_line_number += 1
-                    source_line_number += 1
-                    source_to_code_map[source_line_number] = code_line_number
-                source_list.append(lang_def.chunk_wrapper.format(stdoutdelim=delim, stderrdelim=delim, code=cc.code).encode('utf8'))
-                source_line_number += chunk_wrapper_lines_after
-            source_list.append(lang_def.source_end.encode('utf8'))
+                    run_code_to_user_code_dict[run_code_line_number] = user_code_line_number
+                    user_code_line_number += 1
+                    run_code_line_number += 1
+                run_code_list.append(lang_def.chunk_wrapper.format(stdoutdelim=delim, stderrdelim=delim, code=cc.code).encode('utf8'))
+                run_code_line_number += chunk_wrapper_lines_after
+            run_code_list.append(lang_def.source_end.encode('utf8'))
+
             with tempfile.TemporaryDirectory() as tempdir:
                 source_path = pathlib.Path(tempdir) / 'source.{0}'.format(lang_def.extension)
-                source_path_abs = source_path.absolute()
                 with open(str(source_path), 'wb') as f:
-                    for x in source_list:
+                    for x in run_code_list:
                         f.write(x)
+                pre_procs = []
+                post_procs = []
+                proc_error = False
                 for cmd in lang_def.pre_run_commands:
-                    subprocess.run(shlex.split(cmd))
-                cmd = lang_def.run_command.format(executable=lang_def.executable, source=source_path_abs.as_posix())
+                    if proc_error:
+                        break
+                    pre_proc = subprocess.run(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                cmd = lang_def.run_command.format(executable=lang_def.executable, source=source_path.absolute().as_posix())
                 proc = subprocess.run(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 for cmd in lang_def.post_run_commands:
                     subprocess.run(shlex.split(cmd))
@@ -219,7 +239,7 @@ class CodeProcessor(object):
             stderr_list.extend([None]*(len(session_chunk_list)-len(stdout_list)))
 
             cache = {'stdout': stdout_list, 'stderr': stderr_list}
-            self._stream_cache[session_hash] = cache
+            self._cache[session_hash] = cache
             self._updated_cache_hash_roots.append(session_hash_root)
 
         for cc, stdout, stderr in zip(session_chunk_list, cache['stdout'], cache['stderr']):
@@ -228,12 +248,12 @@ class CodeProcessor(object):
 
 
     def _update_cache(self):
-        if self.cache_stream_path is not None:
-            for cache_path in self.cache_stream_path.glob('*.zip'):
-                if cache_path.name not in self._used_stream_cache_files:
+        if self.cache_path is not None:
+            for cache_path in self.cache_path.glob('*.zip'):
+                if cache_path.name not in self._used_cache_files:
                     cache_path.unlink()
             for hash_root in self._updated_cache_hash_roots:
-                cache_path = self.cache_stream_path / '{0}.zip'.format(hash_root)
+                cache_path = self.cache_path / '{0}.zip'.format(hash_root)
                 with zipfile.ZipFile(str(cache_path), 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-                    data = {k: v for k, v in self._stream_cache.items() if k.startswith(hash_root)}
+                    data = {k: v for k, v in self._cache.items() if k.startswith(hash_root)}
                     zf.writestr('cache.json', json.dumps(data))

@@ -30,11 +30,11 @@ class CodeChunk(object):
                  source_start_line_number: Optional[int]=None,
                  inline: Optional[bool]=None):
         if command not in ('code', 'run'):
-            raise err.SourceError('Unknown Codebraid command "{0}"'.format(command), source_name, start_line_number)
+            raise err.SourceError('Unknown Codebraid command "{0}"'.format(command), source_name, source_start_line_number)
         self.command = command
         code_lines = code.splitlines()
         if len(code_lines) > 1 and inline:
-            raise err.SourceError('Inline code cannot be longer that 1 line', source_name, start_line_number)
+            raise err.SourceError('Inline code cannot be longer that 1 line', source_name, source_start_line_number)
         if not inline:
             # Inline code automatically won't contribute to line count
             code_lines[-1] += '\n'
@@ -47,10 +47,10 @@ class CodeChunk(object):
             try:
                 v_func = self._options_schema_process[k]
             except KeyError:
-                raise err.SourceError('Unknown option "{0}"'.format(k), source_name, start_line_number)
+                raise err.SourceError('Unknown option "{0}"'.format(k), source_name, source_start_line_number)
             v_isvalid, v_processed = v_func(v, inline, final_options)
             if not v_isvalid:
-                raise err.SourceError('Option "{0}" has incorrect value "{1}"'.format(k, v), source_name, start_line_number)
+                raise err.SourceError('Option "{0}" has incorrect value "{1}"'.format(k, v), source_name, source_start_line_number)
             if v_processed is not None:
                 final_options[k] = v_processed
         self.options = final_options
@@ -275,30 +275,17 @@ class Converter(object):
             raise TypeError('Multiple sources are not supported for format {0}'.format(from_format))
         if cache_path is None:
             if paths is not None:
-                cache_path = self.expanded_source_paths[0].parent()
-        else:
-            if isinstance(cache_path, str):
-                cache_path = pathlib.Path(cache_path)
-            elif not isinstance(cache_path, pathlib.Path):
-                raise TypeError
+                cache_path = self.expanded_source_paths[0].parent() / '_codebraid'
+        elif isinstance(cache_path, str):
+            cache_path = pathlib.Path(cache_path)
+        elif not isinstance(cache_path, pathlib.Path):
+            raise TypeError
+        if cache_path is not None:
+            if expandvars:
+                cache_path = pathlib.Path(os.path.expandvars(str(cache_path.as_posix)))
+            if expanduser:
+                cache_path = cache_path.expanduser()
         self.cache_path = cache_path
-        if cache_path is None:
-            self.cache_root_path = None
-            self.cache_stream_path = None
-            self.cache_temp_path = None
-        else:
-            cache_root_path = cache_path / '_codebraid'
-            if not cache_root_path.is_dir():
-                cache_root_path.mkdir(parents=True)
-            self.cache_root_path = cache_root_path
-            cache_stream_path = cache_root_path / 'stream_cache'
-            if not cache_stream_path.is_dir():
-                cache_stream_path.mkdir()
-            self.cache_stream_path = cache_stream_path
-            cache_temp_path = cache_root_path / 'temp'
-            if not cache_temp_path.is_dir():
-                cache_temp_path.mkdir()
-            self.cache_temp_path = cache_temp_path
 
         self.code_chunks = []
         self.code_options = {}

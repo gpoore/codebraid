@@ -289,8 +289,6 @@ class PandocConverter(Converter):
 
         if not isinstance(pandoc_file_scope, bool):
             raise TypeError
-        if pandoc_file_scope and self.cache_path is None:
-            raise ValueError('pandoc_file_scope=True requires specifying cache_path')
         if pandoc_file_scope and kwargs.get('cross_source_sessions') is None:
             self.cross_source_sessions = False
         self.pandoc_file_scope = pandoc_file_scope
@@ -784,18 +782,17 @@ class PandocConverter(Converter):
                                              to_format_pandoc_extensions=to_format_pandoc_extensions,
                                              standalone=standalone)
         else:
-            # No need to check for cache_path is not None; done in __init__
-            tempfile_paths = []
-            for n, markup in enumerate(self._processed_markup.values()):
-                tempfile_path = self.cache_temp_path / 'codebraid_intermediate_{0}.txt'.format(n)
-                tempfile_path.write_text(markup, encoding='utf8')
-                tempfile_paths.append(tempfile_path)
-            converted = self._run_pandoc(input_paths=tempfile_paths,
-                                         from_format='markdown',
-                                         from_format_pandoc_extensions=self.from_format_pandoc_extensions,
-                                         to_format=to_format,
-                                         to_format_pandoc_extensions=to_format_pandoc_extensions,
-                                         standalone=standalone)
-            for tempfile_path in tempfile_paths:
-                tempfile_path.unlink()
+            with tempfile.TemporaryDirectory() as tempdir:
+                tempdir_path = pathlib.Path(tempdir)
+                tempfile_paths = []
+                for n, markup in enumerate(self._processed_markup.values()):
+                    tempfile_path = tempdir_path / 'codebraid_intermediate_{0}.txt'.format(n)
+                    tempfile_path.write_text(markup, encoding='utf8')
+                    tempfile_paths.append(tempfile_path)
+                converted = self._run_pandoc(input_paths=tempfile_paths,
+                                             from_format='markdown',
+                                             from_format_pandoc_extensions=self.from_format_pandoc_extensions,
+                                             to_format=to_format,
+                                             to_format_pandoc_extensions=to_format_pandoc_extensions,
+                                             standalone=standalone)
         return converted
