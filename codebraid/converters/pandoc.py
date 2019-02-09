@@ -30,6 +30,118 @@ class PandocError(err.CodebraidError):
 
 
 
+# Option processing functions
+#
+# Duplicate or invalid options related to presentation result in warnings,
+# while duplicate or invalid options related to code execution result in
+# errors.
+#
+# Code chunk classes
+def _pandoc_class_lang_or_unknown(code_chunk, class_index, class_name, options):
+    if 'lang' in options:
+        code_chunk.source_errors.append('Unknown non-Codebraid class')
+    elif class_index > 0:
+        code_chunk.source_errors.append('The language/format "{0}" must be the first class for code chunk'.format(class_name))
+    else:
+        options['lang'] = class_name
+
+def _pandoc_class_codebraid_command(code_chunk, class_index, class_name, options):
+    if 'codebraid_command' in options:
+        code_chunk.source_errors.append('Only one Codebraid command can be applied per code chunk')
+    else:
+        options['codebraid_command'] = class_name.split('.', 1)[1]
+
+def _pandoc_class_line_anchors(code_chunk, class_index, class_name, options):
+    if 'lineAnchors' in options:
+        code_chunk.source_warnings.append('Duplicate line anchor class for code chunk')
+    else:
+        options['lineAnchors'] = True
+
+def _pandoc_class_line_numbers(code_chunk, class_index, class_name, options):
+    if 'line_numbers' in options:
+        code_chunk.source_warnings.append('Duplicate line numbering class for code chunk')
+    else:
+        options['line_numbers'] = True
+
+_pandoc_class_processors = collections.defaultdict(lambda: _pandoc_class_lang_or_unknown,
+                                                   {'cb.run': _pandoc_class_codebraid_command,
+                                                    'lineAnchors': _pandoc_class_line_anchors,
+                                                    'line-anchors': _pandoc_class_line_anchors,
+                                                    'line_anchors': _pandoc_class_line_anchors,
+                                                    'line_numbers': _pandoc_class_line_numbers,
+                                                    'numberLines': _pandoc_class_line_numbers,
+                                                    'number-lines': _pandoc_class_line_numbers,
+                                                    'number_lines': _pandoc_class_line_numbers})
+
+# Code chunk key-value attributes
+def _pandoc_kv_generic(code_chunk, key, value, options):
+    if key in options:
+        code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
+    else:
+        options[key] = value
+
+def _pandoc_kv_bool(code_chunk, key, value, options):
+    if key in options:
+        code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
+    elif value not in ('true', 'false'):
+        code_chunk.source_errors.append('Attribute "{0}" must be true or false for code chunk'.format(key))
+    else:
+        options[key] = value == 'true'
+
+def _pandoc_kv_first_number(code_chunk, key, value, options):
+    if 'first_number' in options:
+        code_chunk.source_warnings.append('Duplicate first line number attribute for code chunk')
+    else:
+        try:
+            value = int(value)
+        except ValueError:
+            pass
+        options['first_number'] = value
+
+def _pandoc_kv_label(code_chunk, key, value, options,
+                     pandoc_id_re=re.compile(r'(?!\d|_)(?:\w+|[-:.]+)+')):
+    if 'label' in options or 'name' in options:
+        code_chunk.source_errors.append('Duplicate label/name for code chunk')
+    elif not pandoc_id_re.match(value):
+        # Identifier regex approximation for Pandoc/Readers/Markdown.hs
+        code_chunk.source_errors.append('Code chunk label/name must be valid Pandoc identifier: <letter>(<alphanum>|"-_:.")*')
+    else:
+        options['label'] = value
+
+def _pandoc_kv_line_anchors(code_chunk, key, value, options):
+    if 'lineAnchors' in options:
+        code_chunk.source_warnings.append('Duplicate line anchor attribute for code chunk')
+    elif value not in ('true', 'false'):
+        code_chunk.source_warnings.append('Attribute "{0}" must be true or false for code chunk'.format(key))
+    else:
+        options['lineAnchors'] = value
+
+def _pandoc_kv_line_numbers(code_chunk, key, value, options):
+    if 'line_numbers' in options:
+        code_chunk.source_warnings.append('Duplicate line numbering attribute for code chunk')
+    elif value not in ('true', 'false'):
+        code_chunk.source_warnings.append('Attribute "{0}" must be true or false for code chunk'.format(key))
+    else:
+        options['line_numbers'] = value
+
+_pandoc_kv_processors = collections.defaultdict(lambda: _pandoc_kv_generic,
+                                                {'first_number': _pandoc_kv_first_number,
+                                                 'startFrom': _pandoc_kv_first_number,
+                                                 'start-from': _pandoc_kv_first_number,
+                                                 'start_from': _pandoc_kv_first_number,
+                                                 'label': _pandoc_kv_label,
+                                                 'name': _pandoc_kv_label,
+                                                 'lineAnchors': _pandoc_kv_line_anchors,
+                                                 'line-anchors': _pandoc_kv_line_anchors,
+                                                 'line_anchors': _pandoc_kv_line_anchors,
+                                                 'line_numbers': _pandoc_kv_line_numbers,
+                                                 'numberLines': _pandoc_kv_line_numbers,
+                                                 'number-lines': _pandoc_kv_line_numbers,
+                                                 'number_lines': _pandoc_kv_line_numbers})
+
+
+
+
 class PandocCodeChunk(CodeChunk):
     def __init__(self,
                  node: dict,
@@ -37,152 +149,113 @@ class PandocCodeChunk(CodeChunk):
                  parent_node_list_index: int,
                  source_name: str,
                  source_start_line_number: int):
+        super().__pre_init__()
+
         self.node = node
         self.parent_node_list = parent_node_list
         self.parent_node_list_index = parent_node_list_index
 
-        options = {}
-        pandoc_id = ''
-        pandoc_classes = []
-        pandoc_kvpairs = []
         node_id, node_classes, node_kvpairs = node['c'][0]
         code = node['c'][1]
+        options = {}
 
-        # Once design stabilizes, it may be worth converting this in to a set
-        # of class and attribute processing functions, to guarantee consistent
-        # handling
         if node_id:
             options['label'] = node_id
-            pandoc_id = node_id
         inline = node['t'] == 'Code'
         codebraid_command = None
         for n, c in enumerate(node_classes):
-            if c.startswith('cb.'):
-                if codebraid_command is not None:
-                    raise err.SourceError('Only one Codebraid command can be applied per code chunk', source_name, start_line_number)
-                codebraid_command = c.split('.', 1)[1]
-            elif c in ('lineAnchors', 'line-anchors', 'line_anchors'):
-                if 'lineAnchors' in pandoc_classes:
-                    raise err.SourceError('Duplicate line anchor class for code chunk', source_name, start_line_number)
-                pandoc_classes.append('lineAnchors')
-            elif c in ('line_numbers', 'numberLines', 'number-lines', 'number_lines'):
-                if 'line_numbers' in options:
-                    raise err.SourceError('Duplicate line numbering class for code chunk', source_name, start_line_number)
-                options['line_numbers'] = True
-                pandoc_classes.append('numberLines')
-            else:
-                if n > 0:
-                    raise err.SourceError('The language/format must be the first class for code chunk', source_name, start_line_number)
-                if 'lang' in options:
-                    raise err.SourceError('Unknown non-Codebraid class', source_name, start_line_number)
-                options['lang'] = c
-                pandoc_classes.insert(0, c)
+            self._class_processors[c](self, n, c, options)
         for k, v in node_kvpairs:
-            if k == 'hide':
-                if 'hide' in options:
-                    raise err.SourceError('Duplicate "hide" attribute for code chunk', source_name, start_line_number)
-                options['hide'] = v
-            elif k in ('first_number', 'startFrom', 'start-from', 'start_from'):
-                if 'first_number' in options:
-                    raise err.SourceError('Duplicate first line number attribute for code chunk', source_name, start_line_number)
-                options['first_number'] = v
-            elif k in ('label', 'name'):
-                if 'label' in options:
-                    if node_id:
-                        raise err.SourceError('Code chunk can have only one label/name; already have #<id>', source_name, start_line_number)
-                    raise err.SourceError('Code chunk can have only one label/name', source_name, start_line_number)
-                if not self._pandoc_id_re.match(v):
-                    raise err.SourceError('Code chunk label/name must be valid Pandoc identifier: <letter>(<alphanum>|"-_:.")*', source_name, start_line_number)
-                options['label'] = v
-                pandoc_id = v
-            elif k == 'lang':
-                if 'lang' in options:
-                    raise err.SourceError('Duplicate lang for code chunk', source_name, start_line_number)
-                options['lang'] = v
-                pandoc_classes.insert(0, v)
-            elif k in ('lineAnchors', 'line-anchors', 'line_anchors'):
-                if 'lineAnchors' in pandoc_classes:
-                    raise err.SourceError('Duplicate line anchor attribute for code chunk', source_name, start_line_number)
-                pandoc_classes.append('lineAnchors')
-            elif k in ('line_numbers', 'numberLines', 'number-lines', 'number_lines'):
-                if 'line_numbers' in options:
-                    raise err.SourceError('Duplicate line numbering attribute for code chunk', source_name, start_line_number)
-                options['line_numbers'] = v
-                pandoc_classes.append('numberLines')
-            elif k == 'session':
-                if 'session' in options:
-                    raise err.SourceError('Duplicate "session" attribute for code chunk', source_name, start_line_number)
-                options['session'] = v
-            elif k == 'show':
-                if 'show' in options:
-                    raise err.SourceError('Duplicate "show" attribute for code chunk', source_name, start_line_number)
-                options['show'] = v
-            else:
-                raise err.SourceError('Unknown or currently unsupported attribute {0}="{1}"'.format(k, v), source_name, start_line_number)
+            self._kv_processors[k](self, k, v, options)
+
+        pandoc_id = options.get('label', '')
+        pandoc_classes = []
+        pandoc_kvpairs = []
+        if 'lang' in options:
+            pandoc_classes.insert(0, options['lang'])
+        if options.pop('lineAnchors', False):
+            pandoc_classes.append('lineAnchors')
+        if options.get('line_numbers', False):
+            pandoc_classes.append('numberLines')
+        # Can't handle `startFrom` yet here, because if it is `next`, then
+        # the value depends on which other code chunks end up in the session.
+        # Starting line number is determined when output is generated.
+
         self.pandoc_id = pandoc_id
         self.pandoc_classes = pandoc_classes
         self.pandoc_kvpairs = pandoc_kvpairs
         super().__init__(codebraid_command, code, options, source_name, source_start_line_number=source_start_line_number, inline=inline)
 
-    # identifier approximation for Pandoc/Readers/Markdown.hs
-    _pandoc_id_re = re.compile(r'(?!\d|_)(?:\w+|[-:.]+)+')
 
+    _class_processors = _pandoc_class_processors
+    _kv_processors = _pandoc_kv_processors
 
     def output_nodes(self):
         if not self.inline and self.options['line_numbers']:
-            first_num = self.options['first_number']
-            if first_num == 'next':
-                first_num = str(self.code_start_line_number)
+            first_number = self.options['first_number']
+            if first_number == 'next':
+                first_number = str(self.code_start_line_number)
             else:
-                first_num = str(first_num)
-            self.pandoc_kvpairs.append(['startFrom', first_num])
+                first_number = str(first_number)
+            self.pandoc_kvpairs.append(['startFrom', first_number])
         t_code = 'Code' if self.inline else 'CodeBlock'
         t_raw = 'RawInline' if self.inline else 'RawBlock'
         nodes = []
-        for display, format in self.options['show'].items():
-            if display == 'code':
+        for output, format in self.options['show'].items():
+            if output == 'code':
                 code = self.code
                 if not self.inline:
                     code = code[:-1]
                 nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], code]})
-            elif display == 'expression':
-                if format in ('verbatim', 'autoverbatim'):
-                    expression = self.expression
-                    if (format == 'verbatim' and expression is not None) or format == 'autoverbatim':
-                        if expression is None:
-                            expression = ''
-                        nodes.append({'t': t_code, 'c': [['', [], []], expression]})
+            elif output == 'expression':
+                if format == 'verbatim':
+                    if self.expression is not None:
+                        nodes.append({'t': t_code, 'c': [['', ['expression'], []], self.expression]})
+                elif format == 'verbatim_or_empty':
+                    nodes.append({'t': t_code, 'c': [['', [], []], self.expression or '']})
                 elif format == 'raw':
                     if self.expression is not None:
                         nodes.append({'t': t_raw, 'c': ['markdown', self.expression]})
                 else:
                     raise ValueError
-            elif display == 'stdout':
-                if format in ('verbatim', 'autoverbatim'):
-                    stdout = self.stdout
-                    if (format == 'verbatim' and stdout is not None) or format == 'autoverbatim':
-                        if stdout is None:
-                            stdout = ''
-                        if not self.inline:
-                            stdout = stdout[:-1]
-                        nodes.append({'t': t_code, 'c': [['', ['stdout'], []], stdout]})
+            elif output == 'stdout':
+                if format == 'verbatim':
+                    if self.stdout is not None:
+                        if self.inline:
+                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], self.stdout]})
+                        else:
+                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], self.stdout[:-1]]})
+                elif format == 'verbatim_or_empty':
+                    if self.inline:
+                        nodes.append({'t': t_code, 'c': [['', ['stdout'], []], self.stdout or '']})
+                    else:
+                        nodes.append({'t': t_code, 'c': [['', ['stdout'], []], self.stdout[:-1] or '']})
                 elif format == 'raw':
                     if self.stdout is not None:
-                        nodes.append({'t': t_raw, 'c': ['markdown', self.stdout]})
+                        if self.inline:
+                            nodes.append({'t': t_raw, 'c': ['markdown', self.stdout]})
+                        else:
+                            nodes.append({'t': t_raw, 'c': ['markdown', self.stdout[:-1]]})
                 else:
                     raise ValueError
-            elif display == 'stderr':
-                if format in ('verbatim', 'autoverbatim'):
-                    stderr = self.stderr
-                    if (format == 'verbatim' and stderr is not None) or format == 'autoverbatim':
-                        if stderr is None:
-                            stderr = ''
-                        if not self.inline:
-                            stderr = stderr[:-1]
-                        nodes.append({'t': t_code, 'c': [['', ['stderr'], []], stderr]})
+            elif output == 'stderr':
+                if format == 'verbatim':
+                    if self.stderr is not None:
+                        if self.inline:
+                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], self.stderr]})
+                        else:
+                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], self.stderr[:-1]]})
+                elif format == 'verbatim_or_empty':
+                    if self.inline:
+                        nodes.append({'t': t_code, 'c': [['', ['stderr'], []], self.stderr or '']})
+                    else:
+                        nodes.append({'t': t_code, 'c': [['', ['stderr'], []], self.stderr[:-1] or '']})
                 elif format == 'raw':
                     if self.stderr is not None:
-                        nodes.append({'t': t_raw, 'c': ['markdown', self.stderr]})
+                        if self.inline:
+                            nodes.append({'t': t_raw, 'c': ['markdown', self.stderr]})
+                        else:
+                            nodes.append({'t': t_raw, 'c': ['markdown', self.stderr[:-1]]})
                 else:
                     raise ValueError
         return nodes

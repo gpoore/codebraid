@@ -11,9 +11,136 @@
 import os
 import collections
 import pathlib
-import typing; from typing import Optional, Sequence, Union
+import typing; from typing import List, Optional, Sequence, Union
 from .. import err
 from .. import codeprocessors
+
+
+
+
+# Option processing functions
+#
+# These check options for validity and then store them.  There are no type
+# conversions.  Any desired type conversions should be performed in
+# format-specific subclasses of CodeChunk, which can take into account the
+# data types that the format allows for options.  Duplicate or invalid options
+# related to presentation result in warnings, while duplicate or invalid
+# options related to code execution result in errors.
+def _cb_option_unknown(code_chunk, key, value, options):
+    code_chunk.source_errors.append('Unknown option "{0}" for code chunk'.format(key))
+
+def _cb_option_bool(code_chunk, key, value, options):
+    if isinstance(value, bool):
+        options[key] = value
+    else:
+        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+def _cb_option_str(code_chunk, key, value, options):
+    if isinstance(value, str):
+        options[key] = value
+    else:
+        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+def _cb_option_first_number(code_chunk, key, value, options):
+    if (isinstance(value, int) and value > 0) or (isinstance(value, str) and value == 'next'):
+        options[key] = value
+    else:
+        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+def _cb_option_hide(code_chunk, key, value, options):
+    if not isinstance(value, str):
+        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+        return
+    if value == 'all':
+        options['show'] = None
+    else:
+        hide_values = value.replace(' ', '').split('+')
+        if not all(v in ('code', 'stdout', 'stderr', 'expression') for v in hide_values):
+            code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+            return
+        for v in hide_values:
+            options['show'].pop(v, None)
+    options[key] = hide_values
+
+def _cb_option_label(code_chunk, key, value, options):
+    if 'label' in options:
+        code_chunk.source_warnings.append('Duplicate option "{0}" (label/name) for code chunk'.format(key))
+    elif isinstance(value, str):
+        options['label'] = value
+    else:
+        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+_cb_default_show_notebook = collections.OrderedDict([('code', 'verbatim'),
+                                                     ('stdout', 'verbatim'),
+                                                     ('stderr', 'verbatim')])
+_cb_default_show_inline_notebook = collections.OrderedDict([('expression', 'raw'),
+                                                            ('stderr', 'verbatim')])
+def _cb_option_show(code_chunk, key, value, options):
+    if not isinstance(value, str):
+        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+        return
+    if value == 'none':
+        options[key] = None
+    elif value == 'notebook':
+        if code_chunk.inline:
+            options[key] = _cb_default_show_inline_notebook.copy()
+        else:
+            options[key] = _cb_default_show_notebook.copy()
+    else:
+        value_processed = collections.OrderedDict()
+        for output_and_format in value.replace(' ', '').split('+'):
+            if ':' not in output_and_format:
+                output = output_and_format
+                format = None
+            else:
+                output, format = output_and_format.split(':', 1)
+            if output in value_processed:
+                code_chunk.source_warnings.append('Option "{0}" value "{1}" contains duplicate "{2}" in code chunk'.format(key, value, output))
+                continue
+            if output == 'code':
+                if format is None:
+                    format = 'verbatim'
+                elif format != 'verbatim':
+                    code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                    continue
+            elif output in ('stdout', 'stderr'):
+                if format is None:
+                    format = 'verbatim'
+                elif format not in ('verbatim', 'verbatim_or_empty', 'raw'):
+                    code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                    continue
+            elif output == 'expression':
+                if not code_chunk.inline:
+                    code_chunk.source_warnings.append('Invalid "{0}" value "{1}" (not inline) in code chunk'.format(key, value))
+                    continue
+                if format is None:
+                    format = 'raw'
+                elif format not in ('verbatim', 'verbatim_or_empty', 'raw'):
+                    code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                    continue
+            else:
+                code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                continue
+            value_processed[output] = format
+        options[key] = value_processed
+
+
+_cb_option_processors = collections.defaultdict(lambda: _cb_option_unknown,
+                                                {'hide': _cb_option_hide,
+                                                 'first_number': _cb_option_first_number,
+                                                 'label': _cb_option_label,
+                                                 'lang': _cb_option_str,
+                                                 'line_numbers': _cb_option_bool,
+                                                 'session': _cb_option_str,
+                                                 'show': _cb_option_show})
+_cb_default_options = {'first_number': 'next',
+                       'lang': None,
+                       'line_numbers': True,
+                       'session': None,
+                       'show': _cb_default_show_notebook}
+_cb_default_inline_options = {'lang': None,
+                              'session': None,
+                              'show': _cb_default_show_inline_notebook}
 
 
 
@@ -24,39 +151,43 @@ class CodeChunk(object):
     '''
     def __init__(self,
                  command: str,
-                 code: str,
+                 code: Union[str, List[str]],
                  options: dict,
                  source_name: str, *,
                  source_start_line_number: Optional[int]=None,
                  inline: Optional[bool]=None):
+        self.__pre_init__()
+
         if command not in ('code', 'run'):
-            raise err.SourceError('Unknown Codebraid command "{0}"'.format(command), source_name, source_start_line_number)
+            self.source_errors.append('Unknown Codebraid command "{0}"'.format(command))
         self.command = command
-        code_lines = code.splitlines()
+
+        # When code is provided as a string, counting `\n` could be an
+        # alternative to `.splitlines()`, but could require normalizing
+        # newlines and thus might not be simpler or more efficient
+        if isinstance(code, list):
+            code_lines = code
+        else:
+            code_lines = code.splitlines()
         if len(code_lines) > 1 and inline:
-            raise err.SourceError('Inline code cannot be longer that 1 line', source_name, source_start_line_number)
+            self.source_errors.append('Inline code cannot be longer that 1 line')
         if not inline:
-            # Inline code automatically won't contribute to line count
+            # Inline code doesn't end in a newline, so it won't contribute to
+            # the line count of executed code
             code_lines[-1] += '\n'
         self.code = '\n'.join(code_lines)
+
+        self.source_name = source_name
+        self.source_start_line_number = source_start_line_number
+        self.inline = inline
+
         if inline:
             final_options = self._default_inline_options.copy()
         else:
             final_options = self._default_options.copy()
         for k, v in options.items():
-            try:
-                v_func = self._options_schema_process[k]
-            except KeyError:
-                raise err.SourceError('Unknown option "{0}"'.format(k), source_name, source_start_line_number)
-            v_isvalid, v_processed = v_func(v, inline, final_options)
-            if not v_isvalid:
-                raise err.SourceError('Option "{0}" has incorrect value "{1}"'.format(k, v), source_name, source_start_line_number)
-            if v_processed is not None:
-                final_options[k] = v_processed
+            self._option_processors[k](self, k, v, final_options)
         self.options = final_options
-        self.source_name = source_name
-        self.source_start_line_number = source_start_line_number
-        self.inline = inline
 
         self.stdout = None
         self.stderr = None
@@ -65,98 +196,15 @@ class CodeChunk(object):
         self.code_start_line_number = None
 
 
-    @staticmethod
-    def _option_first_number_schema_process(x, inline, opts):
-        if isinstance(x, int) and x > 0:
-            return (True, x)
-        elif isinstance(x, str):
-            if x == 'next':
-                return (True, x)
-            try:
-                x = int(x)
-            except ValueError:
-                return (False, x)
-            return (True, x)
-        return (False, x)
-
-    @staticmethod
-    def _option_hide_schema_process(x, inline, opts):
-        if not isinstance(x, str):
-            return (False, None)
-        vals = x.replace(' ', '').split('+')
-        if not all(val in ('code', 'stdout', 'stderr') for val in vals):
-            return (False, None)
-        for val in vals:
-            opts['show'].pop(val, None)
-        return (True, None)
-
-    _show_notebook = collections.OrderedDict([('code', 'verbatim'),
-                                              ('stdout', 'autoverbatim'),
-                                              ('stderr', 'verbatim')])
-    _show_inline_notebook = collections.OrderedDict([('expression', 'raw'),
-                                                     ('stderr', 'verbatim')])
-
-    def _option_show_schema_process(self, x, inline, opts):
-        if not isinstance(x, str):
-            return (False, x)
-        if x == 'notebook':
-            if inline:
-                return (True, self._show_inline_notebook.copy())
-            return (True, self._show_notebook.copy())
-        v_processed = collections.OrderedDict()
-        vals = x.replace(' ', '').split('+')
-        for output_and_format in vals:
-            if ':' not in output_and_format:
-                output = output_and_format
-                format = None
-            else:
-                output, format = output_and_format.split(':', 1)
-            if output in v_processed:
-                return (False, x)
-            if output == 'code':
-                if format is None:
-                    format = 'verbatim'
-                elif format != 'verbatim':
-                    return (False, x)
-            elif output == 'expression':
-                if not inline:
-                    return (False, x)
-                if format is None:
-                    format = 'raw'
-                elif format not in ('verbatim', 'autoverbatim', 'raw'):
-                    return (False, x)
-            elif output in ('stdout', 'stderr'):
-                if format not in (None, 'verbatim', 'autoverbatim', 'raw'):
-                    return (False, x)
-                if format is None:
-                    format = 'verbatim'
-            else:
-                return (False, x)
-            v_processed[output] = format
-        return (True, v_processed)
-
-    @staticmethod
-    def _option_line_numbers_schema_process(x, inline, opts):
-        if isinstance(x, bool):
-            return (True, x)
-        if x in ('true', 'false'):
-            return (True, x == 'true')
-        return (False, x)
+    def __pre_init__(self):
+        if not hasattr(self, 'source_errors'):
+            self.source_errors = []
+            self.source_warnings = []
 
 
-    _options_schema_process = {'hide': _option_hide_schema_process,
-                               'first_number': _option_first_number_schema_process,
-                               'label': lambda x, inline, opts: (isinstance(x, str), x),
-                               'lang': lambda x, inline, opts: (isinstance(x, str), x),
-                               'line_numbers': _option_line_numbers_schema_process,
-                               'session': lambda x, inline, opts: (isinstance(x, str), x),
-                               'show': _option_show_schema_process}
-
-    _default_options = {'first_number': 'next',
-                        'line_numbers': True,
-                        'session': None,
-                        'show': _show_notebook}
-    _default_inline_options = {'session': None, 'show': _show_inline_notebook}
+    _default_options = _cb_default_options
+    _default_inline_options = _cb_default_inline_options
+    _option_processors = _cb_option_processors
 
 
 
@@ -231,7 +279,12 @@ class Converter(object):
             self.expanded_source_paths = paths
             source_strings = []
             for p in paths:
-                source_string = p.read_text(encoding='utf_8_sig')
+                try:
+                    source_string = p.read_text(encoding='utf_8_sig')
+                except Exception as e:
+                    if not p.is_file():
+                        raise ValueError('File "{0}" does not exist'.format(p))
+                    raise ValueError('Failed to read file "{0}":\n  {1}'.format(p, e))
                 if not source_string:
                     source_string = '\n'
                 source_strings.append(source_string)
