@@ -65,6 +65,7 @@ def _pandoc_class_line_numbers(code_chunk, class_index, class_name, options):
 
 _pandoc_class_processors = collections.defaultdict(lambda: _pandoc_class_lang_or_unknown,
                                                    {'cb.run': _pandoc_class_codebraid_command,
+                                                    'cb.expr': _pandoc_class_codebraid_command,
                                                     'lineAnchors': _pandoc_class_line_anchors,
                                                     'line-anchors': _pandoc_class_line_anchors,
                                                     'line_anchors': _pandoc_class_line_anchors,
@@ -211,18 +212,18 @@ class PandocCodeChunk(CodeChunk):
                 else:
                     code = '\n'.join(self.code_lines)
                 nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], code]})
-            elif output == 'expression':
+            elif output == 'expr':
                 if format == 'verbatim':
-                    if self.expression_lines is not None:
-                        nodes.append({'t': t_code, 'c': [['', ['expression'], []], ' '.join(self.expression_lines)]})
+                    if self.expr_lines is not None:
+                        nodes.append({'t': t_code, 'c': [['', ['expr'], []], ' '.join(self.expr_lines)]})
                 elif format == 'verbatim_or_empty':
-                    if self.expression_lines is not None:
-                        nodes.append({'t': t_code, 'c': [['', ['expression'], []], ' '.join(self.expression_lines)]})
+                    if self.expr_lines is not None:
+                        nodes.append({'t': t_code, 'c': [['', ['expr'], []], ' '.join(self.expr_lines)]})
                     else:
-                        nodes.append({'t': t_code, 'c': [['', ['expression'], []], ' ']})
+                        nodes.append({'t': t_code, 'c': [['', ['expr'], []], ' ']})
                 elif format == 'raw':
-                    if self.expression_lines is not None:
-                        nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.expression_lines)]})
+                    if self.expr_lines is not None:
+                        nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.expr_lines)]})
                 else:
                     raise ValueError
             elif output == 'stdout':

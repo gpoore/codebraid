@@ -55,7 +55,10 @@ def _cb_option_hide(code_chunk, key, value, options):
         options['show'] = collections.OrderedDict()
     else:
         hide_values = value.replace(' ', '').split('+')
-        if not all(v in ('code', 'stdout', 'stderr', 'expression') for v in hide_values):
+        if not all(v in ('code', 'stdout', 'stderr', 'expr') for v in hide_values):
+            code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+            return
+        if 'expr' in hide_values and code_chunk.command != 'expr':
             code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
             return
         for v in hide_values:
@@ -73,8 +76,10 @@ def _cb_option_label(code_chunk, key, value, options):
 _cb_default_show_notebook = collections.OrderedDict([('code', 'verbatim'),
                                                      ('stdout', 'verbatim'),
                                                      ('stderr', 'verbatim')])
-_cb_default_show_inline_notebook = collections.OrderedDict([('expression', 'raw'),
+_cb_default_show_inline_notebook = collections.OrderedDict([('stdout', 'raw'),
                                                             ('stderr', 'verbatim')])
+_cb_default_show_expr_notebook = collections.OrderedDict([('expr', 'raw'),
+                                                          ('stderr', 'verbatim')])
 def _cb_option_show(code_chunk, key, value, options):
     if not isinstance(value, str):
         code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
@@ -83,7 +88,10 @@ def _cb_option_show(code_chunk, key, value, options):
         options[key] = collections.OrderedDict()
     elif value == 'notebook':
         if code_chunk.inline:
-            options[key] = _cb_default_show_inline_notebook.copy()
+            if code_chunk.command == 'expr':
+                options[key] = _cb_default_show_expr_notebook.copy()
+            else:
+                options[key] = _cb_default_show_inline_notebook.copy()
         else:
             options[key] = _cb_default_show_notebook.copy()
     else:
@@ -109,9 +117,9 @@ def _cb_option_show(code_chunk, key, value, options):
                 elif format not in ('verbatim', 'verbatim_or_empty', 'raw'):
                     code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
                     continue
-            elif output == 'expression':
-                if not code_chunk.inline:
-                    code_chunk.source_warnings.append('Invalid "{0}" value "{1}" (not inline) in code chunk'.format(key, value))
+            elif output == 'expr':
+                if not code_chunk.command == 'expr':
+                    code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk (not expr chunk)'.format(key, value))
                     continue
                 if format is None:
                     format = 'raw'
@@ -141,6 +149,9 @@ _cb_default_options = {'first_number': 'next',
 _cb_default_inline_options = {'lang': None,
                               'session': None,
                               'show': _cb_default_show_inline_notebook}
+_cb_default_expr_options = {'lang': None,
+                            'session': None,
+                            'show': _cb_default_show_expr_notebook}
 
 
 
@@ -158,8 +169,11 @@ class CodeChunk(object):
                  inline: Optional[bool]=None):
         self.__pre_init__()
 
-        if command not in ('code', 'run'):
+        if command not in ('code', 'run', 'expr'):
             self.source_errors.append('Unknown Codebraid command "{0}"'.format(command))
+        if command == 'expr' and not inline:
+            self.source_errors.append('Codebraid command "{0}" is only allowed inline'.format(command))
+
         self.command = command
 
         if isinstance(code, list):
@@ -179,7 +193,10 @@ class CodeChunk(object):
         self.inline = inline
 
         if inline:
-            final_options = self._default_inline_options.copy()
+            if command == 'expr':
+                final_options = self._default_expr_options.copy()
+            else:
+                final_options = self._default_inline_options.copy()
         else:
             final_options = self._default_options.copy()
         for k, v in options.items():
@@ -188,8 +205,8 @@ class CodeChunk(object):
 
         self.stdout_lines = None
         self.stderr_lines = None
-        if inline:
-            self.expression_lines = None
+        if command == 'expr':
+            self.expr_lines = None
         self.code_start_line_number = None
 
 
@@ -201,6 +218,7 @@ class CodeChunk(object):
 
     _default_options = _cb_default_options
     _default_inline_options = _cb_default_inline_options
+    _default_expr_options = _cb_default_expr_options
     _option_processors = _cb_option_processors
 
 
