@@ -139,6 +139,9 @@ class Session(object):
         h.update(lang_def_bytes)
         h.update(h.digest())
         for cc in self.code_chunks:
+            # Hash needs to depend on some code chunk details
+            h.update('{{command="{0}"}}'.format(cc.command).encode('utf8'))
+            h.update(h.digest())
             code_bytes = cc.code.encode('utf8')
             h.update(code_bytes)
             code_len += len(code_bytes)
