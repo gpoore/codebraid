@@ -19,6 +19,7 @@ import pkgutil
 import platform
 import subprocess
 import shlex
+import sys
 import tempfile
 import zipfile
 from .. import err
@@ -91,6 +92,7 @@ class Session(object):
         self.pre_run_error_lines = None
         self.run_error = False
         self.run_error_lines = None
+        self.decode_error = False
         self.post_run_error = False
         self.post_run_error_lines = None
 
@@ -111,12 +113,17 @@ class Session(object):
         self.code_chunks.append(code_chunk)
 
 
-    def finalize(self, lang_def, lang_def_bytes):
+    def finalize(self, *, lang_def, lang_def_bytes, hash_alg=None):
         '''
         Perform tasks that must wait until all code chunks are present,
         such as hashing.
         '''
-        h = hashlib.blake2b()
+        if hash_alg is None:
+            h = hashlib.blake2b()
+        elif hash_alg == 'sha512':
+            h = hashlib.sha512()
+        else:
+            raise ValueError
         code_len = 0
         # Hash needs to depend on the language definition
         h.update(lang_def_bytes)
@@ -129,10 +136,8 @@ class Session(object):
             # Updating hash based on its current value at the end of each
             # chunk accomplishes this.
             h.update(h.digest())
-        session_blake2b = h.hexdigest()
-        self.hash = '{0}_{1}'.format(session_blake2b, code_len)
-        self.hash_root = session_blake2b[:16]
-        self.tempsuffix = session_blake2b[:16]
+        self.hash = '{0}_{1}'.format(h.hexdigest(), code_len)
+        self.hash_root = self.tempsuffix = h.hexdigest()[:16]
         self.lang_def = lang_def
         self.lang_def_bytes = lang_def_bytes
 
@@ -149,6 +154,17 @@ class CodeProcessor(object):
         self.code_options = code_options
         self.cross_source_sessions = cross_source_sessions
         self.cache_path = cache_path
+
+        cache_config = {}
+        if cache_path is not None:
+            cache_config_path = cache_path / 'config.zip'
+            if cache_config_path.is_file():
+                with zipfile.ZipFile(str(cache_config_path)) as zf:
+                    with zf.open('config.json') as f:
+                        cache_config = json.load(f)
+        if not cache_config and sys.version_info < (3, 6):
+            cache_config['hash_algorithm'] = 'sha512'
+        self.cache_config = cache_config
 
         raw_language_index = pkgutil.get_data('codebraid', 'languages/index.bespon')
         if raw_language_index is None:
@@ -181,12 +197,15 @@ class CodeProcessor(object):
                 if cc.command == 'run':
                     sessions_run[(cc.options['lang'], cc.options['session'], cc.source_name)].append(cc)
         for session in sessions_run.values():
-            session.finalize(language_definitions[session.lang], language_definitions_bytes[session.lang])
+            session.finalize(lang_def=language_definitions[session.lang],
+                             lang_def_bytes=language_definitions_bytes[session.lang],
+                             hash_alg=cache_config.get('hash_algorithm', None))
         self._sessions_run = sessions_run
 
         # Cached stdout and stderr, plus any other relevant data.  Each
         # session has a key based on a BLAKE2b hash of its code plus the
-        # length in bytes of the code when encoded with UTF8.
+        # length in bytes of the code when encoded with UTF8.  (SHA-512 is
+        # used as a fallback for Python 3.5.)
         self._cache = {}
         # Used files from the cache.  By default, these will be in
         # `<doc directory>/_codebraid` and will have names of the form
@@ -294,13 +313,12 @@ class CodeProcessor(object):
                 cmd = cmd_template.format(**template_dict)
                 pre_proc = subprocess.run(shlex.split(cmd),
                                           stdout=subprocess.PIPE,
-                                          stderr=subprocess.STDOUT,
-                                          encoding=session.lang_def.pre_run_encoding,
-                                          errors='backslashreplace')
+                                          stderr=subprocess.STDOUT,)
                 if pre_proc.returncode != 0:
                     error = True
                     session.pre_run_error = True
-                    session.pre_run_error_lines = pre_proc.stdout.splitlines()
+                    encoding = session.lang_def.pre_run_encoding or locale.getpreferredencoding(False)
+                    session.pre_run_error_lines = pre_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
 
             if not error:
                 cmd_template = session.lang_def.run_command
@@ -308,14 +326,18 @@ class CodeProcessor(object):
 
                 proc = subprocess.run(shlex.split(cmd),
                                       stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE,
-                                      encoding=session.lang_def.run_encoding,
-                                      errors='backslashreplace')
+                                      stderr=subprocess.PIPE)
                 if proc.returncode != 0:
                     error = True
                     session.run_error = True
-                stdout_lines = proc.stdout.splitlines()
-                stderr_lines = proc.stderr.splitlines()
+                encoding = session.lang_def.run_encoding or locale.getpreferredencoding(False)
+                try:
+                    stdout_lines = proc.stdout.decode(encoding).splitlines()
+                    stderr_lines = proc.stderr.decode(encoding).splitlines()
+                except UnicodeDecodeError:
+                    session.decode_error = True
+                    stdout_lines = proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
+                    stderr_lines = proc.stderr.decode(encoding, errors='backslashreplace').splitlines()
 
             for cmd_template in session.lang_def.post_run_commands:
                 if error:
@@ -323,13 +345,12 @@ class CodeProcessor(object):
                 cmd = cmd_template.format(**template_dict)
                 post_proc = subprocess.run(shlex.split(cmd),
                                            stdout=subprocess.PIPE,
-                                           stderr=subprocess.STDOUT,
-                                           encoding=session.lang_def.post_run_encoding,
-                                           errors='backslashreplace')
+                                           stderr=subprocess.STDOUT)
                 if post_proc.returncode != 0:
                     error = True
                     session.post_run_error = True
-                    session.post_run_error_lines = post_proc.stdout.splitlines()
+                    encoding = encoding=session.lang_def.post_run_encoding,
+                    session.post_run_error_lines = post_proc.stdout.decode(errors='backslashreplace').splitlines()
 
         if session.pre_run_error:
             chunk_stdout_list = [None]
@@ -383,3 +404,7 @@ class CodeProcessor(object):
                 with zipfile.ZipFile(str(cache_zip_path), 'w', compression=zipfile.ZIP_DEFLATED) as zf:
                     data = {k: v for k, v in self._cache.items() if k.startswith(hash_root)}
                     zf.writestr('cache.json', json.dumps(data))
+            if self.cache_config:
+                cache_config_path = self.cache_path / 'config.zip'
+                with zipfile.ZipFile(str(cache_config_path), 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+                    zf.writestr('cache.json', json.dumps(self.cache_config))

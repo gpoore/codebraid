@@ -221,7 +221,7 @@ class PandocCodeChunk(CodeChunk):
                     else:
                         nodes.append({'t': t_code, 'c': [['', ['expression'], []], ' ']})
                 elif format == 'raw':
-                    if self.expression is not None:
+                    if self.expression_lines is not None:
                         nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.expression_lines)]})
                 else:
                     raise ValueError
@@ -491,10 +491,9 @@ class PandocConverter(Converter):
 
         try:
             proc = subprocess.run(cmd_list,
-                                  input=input,
+                                  input=input.encode('utf8') if input is not None else input,
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT,
-                                  encoding='utf8',
                                   startupinfo=startupinfo, check=True)
         except subprocess.CalledProcessError as e:
             if isinstance(input_paths, pathlib.Path) and input_name is None:
@@ -504,7 +503,7 @@ class PandocConverter(Converter):
             else:
                 msg = 'Failed to run Pandoc on source {0}:\n{1}'.format(input_name, e)
             raise PandocError(msg)
-        return proc.stdout
+        return proc.stdout.decode('utf8')
 
 
     _walk_node_list = staticmethod(walk_node_list)
