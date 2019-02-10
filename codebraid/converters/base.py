@@ -52,7 +52,7 @@ def _cb_option_hide(code_chunk, key, value, options):
         code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
         return
     if value == 'all':
-        options['show'] = None
+        options['show'] = collections.OrderedDict()
     else:
         hide_values = value.replace(' ', '').split('+')
         if not all(v in ('code', 'stdout', 'stderr', 'expression') for v in hide_values):
@@ -79,8 +79,8 @@ def _cb_option_show(code_chunk, key, value, options):
     if not isinstance(value, str):
         code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
         return
-    if value == 'none':
-        options[key] = None
+    if value == 'none' or value is None:
+        options[key] = collections.OrderedDict()
     elif value == 'notebook':
         if code_chunk.inline:
             options[key] = _cb_default_show_inline_notebook.copy()
@@ -162,20 +162,17 @@ class CodeChunk(object):
             self.source_errors.append('Unknown Codebraid command "{0}"'.format(command))
         self.command = command
 
-        # When code is provided as a string, counting `\n` could be an
-        # alternative to `.splitlines()`, but could require normalizing
-        # newlines and thus might not be simpler or more efficient
         if isinstance(code, list):
             code_lines = code
         else:
             code_lines = code.splitlines()
         if len(code_lines) > 1 and inline:
             self.source_errors.append('Inline code cannot be longer that 1 line')
-        if not inline:
-            # Inline code doesn't end in a newline, so it won't contribute to
-            # the line count of executed code
-            code_lines[-1] += '\n'
-        self.code = '\n'.join(code_lines)
+        self.code_lines = code_lines
+        if inline:
+            self.code = code_lines[0]
+        else:
+            self.code = '\n'.join(code_lines)
 
         self.source_name = source_name
         self.source_start_line_number = source_start_line_number
@@ -189,10 +186,10 @@ class CodeChunk(object):
             self._option_processors[k](self, k, v, final_options)
         self.options = final_options
 
-        self.stdout = None
-        self.stderr = None
+        self.stdout_lines = None
+        self.stderr_lines = None
         if inline:
-            self.expression = None
+            self.expression_lines = None
         self.code_start_line_number = None
 
 
@@ -361,7 +358,11 @@ class Converter(object):
         raise NotImplementedError
 
     def _process_code_chunks(self):
-        codeprocessors.CodeProcessor(converter=self).process()
+        cp = codeprocessors.CodeProcessor(code_chunks=self.code_chunks,
+                                          code_options=self.code_options,
+                                          cross_source_sessions=self.cross_source_sessions,
+                                          cache_path=self.cache_path)
+        cp.process()
 
     def _postprocess_code_chunks(self):
         raise NotImplementedError

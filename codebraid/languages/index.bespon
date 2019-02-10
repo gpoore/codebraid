@@ -21,12 +21,24 @@
 #     optional string or list of strings
 #     commands run before code
 #
+# pre_run_encoding =
+#     optional encoding for stdout and stderr of pre_run_command
+#     defaults to best guess, with \xNN escapes of invalid bytes
+#
 # run_command =
 #     optional string, default '{executable} {source}'
+#
+# run_encoding =
+#     optional encoding for stdout and stderr of run_command
+#     defaults to best guess, with \xNN escapes of invalid bytes
 #
 # post_run_commands =
 #     optional string or list of strings
 #     commands run after code
+#
+# post_run_encoding =
+#     optional encoding for stdout and stderr of post_run_command
+#     defaults to best guess, with \xNN escapes of invalid bytes
 #
 # source_start =
 #     optional string

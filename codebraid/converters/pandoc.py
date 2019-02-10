@@ -162,7 +162,6 @@ class PandocCodeChunk(CodeChunk):
         if node_id:
             options['label'] = node_id
         inline = node['t'] == 'Code'
-        codebraid_command = None
         for n, c in enumerate(node_classes):
             self._class_processors[c](self, n, c, options)
         for k, v in node_kvpairs:
@@ -171,6 +170,7 @@ class PandocCodeChunk(CodeChunk):
         pandoc_id = options.get('label', '')
         pandoc_classes = []
         pandoc_kvpairs = []
+        codebraid_command = options.pop('codebraid_command')
         if 'lang' in options:
             pandoc_classes.insert(0, options['lang'])
         if options.pop('lineAnchors', False):
@@ -184,6 +184,7 @@ class PandocCodeChunk(CodeChunk):
         self.pandoc_id = pandoc_id
         self.pandoc_classes = pandoc_classes
         self.pandoc_kvpairs = pandoc_kvpairs
+        self._output_nodes = None
         super().__init__(codebraid_command, code, options, source_name, source_start_line_number=source_start_line_number, inline=inline)
 
 
@@ -191,6 +192,8 @@ class PandocCodeChunk(CodeChunk):
     _kv_processors = _pandoc_kv_processors
 
     def output_nodes(self):
+        if self._output_nodes is not None:
+            return self._output_nodes
         if not self.inline and self.options['line_numbers']:
             first_number = self.options['first_number']
             if first_number == 'next':
@@ -203,61 +206,78 @@ class PandocCodeChunk(CodeChunk):
         nodes = []
         for output, format in self.options['show'].items():
             if output == 'code':
-                code = self.code
-                if not self.inline:
-                    code = code[:-1]
+                if self.inline:
+                    code = self.code_lines[0]
+                else:
+                    code = '\n'.join(self.code_lines)
                 nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], code]})
             elif output == 'expression':
                 if format == 'verbatim':
-                    if self.expression is not None:
-                        nodes.append({'t': t_code, 'c': [['', ['expression'], []], self.expression]})
+                    if self.expression_lines is not None:
+                        nodes.append({'t': t_code, 'c': [['', ['expression'], []], ' '.join(self.expression_lines)]})
                 elif format == 'verbatim_or_empty':
-                    nodes.append({'t': t_code, 'c': [['', [], []], self.expression or '']})
+                    if self.expression_lines is not None:
+                        nodes.append({'t': t_code, 'c': [['', ['expression'], []], ' '.join(self.expression_lines)]})
+                    else:
+                        nodes.append({'t': t_code, 'c': [['', ['expression'], []], ' ']})
                 elif format == 'raw':
                     if self.expression is not None:
-                        nodes.append({'t': t_raw, 'c': ['markdown', self.expression]})
+                        nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.expression_lines)]})
                 else:
                     raise ValueError
             elif output == 'stdout':
                 if format == 'verbatim':
-                    if self.stdout is not None:
+                    if self.stdout_lines is not None:
                         if self.inline:
-                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], self.stdout]})
+                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], ' '.join(self.stdout_lines)]})
                         else:
-                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], self.stdout[:-1]]})
+                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], '\n'.join(self.stdout_lines)]})
                 elif format == 'verbatim_or_empty':
-                    if self.inline:
-                        nodes.append({'t': t_code, 'c': [['', ['stdout'], []], self.stdout or '']})
-                    else:
-                        nodes.append({'t': t_code, 'c': [['', ['stdout'], []], self.stdout[:-1] or '']})
-                elif format == 'raw':
-                    if self.stdout is not None:
+                    if self.stderr_lines is not None:
                         if self.inline:
-                            nodes.append({'t': t_raw, 'c': ['markdown', self.stdout]})
+                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], ' '.join(self.stdout_lines)]})
                         else:
-                            nodes.append({'t': t_raw, 'c': ['markdown', self.stdout[:-1]]})
+                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], '\n'.join(self.stdout_lines)]})
+                    else:
+                        if self.inline:
+                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], ' ']})
+                        else:
+                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], '\n']})
+                elif format == 'raw':
+                    if self.stdout_lines is not None:
+                        if self.inline:
+                            nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.stdout_lines)]})
+                        else:
+                            nodes.append({'t': t_raw, 'c': ['markdown', '\n'.join(self.stdout_lines)]})
                 else:
                     raise ValueError
             elif output == 'stderr':
                 if format == 'verbatim':
-                    if self.stderr is not None:
+                    if self.stderr_lines is not None:
                         if self.inline:
-                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], self.stderr]})
+                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], ' '.join(self.stderr_lines)]})
                         else:
-                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], self.stderr[:-1]]})
+                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], '\n'.join(self.stderr_lines)]})
                 elif format == 'verbatim_or_empty':
-                    if self.inline:
-                        nodes.append({'t': t_code, 'c': [['', ['stderr'], []], self.stderr or '']})
-                    else:
-                        nodes.append({'t': t_code, 'c': [['', ['stderr'], []], self.stderr[:-1] or '']})
-                elif format == 'raw':
-                    if self.stderr is not None:
+                    if self.stderr_lines is not None:
                         if self.inline:
-                            nodes.append({'t': t_raw, 'c': ['markdown', self.stderr]})
+                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], ' '.join(self.stderr_lines)]})
                         else:
-                            nodes.append({'t': t_raw, 'c': ['markdown', self.stderr[:-1]]})
+                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], '\n'.join(self.stderr_lines)]})
+                    else:
+                        if self.inline:
+                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], ' ']})
+                        else:
+                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], '\n']})
+                elif format == 'raw':
+                    if self.stderr_lines is not None:
+                        if self.inline:
+                            nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.stderr_lines)]})
+                        else:
+                            nodes.append({'t': t_raw, 'c': ['markdown', '\n'.join(self.stderr_lines)]})
                 else:
                     raise ValueError
+        self._output_nodes = nodes
         return nodes
 
 

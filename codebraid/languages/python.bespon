@@ -1,6 +1,8 @@
 |=== python
 extension = 'py'
 
+run_encoding = 'utf8'
+
 source_start =
     |```
     # -*- coding: utf-8 -*-
@@ -13,7 +15,7 @@ source_start =
 
 chunk_wrapper =
     |```
-    print('\n{stdoutdelim}')
+    print('\n{stdoutdelim}', flush=True)
     sys.stderr.write('\n{stderrdelim}\n')
     {code}
     |```/
@@ -23,7 +25,7 @@ inline_expression_formatter =
     _codebraid_temp_{tempsuffix} = str({code})
     print('\n{stdoutdelim}')
     sys.stderr.write('\n{stderrdelim}\n')
-    print(_codebraid_temp_{suffix})
+    print(_codebraid_temp_{tempsuffix})
     |```/
 
 error_patterns = 'Error:'
