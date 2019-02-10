@@ -387,23 +387,34 @@ class CodeProcessor(object):
                     if line.startswith(stdstream_delim_start) and line == stdstream_delim:
                         if chunk_start_index < 0:
                             # Handle possibility of errors or warnings from
-                            # initial template code.  At least for basic
-                            # language support, there typically won't be any
-                            # final template code, so that case isn't handled
-                            # currently.
+                            # initial template code, or that occur before
+                            # execution begins (for example, syntax errors).
+                            # At least for basic language support, there
+                            # typically won't be any final template code, so
+                            # that case isn't handled currently.
                             if index > 1 and std_lines is stderr_lines:
                                 chunk_end_index = index - 1
                                 if std_lines[chunk_end_index]:
                                     chunk_end_index = index
-                                template_stderr_lines = std_lines[0:chunk_end_index]
-                                for ts_line in template_stderr_lines:
-                                    if any(x in ts_line for x in error_patterns):
-                                        session.run_errors = True
-                                        session.run_error_template_lines = template_stderr_lines
-                                        break
-                                    elif any(x in line for x in warning_patterns):
-                                        session.run_warnings = True
-                                        session.run_warning_template_lines = template_stderr_lines
+                                leading_err_lines = std_lines[0:chunk_end_index]
+                                if index == len(stderr_lines) - 1:
+                                    # If the only delim is the one that was
+                                    # inserted, the code never ran.  Normal
+                                    # stderr processing will handle this
+                                    # later.
+                                    session.run_errors = True
+                                    storage_list.append(leading_err_lines)
+                                else:
+                                    # Apparently the code ran, so this is
+                                    # probably a template issue.
+                                    for err_line in leading_err_lines:
+                                        if any(x in err_line for x in error_patterns):
+                                            session.run_errors = True
+                                            session.run_error_template_lines = leading_err_lines
+                                            break
+                                        elif any(x in line for x in warning_patterns):
+                                            session.run_warnings = True
+                                            session.run_warning_template_lines = leading_err_lines
                             chunk_start_index = index + 1
                         else:
                             chunk_end_index = index - 1
