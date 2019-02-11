@@ -10,8 +10,10 @@
 
 import os
 import collections
+import json
 import pathlib
 import typing; from typing import List, Optional, Sequence, Union
+import zipfile
 from .. import err
 from .. import codeprocessors
 
@@ -264,7 +266,8 @@ class Converter(object):
                  cross_source_sessions: bool=True,
                  expanduser: bool=False,
                  expandvars: bool=False,
-                 from_format: Optional[str]=None):
+                 from_format: Optional[str]=None,
+                 synctex: bool=False):
         if not all(isinstance(x, bool) for x in (cross_source_sessions, expanduser, expandvars)):
             raise TypeError
         self.cross_source_sessions = cross_source_sessions
@@ -353,7 +356,17 @@ class Converter(object):
                 cache_path = pathlib.Path(os.path.expandvars(str(cache_path.as_posix)))
             if expanduser:
                 cache_path = cache_path.expanduser()
+            if not cache_path.is_dir():
+                cache_path.mkdir(parents=True)
         self.cache_path = cache_path
+        self._io_map = False
+        if not isinstance(synctex, bool):
+            raise TypeError
+        if synctex and cache_path is None:
+            raise ValueError
+        self.synctex = synctex
+        if synctex:
+            self._io_map = True
 
         self.code_chunks = []
         self.code_options = {}
@@ -387,3 +400,9 @@ class Converter(object):
 
     def convert(self, *, to_format):
         raise NotImplementedError
+
+
+    def _save_synctex_data(self, data):
+        zip_path = self.cache_path / 'synctex_data.zip'
+        with zipfile.ZipFile(str(zip_path), 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr('synctex_data.json', json.dumps(data))

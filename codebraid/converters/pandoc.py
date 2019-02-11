@@ -358,7 +358,6 @@ class PandocConverter(Converter):
                  pandoc_file_scope: Optional[bool]=False,
                  from_format_pandoc_extensions: Optional[str]=None,
                  scroll_sync: bool=False,
-                 synctex: bool=False,
                  **kwargs):
         super().__init__(**kwargs)
 
@@ -405,20 +404,17 @@ class PandocConverter(Converter):
             raise TypeError
         self.from_format_pandoc_extensions = from_format_pandoc_extensions or ''
 
-        if not all(isinstance(x, bool) for x in (scroll_sync, synctex)):
+        if not isinstance(scroll_sync, bool):
             raise TypeError
         self.scroll_sync = scroll_sync
         if scroll_sync:
             raise NotImplementedError
-        self.synctex = synctex
-        if scroll_sync or synctex:
             self._io_map = True
-        else:
-            self._io_map = False
 
         self._asts = {}
         self._para_plain_source_name_node_line_number = []
-        self._processed_markup = {}
+        self._final_ast = None
+        self._final_ast_bytes = None
 
 
     from_formats = set(['json', 'markdown'])
@@ -447,7 +443,8 @@ class PandocConverter(Converter):
                     output_path: Optional[pathlib.Path]=None,
                     overwrite: bool=False,
                     standalone: bool=False,
-                    trace: bool=False):
+                    trace: bool=False,
+                    decode_output: bool=True):
         '''
         Convert between formats using Pandoc.
 
@@ -504,6 +501,8 @@ class PandocConverter(Converter):
             else:
                 msg = 'Failed to run Pandoc on source {0}:\n{1}'.format(input_name, e)
             raise PandocError(msg)
+        if not decode_output:
+            return proc.stdout
         return proc.stdout.decode('utf8')
 
 
@@ -546,6 +545,12 @@ class PandocConverter(Converter):
         return span_node
 
     @staticmethod
+    def _io_map_span_node_to_raw_tracker(span_node):
+        span_node['t'] = 'RawInline'
+        span_node['c'] = [None, '\x02CodebraidTrace({0})\x03'.format(span_node['c'][0][2][0][1])]
+
+
+    @staticmethod
     def _freeze_raw_node(node, source_name, line_number,
                          type_translation_dict={'RawBlock': 'CodeBlock', 'RawInline': 'Code'}):
         '''
@@ -559,24 +564,50 @@ class PandocConverter(Converter):
                         [
                             '',  # id
                             ['codebraid--temp'],  # classes
+                            [['format', raw_format]],  # kv pairs
+                        ],
+                        raw_content
+                    ]
+
+    @staticmethod
+    def _freeze_raw_node_io_map(node, source_name, line_number,
+                                type_translation_dict={'RawBlock': 'CodeBlock', 'RawInline': 'Code'}):
+        '''
+        Same as `_freeze_raw_node()`, but also store trace info.
+        '''
+        node['t'] = type_translation_dict[node['t']]
+        raw_format, raw_content = node['c']
+        node['c'] = [
+                        [
+                            '',  # id
+                            ['codebraid--temp'],  # classes
                             [['format', raw_format], ['trace', '{0}:{1}'.format(source_name, line_number)]]  # kv pairs
                         ],
                         raw_content
                     ]
 
     @staticmethod
-    def _thaw_raw_node(node, source_name, line_number,
+    def _thaw_raw_node(node,
                        type_translation_dict={'CodeBlock': 'RawBlock', 'Code': 'RawInline'}):
         '''
         Convert a special code node back into its original form as a raw node.
         '''
         node['t'] = type_translation_dict[node['t']]
+        node['c'] = [node['c'][0][2][0][1], node['c'][1]]
+
+    @staticmethod
+    def _thaw_raw_node_io_map(node,
+                              type_translation_dict={'CodeBlock': 'RawBlock', 'Code': 'RawInline'}):
+        '''
+        Same as `_thaw_raw_node()`, but also return trace info.
+        '''
+        node['t'] = type_translation_dict[node['t']]
         for k, v in node['c'][0][2]:
             if k == 'format':
-                raw_format = k
-                break
-        raw_content = node['c'][1]
-        node['c'] = [raw_format, raw_content]
+                raw_format = v
+            else:
+                trace = v
+        node['c'] = [raw_format, '\x02CodebraidTrace({0})\x03'.format(trace) + node['c'][1]]
 
 
     # Regex for footnotes.  While they shouldn't be indented, the Pandoc
@@ -729,7 +760,10 @@ class PandocConverter(Converter):
         source_name, line, line_number = next(source_name_line_and_number_iter)
         line_index = 0
         block_node_types = self._block_node_types
-        freeze_raw_node = self._freeze_raw_node
+        if self._io_map:
+            freeze_raw_node = self._freeze_raw_node_io_map
+        else:
+            freeze_raw_node = self._freeze_raw_node
         for node_tuple in self._walk_ast_less_note_contents(ast):
             node, parent_node_list, parent_node_list_index = node_tuple
             node_type = node['t']
@@ -854,26 +888,27 @@ class PandocConverter(Converter):
             index = code_chunk.parent_node_list_index
             code_chunk.parent_node_list[index:index+1] = code_chunk.output_nodes()
         if self._io_map:
+            # Insert tracking spans if needed
+            io_map_span_node = self._io_map_span_node
             for source_name, node, line_number in self._para_plain_source_name_node_line_number:
-                node['c'].insert(0, self._io_map_span_node(source_name, line_number))
-        for source_name, ast in self._asts.items():
-            self._processed_markup[source_name] = self._run_pandoc(input=json.dumps(ast),
-                                                                   from_format='json',
-                                                                   to_format='markdown',
-                                                                   to_format_pandoc_extensions=self.from_format_pandoc_extensions+'-latex_macros-smart',
-                                                                   standalone=True)
+                node['c'].insert(0, io_map_span_node(source_name, line_number))
 
-    def convert(self, *, to_format, to_format_pandoc_extensions=None, standalone=False):
-        if to_format not in self.to_formats:
-            raise ValueError
+        # Convert modified AST to markdown, then back, so that raw output
+        # can be reinterpreted as markdown
+        processed_markup = {}
+        for source_name, ast in self._asts.items():
+            processed_markup[source_name] = self._run_pandoc(input=json.dumps(ast),
+                                                             from_format='json',
+                                                             to_format='markdown',
+                                                             to_format_pandoc_extensions=self.from_format_pandoc_extensions+'-latex_macros-smart',
+                                                             standalone=True)
         if not self.pandoc_file_scope or len(self.source_strings) == 1:
-            for markup in self._processed_markup.values():
-                converted = self._run_pandoc(input=markup,
-                                             from_format='markdown',
-                                             from_format_pandoc_extensions=self.from_format_pandoc_extensions,
-                                             to_format=to_format,
-                                             to_format_pandoc_extensions=to_format_pandoc_extensions,
-                                             standalone=standalone)
+            for markup in processed_markup.values():
+                final_ast_bytes = self._run_pandoc(input=markup,
+                                                   from_format='markdown',
+                                                   from_format_pandoc_extensions=self.from_format_pandoc_extensions,
+                                                   to_format='json',
+                                                   decode_output=False)
         else:
             with tempfile.TemporaryDirectory() as tempdir:
                 tempdir_path = pathlib.Path(tempdir)
@@ -882,10 +917,93 @@ class PandocConverter(Converter):
                     tempfile_path = tempdir_path / 'codebraid_intermediate_{0}.txt'.format(n)
                     tempfile_path.write_text(markup, encoding='utf8')
                     tempfile_paths.append(tempfile_path)
-                converted = self._run_pandoc(input_paths=tempfile_paths,
-                                             from_format='markdown',
-                                             from_format_pandoc_extensions=self.from_format_pandoc_extensions,
-                                             to_format=to_format,
-                                             to_format_pandoc_extensions=to_format_pandoc_extensions,
-                                             standalone=standalone)
-        return converted
+                final_ast_bytes = self._run_pandoc(input_paths=tempfile_paths,
+                                                   from_format='markdown',
+                                                   from_format_pandoc_extensions=self.from_format_pandoc_extensions,
+                                                   to_format='json',
+                                                   decode_output=False)
+        final_ast = json.loads(final_ast_bytes)
+        self._final_ast_bytes = final_ast_bytes
+        self._final_ast = final_ast
+
+        if not self._io_map:
+            thaw_raw_node = self._thaw_raw_node
+            for node_tuple in self._walk_ast(final_ast):
+                node, parent_node_list, parent_node_list_index = node_tuple
+                node_type = node['t']
+                if node_type in ('Code', 'CodeBlock') and 'codebraid--temp' in node['c'][0][1]:
+                    thaw_raw_node(node)
+        else:
+            io_tracker_nodes = []
+            io_map_span_node_to_raw_tracker = self._io_map_span_node_to_raw_tracker
+            thaw_raw_node = self._thaw_raw_node_io_map
+            for node_tuple in self._walk_ast(final_ast):
+                node, parent_node_list, parent_node_list_index = node_tuple
+                node_type = node['t']
+                if node_type == 'Span' and 'codebraid--temp' in node['c'][0][1]:
+                    io_map_span_node_to_raw_tracker(node)
+                    io_tracker_nodes.append(node)
+                if node_type in ('Code', 'CodeBlock') and 'codebraid--temp' in node['c'][0][1]:
+                    thaw_raw_node(node)
+            self._io_tracker_nodes = io_tracker_nodes
+
+
+    def convert(self, *, to_format, to_format_pandoc_extensions=None, standalone=False,
+                output_path=None, overwrite=False):
+        if to_format not in self.to_formats:
+            raise ValueError
+        if to_format_pandoc_extensions is not None and not isinstance(to_format_pandoc_extensions, str):
+            raise TypeError
+        if not isinstance(standalone, bool):
+            raise TypeError
+        if output_path is not None:
+            if not isinstance(output_path, pathlib.Path):
+                if isinstance(output_path, str):
+                    output_path = pathlib.Path(output_path)
+                else:
+                    raise TypeError
+        if not isinstance(overwrite, bool):
+            raise TypeError
+        if output_path is not None and output_path.is_file() and not overwrite:
+            raise RuntimeError('Output path {0} exists, but overwrite=False'.format(output_path))
+
+        if not self._io_map:
+            converted = self._run_pandoc(input=json.dumps(self._final_ast),
+                                         from_format='json',
+                                         to_format=to_format,
+                                         to_format_pandoc_extensions=to_format_pandoc_extensions,
+                                         standalone=standalone,
+                                         output_path=output_path,
+                                         overwrite=overwrite)
+        else:
+            for node in self._io_tracker_nodes:
+                node['c'][0] = to_format
+            converted = self._run_pandoc(input=json.dumps(self._final_ast),
+                                         from_format='json',
+                                         to_format=to_format,
+                                         to_format_pandoc_extensions=to_format_pandoc_extensions,
+                                         standalone=standalone)
+            converted_lines = converted.splitlines()
+            converted_to_source_dict = {}
+            trace_re = re.compile(r'\x02CodebraidTrace\(.+?:\d+\)\x03')
+            for index, line in enumerate(converted_lines):
+                if '\x02' in line:
+                    #  Tracking format:  '\x02CodebraidTrace({0})\x03'
+                    line_split = line.split('\x02CodebraidTrace(', 1)
+                    if len(line_split) == 1:
+                        continue
+                    line_before, trace_and_line_after = line_split
+                    trace, line_after = trace_and_line_after.split(')\x03', 1)
+                    line = line_before + line_after
+                    converted_to_source_dict[str(index + 1)] = trace
+                    if '\x02' in line:
+                        line = trace_re.sub('', line)
+                    converted_lines[index] = line
+            converted_lines[-1] = converted_lines[-1] + '\n'
+            converted = '\n'.join(converted_lines)
+            if output_path is not None:
+                output_path.write_text(converted, encoding='utf8')
+            if self.synctex:
+                self._save_synctex_data(converted_to_source_dict)
+        if output_path is None:
+            return converted

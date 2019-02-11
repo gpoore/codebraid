@@ -190,10 +190,14 @@ class CodeProcessor(object):
             try:
                 lang_def_fname = language_index[lang]
             except KeyError:
-                raise err.CodebraidError('Language definition for "{0}" does not exist, or is not indexed'.format(lang))
+                for cc in self.code_chunks:
+                    if cc.options['lang'] == lang:
+                        cc.source_errors.append('Language definition for "{0}" does not exist, or is not indexed'.format(lang))
             raw_lang_def = pkgutil.get_data('codebraid', 'languages/{0}'.format(lang_def_fname))
             if raw_lang_def is None:
-                raise err.CodebraidError('Language definition for "{0}" does not exist'.format(lang))
+                for cc in self.code_chunks:
+                    if cc.options['lang'] == lang:
+                        cc.source_errors.append('Language definition for "{0}" does not existd'.format(lang))
             lang_def = bespon.loads(raw_lang_def)
             language_definitions[lang] = Language(lang, lang_def[lang])
             # The raw language definition will be hashed as part of creating
@@ -500,7 +504,7 @@ class CodeProcessor(object):
                                     if run_number < 0:
                                         user_number = 0
                                     else:
-                                        user_number = run_code_to_user_code_dict[run_num]
+                                        user_number = run_code_to_user_code_dict[run_number]
                                 line = line.replace(match.group(0), match.group(0).replace(str(run_number), str(user_number)))
                             cc_stderr_lines[index] = line
 
