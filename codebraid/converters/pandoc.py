@@ -67,6 +67,7 @@ def _pandoc_class_line_numbers(code_chunk, class_index, class_name, options):
 _pandoc_class_processors = collections.defaultdict(lambda: _pandoc_class_lang_or_unknown,
                                                    {'cb.run': _pandoc_class_codebraid_command,
                                                     'cb.expr': _pandoc_class_codebraid_command,
+                                                    'cb.nb': _pandoc_class_codebraid_command,
                                                     'lineAnchors': _pandoc_class_line_anchors,
                                                     'line-anchors': _pandoc_class_line_anchors,
                                                     'line_anchors': _pandoc_class_line_anchors,
@@ -161,6 +162,7 @@ class PandocCodeChunk(CodeChunk):
         code = node['c'][1]
         options = {}
 
+        # Preprocess options
         if node_id:
             options['label'] = node_id
         inline = node['t'] == 'Code'
@@ -168,16 +170,20 @@ class PandocCodeChunk(CodeChunk):
             self._class_processors[c](self, n, c, options)
         for k, v in node_kvpairs:
             self._kv_processors[k](self, k, v, options)
+        codebraid_command = options.pop('codebraid_command')
 
-        pandoc_id = options.get('label', '')
+        # Process options
+        super().__init__(codebraid_command, code, options, source_name, source_start_line_number=source_start_line_number, inline=inline)
+
+        # Work with processed options -- now use `self.options`
+        pandoc_id = self.options.get('label', '')
         pandoc_classes = []
         pandoc_kvpairs = []
-        codebraid_command = options.pop('codebraid_command')
-        if 'lang' in options:
+        if 'lang' in self.options:
             pandoc_classes.insert(0, options['lang'])
-        if options.pop('lineAnchors', False):
+        if self.options.pop('lineAnchors', False):
             pandoc_classes.append('lineAnchors')
-        if options.get('line_numbers', False):
+        if self.options.get('line_numbers', False):
             pandoc_classes.append('numberLines')
         # Can't handle `startFrom` yet here, because if it is `next`, then
         # the value depends on which other code chunks end up in the session.
@@ -187,7 +193,6 @@ class PandocCodeChunk(CodeChunk):
         self.pandoc_classes = pandoc_classes
         self.pandoc_kvpairs = pandoc_kvpairs
         self._output_nodes = None
-        super().__init__(codebraid_command, code, options, source_name, source_start_line_number=source_start_line_number, inline=inline)
 
 
     _class_processors = _pandoc_class_processors
@@ -748,12 +753,20 @@ class PandocConverter(Converter):
                     while invalid_line_number < trace_line_number:
                         invalid_line_numbers.add(invalid_line_number)
                         invalid_line_number += 1
-                # Link definitions must be at root level and produce Nulls
-                if not trace_node_type and not last_trace_in_chunk and not trace_in_chunk:
-                    invalid_line_number = last_trace_line_number
-                    while invalid_line_number < trace_line_number:
-                        invalid_line_numbers.add(invalid_line_number)
-                        invalid_line_number += 1
+                # Link definitions must be at root level and produce Nulls.
+                # Since they can contain much less text compared to footnotes,
+                # it is unlikely that they will significantly affect line
+                # numbers.  If more precision is needed later, something like
+                # approach below could be used.  However, it would need to be
+                # supplemented with a regex, like the footnote case, because
+                # the conditions below are also met by some raw nodes.
+                # ```
+                # if not trace_node_type and not last_trace_in_chunk and not trace_in_chunk:
+                #     invalid_line_number = last_trace_line_number
+                #     while invalid_line_number < trace_line_number:
+                #         invalid_line_numbers.add(invalid_line_number)
+                #         invalid_line_number += 1
+                # ```
         except Exception as e:
             raise PandocError('Incompatible Pandoc version or trace; cannot parse trace format:\n{0}'.format(e))
 
@@ -848,25 +861,34 @@ class PandocConverter(Converter):
                     self.code_chunks.append(code_chunk)
                 para_plain_node = None
             elif node_type == 'RawBlock':
-                # Note that HTML RawBlock can be inline, so use `.find()`
-                # rather than `in` to guarantee results.  The
-                # `len(node_contents_line) or 1` guarantees that multiple
-                # empty `node_contents_line` won't keep matching the same
-                # `line`.
+                # Since some RawBlocks can be inline in the sense that their
+                # content does not begin on a new line (especially HTML, LaTeX
+                # to a lesser extent), use `.find()` rather than `in` to
+                # guarantee results.  The `len(node_contents_line) or 1`
+                # guarantees that multiple empty `node_contents_line` won't
+                # keep matching the same `line`.
                 node_format, node_contents = node['c']
-                node_contents_lines = node_contents.splitlines()
-                for node_contents_line in node_contents_lines:
-                    line_index = line.find(node_contents_line)
-                    if line_index >= 0:
-                        line_index += len(node_contents_line) or 1
-                    else:
-                        source_name, line, line_number = next(source_name_line_and_number_iter)
+                if node_format != 'html':
+                    # While this almost always works for HTML, it does fail in
+                    # at least some cases because the node contents do not
+                    # necessarily correspond to the verbatim content of the
+                    # document.  For example, try the invalid HTML
+                    # `<hr/></hr/>`; the first tag becomes `<hr />` with
+                    # an inserted space.
+                    # https://github.com/jgm/pandoc/issues/5305
+                    node_contents_lines = node_contents.splitlines()
+                    for node_contents_line in node_contents_lines:
                         line_index = line.find(node_contents_line)
-                        if line_index < 0:
-                            while line_index < 0:
-                                source_name, line, line_number = next(source_name_line_and_number_iter)
-                                line_index = line.find(node_contents_line)
-                        line_index += len(node_contents_line) or 1
+                        if line_index >= 0:
+                            line_index += len(node_contents_line) or 1
+                        else:
+                            source_name, line, line_number = next(source_name_line_and_number_iter)
+                            line_index = line.find(node_contents_line)
+                            if line_index < 0:
+                                while line_index < 0:
+                                    source_name, line, line_number = next(source_name_line_and_number_iter)
+                                    line_index = line.find(node_contents_line)
+                            line_index += len(node_contents_line) or 1
                 if node_format == 'html' and node_contents == '<!--codebraid.eof-->':
                     node['t'] = 'Null'
                     del node['c']

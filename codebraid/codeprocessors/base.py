@@ -190,7 +190,7 @@ class CodeProcessor(object):
         language_index = bespon.loads(raw_language_index)
         language_definitions = {}
         language_definitions_bytes = {}
-        required_langs = set(cc.options['lang'] for cc in self.code_chunks if cc.command in ('run', 'expr'))
+        required_langs = set(cc.options['lang'] for cc in self.code_chunks if cc.command in ('run', 'expr', 'nb'))
         for lang in required_langs:
             try:
                 lang_def_fname = language_index[lang]
@@ -212,11 +212,11 @@ class CodeProcessor(object):
         sessions_run = util.KeyDefaultDict(Session)
         if self.cross_source_sessions:
             for cc in self.code_chunks:
-                if cc.command in ('run', 'expr'):
+                if cc.command in ('run', 'expr', 'nb'):
                     sessions_run[(cc.options['lang'], cc.options['session'])].append(cc)
         else:
             for cc in self.code_chunks:
-                if cc.command in ('run', 'expr'):
+                if cc.command in ('run', 'expr', 'nb'):
                     sessions_run[(cc.options['lang'], cc.options['session'], cc.source_name)].append(cc)
         for session in sessions_run.values():
             session.finalize(lang_def=language_definitions[session.lang],
@@ -302,7 +302,7 @@ class CodeProcessor(object):
         for cc in session.code_chunks:
             run_code_line_number += chunk_wrapper_n_lines_before
             if cc.inline:
-                if cc.command == 'expr':
+                if cc.command == 'expr' or cc.command == 'nb':
                     code = session.lang_def.inline_expression_formatter.format(stdoutdelim=expression_delim_escaped,
                                                                                stderrdelim=expression_delim_escaped,
                                                                                tempsuffix=session.tempsuffix,
@@ -462,7 +462,7 @@ class CodeProcessor(object):
                 # Process inline expressions by separating stdout from
                 # expression value.
                 if cc_stdout_lines is not None:
-                    if cc.command == 'expr':
+                    if cc.command == 'expr' or (cc.inline and cc.command == 'nb'):
                         index = 0
                         for line in cc_stdout_lines:
                             if line.startswith(expression_delim_start) and line == expression_delim:
@@ -487,7 +487,7 @@ class CodeProcessor(object):
                     # stderr due to expression evaluation from stderr due to
                     # converting the expressing to a string and printing it.
                     # The two varieties may be handled separately in future.
-                    if cc.inline and cc.command == 'expr':
+                    if cc.inline and (cc.command == 'expr' or cc.command == 'nb'):
                         index = 0
                         for line in cc_stderr_lines:
                             if line.startswith(expression_delim_start) and line == expression_delim:

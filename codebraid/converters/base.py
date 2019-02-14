@@ -75,27 +75,12 @@ def _cb_option_label(code_chunk, key, value, options):
     else:
         code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
 
-_cb_default_show_notebook = collections.OrderedDict([('code', 'verbatim'),
-                                                     ('stdout', 'verbatim'),
-                                                     ('stderr', 'verbatim')])
-_cb_default_show_inline_notebook = collections.OrderedDict([('stdout', 'raw'),
-                                                            ('stderr', 'verbatim')])
-_cb_default_show_expr_notebook = collections.OrderedDict([('expr', 'raw'),
-                                                          ('stderr', 'verbatim')])
 def _cb_option_show(code_chunk, key, value, options):
     if not isinstance(value, str):
         code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
         return
     if value == 'none' or value is None:
         options[key] = collections.OrderedDict()
-    elif value == 'notebook':
-        if code_chunk.inline:
-            if code_chunk.command == 'expr':
-                options[key] = _cb_default_show_expr_notebook.copy()
-            else:
-                options[key] = _cb_default_show_inline_notebook.copy()
-        else:
-            options[key] = _cb_default_show_notebook.copy()
     else:
         value_processed = collections.OrderedDict()
         for output_and_format in value.replace(' ', '').split('+'):
@@ -120,7 +105,7 @@ def _cb_option_show(code_chunk, key, value, options):
                     code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
                     continue
             elif output == 'expr':
-                if not code_chunk.command == 'expr':
+                if not (code_chunk.command == 'expr' or (code_chunk.command == 'nb' and code_chunk.inline)):
                     code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk (not expr chunk)'.format(key, value))
                     continue
                 if format is None:
@@ -143,17 +128,27 @@ _cb_option_processors = collections.defaultdict(lambda: _cb_option_unknown,
                                                  'line_numbers': _cb_option_bool,
                                                  'session': _cb_option_str,
                                                  'show': _cb_option_show})
-_cb_default_options = {'first_number': 'next',
-                       'lang': None,
-                       'line_numbers': True,
-                       'session': None,
-                       'show': _cb_default_show_notebook}
+
+ODict = collections.OrderedDict
+_cb_default_show_options = collections.defaultdict(lambda: ODict,
+                                                   {('expr', True): ODict([('expr', 'raw'),
+                                                                           ('stderr', 'verbatim')]),
+                                                    ('nb', True):   ODict([('expr', 'raw'),
+                                                                           ('stderr', 'verbatim')]),
+                                                    ('nb', False):  ODict([('code', 'verbatim'),
+                                                                           ('stdout', 'verbatim'),
+                                                                           ('stderr', 'verbatim')]),
+                                                    ('run', True):  ODict([('stdout', 'raw'),
+                                                                           ('stderr', 'verbatim')]),
+                                                    ('run', False): ODict([('stdout', 'raw'),
+                                                                           ('stderr', 'verbatim')])})
+
+_cb_default_block_options = {'first_number': 'next',
+                             'lang': None,
+                             'line_numbers': True,
+                             'session': None}
 _cb_default_inline_options = {'lang': None,
-                              'session': None,
-                              'show': _cb_default_show_inline_notebook}
-_cb_default_expr_options = {'lang': None,
-                            'session': None,
-                            'show': _cb_default_show_expr_notebook}
+                              'session': None}
 
 
 
@@ -194,13 +189,8 @@ class CodeChunk(object):
         self.source_start_line_number = source_start_line_number
         self.inline = inline
 
-        if inline:
-            if command == 'expr':
-                final_options = self._default_expr_options.copy()
-            else:
-                final_options = self._default_inline_options.copy()
-        else:
-            final_options = self._default_options.copy()
+        final_options = self._default_options[inline].copy()
+        final_options['show'] = self._default_show[(command, inline)].copy()
         for k, v in options.items():
             self._option_processors[k](self, k, v, final_options)
         self.options = final_options
@@ -208,7 +198,7 @@ class CodeChunk(object):
         self.session_index = None
         self.stdout_lines = None
         self.stderr_lines = None
-        if command == 'expr':
+        if command == 'expr' or (inline and command == 'nb'):
             self.expr_lines = None
         self.code_start_line_number = None
 
@@ -219,9 +209,9 @@ class CodeChunk(object):
             self.source_warnings = []
 
 
-    _default_options = _cb_default_options
-    _default_inline_options = _cb_default_inline_options
-    _default_expr_options = _cb_default_expr_options
+    _default_options = {True: _cb_default_inline_options,
+                        False: _cb_default_block_options}
+    _default_show = _cb_default_show_options
     _option_processors = _cb_option_processors
 
 
