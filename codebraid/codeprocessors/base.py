@@ -116,12 +116,6 @@ class Session(object):
         if not code_chunk.inline:
             code_chunk.code_start_line_number = self._code_start_line_number
             self._code_start_line_number += len(code_chunk.code_lines)
-        if code_chunk.source_errors:
-            self.source_error_chunks.append(code_chunk)
-            self.errors = True
-        if code_chunk.source_warnings:
-            self.source_warning_chunks.append(code_chunk)
-            self.warnings = True
         self.code_chunks.append(code_chunk)
 
 
@@ -130,6 +124,14 @@ class Session(object):
         Perform tasks that must wait until all code chunks are present,
         such as hashing.
         '''
+        for cc in self.code_chunks:
+            if cc.source_errors:
+                self.source_error_chunks.append(cc)
+                self.errors = True
+            if cc.source_warnings:
+                self.source_warning_chunks.append(cc)
+                self.warnings = True
+
         if hash_alg is None:
             h = hashlib.blake2b()
         elif hash_alg == 'sha512':
@@ -188,8 +190,8 @@ class CodeProcessor(object):
         if raw_language_index is None:
             raise err.CodebraidError('Failed to find "codebraid/languages/index.bespon"')
         language_index = bespon.loads(raw_language_index)
-        language_definitions = {}
-        language_definitions_bytes = {}
+        language_definitions = collections.defaultdict(lambda: None)
+        language_definitions_bytes = collections.defaultdict(lambda: b'')
         required_langs = set(cc.options['lang'] for cc in self.code_chunks if cc.command in ('run', 'expr', 'nb'))
         for lang in required_langs:
             try:
@@ -198,6 +200,7 @@ class CodeProcessor(object):
                 for cc in self.code_chunks:
                     if cc.options['lang'] == lang:
                         cc.source_errors.append('Language definition for "{0}" does not exist, or is not indexed'.format(lang))
+                continue
             raw_lang_def = pkgutil.get_data('codebraid', 'languages/{0}'.format(lang_def_fname))
             if raw_lang_def is None:
                 for cc in self.code_chunks:

@@ -40,9 +40,15 @@ class PandocError(err.CodebraidError):
 # Code chunk classes
 def _pandoc_class_lang_or_unknown(code_chunk, class_index, class_name, options):
     if 'lang' in options:
-        code_chunk.source_errors.append('Unknown non-Codebraid class')
+        if class_name.startswith('cb.'):
+            code_chunk.source_errors.append('Unknown or unsupported Codebraid command "{0}"'.format(class_name))
+        else:
+            code_chunk.source_errors.append('Unknown non-Codebraid class')
     elif class_index > 0:
-        code_chunk.source_errors.append('The language/format "{0}" must be the first class for code chunk'.format(class_name))
+        if class_name.startswith('cb.'):
+            code_chunk.source_errors.append('Unknown or unsupported Codebraid command "{0}"'.format(class_name))
+        else:
+            code_chunk.source_errors.append('The language/format "{0}" must be the first class for code chunk'.format(class_name))
     else:
         options['lang'] = class_name
 
@@ -170,7 +176,7 @@ class PandocCodeChunk(CodeChunk):
             self._class_processors[c](self, n, c, options)
         for k, v in node_kvpairs:
             self._kv_processors[k](self, k, v, options)
-        codebraid_command = options.pop('codebraid_command')
+        codebraid_command = options.pop('codebraid_command', None)
 
         # Process options
         super().__init__(codebraid_command, code, options, source_name, source_start_line_number=source_start_line_number, inline=inline)
@@ -199,6 +205,15 @@ class PandocCodeChunk(CodeChunk):
     _kv_processors = _pandoc_kv_processors
 
     def output_nodes(self):
+        if self.source_errors:
+            message = 'SOURCE ERROR ({0} near line {1}):'.format(self.source_name, self.source_start_line_number)
+            if self.inline:
+                return [{'t': 'Code',
+                         'c': [['', ['source_error', 'sourceError'], []],
+                              message + ' ' + ' '.join(self.source_errors)]}]
+            return [{'t': 'CodeBlock',
+                     'c': [['', ['source_error', 'sourceError'], []],
+                     message + '\n' + '\n'.join(self.source_errors)]}]
         if self._output_nodes is not None:
             return self._output_nodes
         if not self.inline and self.options['line_numbers']:

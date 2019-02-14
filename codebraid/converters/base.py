@@ -130,7 +130,7 @@ _cb_option_processors = collections.defaultdict(lambda: _cb_option_unknown,
                                                  'show': _cb_option_show})
 
 ODict = collections.OrderedDict
-_cb_default_show_options = collections.defaultdict(lambda: ODict,
+_cb_default_show_options = collections.defaultdict(lambda: ODict(),
                                                    {('expr', True): ODict([('expr', 'raw'),
                                                                            ('stderr', 'verbatim')]),
                                                     ('nb', True):   ODict([('expr', 'raw'),
@@ -167,7 +167,10 @@ class CodeChunk(object):
         self.__pre_init__()
 
         if command not in ('code', 'expr', 'nb', 'run'):
-            self.source_errors.append('Unknown Codebraid command "{0}"'.format(command))
+            if command is None:
+                self.source_errors.append('Missing valid Codebraid command')
+            else:
+                self.source_errors.append('Unknown Codebraid command "{0}"'.format(command))
         if command == 'expr' and not inline:
             self.source_errors.append('Codebraid command "{0}" is only allowed inline'.format(command))
 
