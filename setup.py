@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2018, Geoffrey M. Poore
+# Copyright (c) 2018-2019, Geoffrey M. Poore
 # All rights reserved.
 #
 # Licensed under the BSD 3-Clause License:
@@ -9,24 +9,13 @@
 
 
 import sys
-if sys.version_info < (3, 6):
-    sys.exit('Codebraid requires Python 3.6+')
+if sys.version_info < (3, 5):
+    sys.exit('Codebraid requires Python 3.5+')
 import os
 import pathlib
+from setuptools import setup
 
 
-try:
-    from setuptools import setup
-    setup_package_dependent_keywords = dict(
-        entry_points = {
-            #'console_scripts': ['codebraid = codebraid.cmdline:main'],
-        },
-    )
-except ImportError:
-    from distutils.core import setup
-    setup_package_dependent_keywords = dict(
-        #scripts = ['bin/codebraid'],
-    )
 
 
 # Extract the version from version.py, using functions in fmtversion.py
@@ -42,22 +31,31 @@ long_description = readme_path.read_text(encoding='utf8')
 setup(name='codebraid',
       version=version,
       py_modules=[],
-      packages=['codebraid'],
-      description='Execute code embedded in markdown and LaTeX documents',
+      packages=[
+          'codebraid',
+          'codebraid.converters',
+          'codebraid.codeprocessors'
+      ],
+      package_data = {
+          'codebraid': ['languages/*.bespon']
+      },
+      description='Execute code embedded in a markdown document and access the output in the document',
       long_description=long_description,
       long_description_content_type='text/markdown',
       author='Geoffrey M. Poore',
       author_email='gpoore@gmail.com',
       url='http://github.com/gpoore/codebraid',
       license='BSD',
-      keywords=['dynamic documents', 'reproducible research',
-                'markdown', 'pandoc', 'LaTeX', 'Jupyter'],
-      python_requires='~=3.6',
+      keywords=['dynamic documents', 'reproducible research', 'notebook',
+                'markdown', 'pandoc', 'LaTeX'],
+      python_requires='>=3.5',
+      install_requires=[
+          'bespon>=0.3',
+      ],
       # https://pypi.python.org/pypi?:action=list_classifiers
       classifiers=[
           'Development Status :: 4 - Beta',
           'Environment :: Console',
-          'Framework :: Jupyter',
           'Intended Audience :: Developers',
           'Intended Audience :: Education',
           'Intended Audience :: Science/Research',
@@ -65,7 +63,9 @@ setup(name='codebraid',
           'Operating System :: OS Independent',
           'Programming Language :: Python',
           'Programming Language :: Python :: 3 :: Only',
+          'Programming Language :: Python :: 3.5',
           'Programming Language :: Python :: 3.6',
+          'Programming Language :: Python :: 3.7',
           'Topic :: Documentation',
           'Topic :: Education',
           'Topic :: Software Development',
@@ -74,5 +74,7 @@ setup(name='codebraid',
           'Topic :: Text Processing',
           'Topic :: Text Processing :: Markup',
       ],
-      **setup_package_dependent_keywords
+      entry_points = {
+          'console_scripts': ['codebraid = codebraid.cmdline:main'],
+      },
 )
