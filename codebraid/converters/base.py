@@ -171,7 +171,7 @@ class CodeChunk(object):
                  inline: Optional[bool]=None):
         self.__pre_init__()
 
-        if command not in ('code', 'run', 'expr'):
+        if command not in ('code', 'expr', 'nb', 'run'):
             self.source_errors.append('Unknown Codebraid command "{0}"'.format(command))
         if command == 'expr' and not inline:
             self.source_errors.append('Codebraid command "{0}" is only allowed inline'.format(command))
@@ -205,6 +205,7 @@ class CodeChunk(object):
             self._option_processors[k](self, k, v, final_options)
         self.options = final_options
 
+        self.session_index = None
         self.stdout_lines = None
         self.stderr_lines = None
         if command == 'expr':
@@ -346,7 +347,7 @@ class Converter(object):
             raise TypeError('Multiple sources are not supported for format {0}'.format(from_format))
         if cache_path is None:
             if paths is not None:
-                cache_path = self.expanded_source_paths[0].parent() / '_codebraid'
+                cache_path = self.expanded_source_paths[0].parent / '_codebraid'
         elif isinstance(cache_path, str):
             cache_path = pathlib.Path(cache_path)
         elif not isinstance(cache_path, pathlib.Path):
@@ -403,6 +404,6 @@ class Converter(object):
 
 
     def _save_synctex_data(self, data):
-        zip_path = self.cache_path / 'synctex_data.zip'
+        zip_path = self.cache_path / 'synctex.zip'
         with zipfile.ZipFile(str(zip_path), 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr('synctex_data.json', json.dumps(data))
+            zf.writestr('synctex.json', json.dumps(data))

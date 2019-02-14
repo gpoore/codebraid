@@ -15,8 +15,9 @@ import pathlib
 import platform
 import re
 import subprocess
+import sys
 import tempfile
-from typing import Optional, Sequence, Union
+from typing import Dict, Optional, Sequence, Union
 import warnings
 from .base import Converter, CodeChunk
 from .. import err
@@ -356,10 +357,13 @@ class PandocConverter(Converter):
     def __init__(self, *,
                  pandoc_path: Optional[Union[str, pathlib.Path]]=None,
                  pandoc_file_scope: Optional[bool]=False,
-                 from_format_pandoc_extensions: Optional[str]=None,
+                 from_format: Optional[str]=None,
                  scroll_sync: bool=False,
                  **kwargs):
-        super().__init__(**kwargs)
+        if from_format is not None and not isinstance(from_format, str):
+            raise TypeError
+        from_format, from_format_pandoc_extensions = self._split_format_extensions(from_format)
+        super().__init__(from_format=from_format, **kwargs)
 
         if pandoc_path is None:
             pandoc_path = pathlib.Path('pandoc')
@@ -399,9 +403,6 @@ class PandocConverter(Converter):
                 self.source_strings[n] = source_string
             self.concat_source_string = ''.join(self.source_strings)
 
-        if (from_format_pandoc_extensions is not None and
-                not isinstance(from_format_pandoc_extensions, str)):
-            raise TypeError
         self.from_format_pandoc_extensions = from_format_pandoc_extensions or ''
 
         if not isinstance(scroll_sync, bool):
@@ -417,9 +418,22 @@ class PandocConverter(Converter):
         self._final_ast_bytes = None
 
 
-    from_formats = set(['json', 'markdown'])
-    to_formats = set(['json', 'markdown', 'html', 'latex'])
+    from_formats = set(['markdown'])
+    to_formats = set(['markdown', 'html', 'latex'])
     multi_source_formats = set(['markdown'])
+
+
+    def _split_format_extensions(self, format_extensions):
+        '''
+        Split a Pandoc `--from` or `--to` string of the form
+        `format+extension1-extension2` into the format and extensions.
+        '''
+        if format_extensions is None:
+            return (None, None)
+        index = min([x for x in (format_extensions.find('+'), format_extensions.find('-')) if x >= 0], default=-1)
+        if index >= 0:
+            return (format_extensions[:index], format_extensions[index:])
+        return (format_extensions, None)
 
 
     # Node sets are based on pandocfilters
@@ -444,15 +458,16 @@ class PandocConverter(Converter):
                     overwrite: bool=False,
                     standalone: bool=False,
                     trace: bool=False,
-                    decode_output: bool=True):
+                    decode_output: bool=True,
+                    other_pandoc_args: Optional[Dict[str, str]]=None):
         '''
         Convert between formats using Pandoc.
 
         Communication with Pandoc is accomplished via pipes.
         '''
-        if from_format not in self.from_formats:
+        if from_format not in self.from_formats and from_format != 'json':
             raise ValueError
-        if to_format not in self.to_formats:
+        if to_format not in self.to_formats and to_format != 'json':
             raise ValueError
         if from_format_pandoc_extensions is None:
             from_format_pandoc_extensions = ''
@@ -474,6 +489,8 @@ class PandocConverter(Converter):
             cmd_list.append('--file-scope')
         if output_path:
             cmd_list.extend(['--output', output_path.as_posix()])
+        if other_pandoc_args:
+            cmd_list.extend(other_pandoc_args)
         if input_paths is not None:
             if isinstance(input_paths, pathlib.Path):
                 cmd_list.append(input_paths.as_posix())
@@ -491,7 +508,7 @@ class PandocConverter(Converter):
             proc = subprocess.run(cmd_list,
                                   input=input.encode('utf8') if input is not None else input,
                                   stdout=subprocess.PIPE,
-                                  stderr=subprocess.STDOUT,
+                                  stderr=subprocess.PIPE,
                                   startupinfo=startupinfo, check=True)
         except subprocess.CalledProcessError as e:
             if isinstance(input_paths, pathlib.Path) and input_name is None:
@@ -502,8 +519,8 @@ class PandocConverter(Converter):
                 msg = 'Failed to run Pandoc on source {0}:\n{1}'.format(input_name, e)
             raise PandocError(msg)
         if not decode_output:
-            return proc.stdout
-        return proc.stdout.decode('utf8')
+            return (proc.stdout, proc.stderr)
+        return (proc.stdout.decode('utf8'), proc.stderr.decode('utf8'))
 
 
     _walk_node_list = staticmethod(walk_node_list)
@@ -668,16 +685,15 @@ class PandocConverter(Converter):
         from_format_pandoc_extensions = self.from_format_pandoc_extensions
         if self.from_format == 'markdown':
             from_format_pandoc_extensions += '-latex_macros-smart'
-        stdout_lines = self._run_pandoc(input=source_string,
-                                        input_name=single_source_name,
-                                        from_format=self.from_format,
-                                        from_format_pandoc_extensions=from_format_pandoc_extensions,
-                                        to_format='json',
-                                        file_scope=self.pandoc_file_scope,
-                                        trace=True).splitlines()
-        raw_ast = stdout_lines.pop()
+        pandoc_stdout, pandoc_stderr = self._run_pandoc(input=source_string,
+                                                        input_name=single_source_name,
+                                                        from_format=self.from_format,
+                                                        from_format_pandoc_extensions=from_format_pandoc_extensions,
+                                                        to_format='json',
+                                                        file_scope=self.pandoc_file_scope,
+                                                        trace=True)
         try:
-            ast = json.loads(raw_ast)
+            ast = json.loads(pandoc_stdout)
         except Exception as e:
             raise PandocError('Failed to load AST (incompatible Pandoc version?):\n{0}'.format(e))
         if not (isinstance(ast, dict) and
@@ -698,8 +714,9 @@ class PandocConverter(Converter):
         in_footnote = False
         trace = ('', 1, False)  # (<node type>, <line number>, <in chunk>)
         try:
-            for trace_line in stdout_lines:
+            for trace_line in pandoc_stderr.splitlines():
                 if trace_line.startswith('[WARNING]'):
+                    print(trace_line, file=sys.stderr)
                     continue
                 last_trace_node_type, last_trace_line_number, last_trace_in_chunk = trace
                 trace_line = trace_line[left_trace_type_slice_index:]
@@ -897,31 +914,38 @@ class PandocConverter(Converter):
         # can be reinterpreted as markdown
         processed_markup = {}
         for source_name, ast in self._asts.items():
-            processed_markup[source_name] = self._run_pandoc(input=json.dumps(ast),
-                                                             from_format='json',
-                                                             to_format='markdown',
-                                                             to_format_pandoc_extensions=self.from_format_pandoc_extensions+'-latex_macros-smart',
-                                                             standalone=True)
+            processed_markup[source_name], _ = self._run_pandoc(input=json.dumps(ast),
+                                                                from_format='json',
+                                                                to_format='markdown',
+                                                                to_format_pandoc_extensions=self.from_format_pandoc_extensions+'-latex_macros-smart',
+                                                                standalone=True)
+
         if not self.pandoc_file_scope or len(self.source_strings) == 1:
             for markup in processed_markup.values():
-                final_ast_bytes = self._run_pandoc(input=markup,
-                                                   from_format='markdown',
-                                                   from_format_pandoc_extensions=self.from_format_pandoc_extensions,
-                                                   to_format='json',
-                                                   decode_output=False)
+                final_ast_bytes, pandoc_stderr_bytes = self._run_pandoc(input=markup,
+                                                                        from_format='markdown',
+                                                                        from_format_pandoc_extensions=self.from_format_pandoc_extensions,
+                                                                        to_format='json',
+                                                                        decode_output=False)
+                if pandoc_stderr_bytes:
+                    for line in pandoc_stderr_bytes.decode('utf8').splitlines():
+                        print(line, file=sys.stderr)
         else:
             with tempfile.TemporaryDirectory() as tempdir:
                 tempdir_path = pathlib.Path(tempdir)
                 tempfile_paths = []
-                for n, markup in enumerate(self._processed_markup.values()):
+                for n, markup in enumerate(processed_markup.values()):
                     tempfile_path = tempdir_path / 'codebraid_intermediate_{0}.txt'.format(n)
                     tempfile_path.write_text(markup, encoding='utf8')
                     tempfile_paths.append(tempfile_path)
-                final_ast_bytes = self._run_pandoc(input_paths=tempfile_paths,
-                                                   from_format='markdown',
-                                                   from_format_pandoc_extensions=self.from_format_pandoc_extensions,
-                                                   to_format='json',
-                                                   decode_output=False)
+                final_ast_bytes, pandoc_stderr_bytes = self._run_pandoc(input_paths=tempfile_paths,
+                                                                        from_format='markdown',
+                                                                        from_format_pandoc_extensions=self.from_format_pandoc_extensions,
+                                                                        to_format='json',
+                                                                        decode_output=False)
+                if pandoc_stderr_bytes:
+                    for line in pandoc_stderr_bytes.decode('utf8').splitlines():
+                        print(line, file=sys.stderr)
         final_ast = json.loads(final_ast_bytes)
         self._final_ast_bytes = final_ast_bytes
         self._final_ast = final_ast
@@ -948,12 +972,13 @@ class PandocConverter(Converter):
             self._io_tracker_nodes = io_tracker_nodes
 
 
-    def convert(self, *, to_format, to_format_pandoc_extensions=None, standalone=False,
-                output_path=None, overwrite=False):
+    def convert(self, *, to_format, output_path=None, overwrite=False,
+                standalone=None, other_pandoc_args=None):
+        if not isinstance(to_format, str):
+            raise TypeError
+        to_format, to_format_pandoc_extensions = self._split_format_extensions(to_format)
         if to_format not in self.to_formats:
             raise ValueError
-        if to_format_pandoc_extensions is not None and not isinstance(to_format_pandoc_extensions, str):
-            raise TypeError
         if not isinstance(standalone, bool):
             raise TypeError
         if output_path is not None:
@@ -962,6 +987,7 @@ class PandocConverter(Converter):
                     output_path = pathlib.Path(output_path)
                 else:
                     raise TypeError
+
         if not isinstance(overwrite, bool):
             raise TypeError
         if output_path is not None and output_path.is_file() and not overwrite:
@@ -972,9 +998,10 @@ class PandocConverter(Converter):
                                          from_format='json',
                                          to_format=to_format,
                                          to_format_pandoc_extensions=to_format_pandoc_extensions,
-                                         standalone=standalone,
                                          output_path=output_path,
-                                         overwrite=overwrite)
+                                         overwrite=overwrite,
+                                         standalone=standalone,
+                                         other_pandoc_args=other_pandoc_args)
         else:
             for node in self._io_tracker_nodes:
                 node['c'][0] = to_format
@@ -982,7 +1009,10 @@ class PandocConverter(Converter):
                                          from_format='json',
                                          to_format=to_format,
                                          to_format_pandoc_extensions=to_format_pandoc_extensions,
-                                         standalone=standalone)
+                                         output_path=output_path,
+                                         overwrite=overwrite,
+                                         standalone=standalone,
+                                         other_pandoc_args=other_pandoc_args)
             converted_lines = converted.splitlines()
             converted_to_source_dict = {}
             trace_re = re.compile(r'\x02CodebraidTrace\(.+?:\d+\)\x03')
