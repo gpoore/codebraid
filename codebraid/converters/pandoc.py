@@ -209,10 +209,10 @@ class PandocCodeChunk(CodeChunk):
             message = 'SOURCE ERROR ({0} near line {1}):'.format(self.source_name, self.source_start_line_number)
             if self.inline:
                 return [{'t': 'Code',
-                         'c': [['', ['source_error', 'sourceError'], []],
+                         'c': [['', ['sourceError'], []],
                               message + ' ' + ' '.join(self.source_errors)]}]
             return [{'t': 'CodeBlock',
-                     'c': [['', ['source_error', 'sourceError'], []],
+                     'c': [['', ['sourceError'], []],
                      message + '\n' + '\n'.join(self.source_errors)]}]
         if self._output_nodes is not None:
             return self._output_nodes
@@ -500,7 +500,8 @@ class PandocConverter(Converter):
 
         cmd_list = [str(self.pandoc_path),
                     '--from', from_format + from_format_pandoc_extensions,
-                    '--to', to_format + to_format_pandoc_extensions]
+                    '--to', to_format + to_format_pandoc_extensions,
+                    '--eol', 'lf']
         if standalone:
             cmd_list.append('--standalone')
         if trace:
@@ -711,11 +712,13 @@ class PandocConverter(Converter):
                                                         from_format_pandoc_extensions=from_format_pandoc_extensions,
                                                         to_format='json',
                                                         file_scope=self.pandoc_file_scope,
-                                                        trace=True)
+                                                        trace=True,
+                                                        decode_output=False)
         try:
             ast = json.loads(pandoc_stdout)
         except Exception as e:
             raise PandocError('Failed to load AST (incompatible Pandoc version?):\n{0}'.format(e))
+        pandoc_stderr = pandoc_stderr.decode('utf8')
         if not (isinstance(ast, dict) and
                 'pandoc-api-version' in ast and 'blocks' in ast):
             raise PandocError('Incompatible Pandoc API version')
@@ -1031,25 +1034,21 @@ class PandocConverter(Converter):
             raise RuntimeError('Output path {0} exists, but overwrite=False'.format(output_path))
 
         if not self._io_map:
-            converted = self._run_pandoc(input=json.dumps(self._final_ast),
-                                         from_format='json',
-                                         to_format=to_format,
-                                         to_format_pandoc_extensions=to_format_pandoc_extensions,
-                                         output_path=output_path,
-                                         overwrite=overwrite,
-                                         standalone=standalone,
-                                         other_pandoc_args=other_pandoc_args)
+            converted, _ = self._run_pandoc(input=json.dumps(self._final_ast),
+                                            from_format='json',
+                                            to_format=to_format,
+                                            to_format_pandoc_extensions=to_format_pandoc_extensions,
+                                            standalone=standalone,
+                                            other_pandoc_args=other_pandoc_args)
         else:
             for node in self._io_tracker_nodes:
                 node['c'][0] = to_format
-            converted = self._run_pandoc(input=json.dumps(self._final_ast),
-                                         from_format='json',
-                                         to_format=to_format,
-                                         to_format_pandoc_extensions=to_format_pandoc_extensions,
-                                         output_path=output_path,
-                                         overwrite=overwrite,
-                                         standalone=standalone,
-                                         other_pandoc_args=other_pandoc_args)
+            converted, _ = self._run_pandoc(input=json.dumps(self._final_ast),
+                                            from_format='json',
+                                            to_format=to_format,
+                                            to_format_pandoc_extensions=to_format_pandoc_extensions,
+                                            standalone=standalone,
+                                            other_pandoc_args=other_pandoc_args)
             converted_lines = converted.splitlines()
             converted_to_source_dict = {}
             trace_re = re.compile(r'\x02CodebraidTrace\(.+?:\d+\)\x03')
@@ -1068,9 +1067,9 @@ class PandocConverter(Converter):
                     converted_lines[index] = line
             converted_lines[-1] = converted_lines[-1] + '\n'
             converted = '\n'.join(converted_lines)
-            if output_path is not None:
-                output_path.write_text(converted, encoding='utf8')
-            if self.synctex:
-                self._save_synctex_data(converted_to_source_dict)
-        if output_path is None:
-            return converted
+        if self.synctex:
+            self._save_synctex_data(converted_to_source_dict)
+        if output_path is not None:
+            output_path.write_text(converted, encoding='utf8')
+        else:
+            print(converted, end='')
