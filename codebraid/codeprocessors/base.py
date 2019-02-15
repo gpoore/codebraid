@@ -37,7 +37,19 @@ class Language(object):
     def __init__(self, name, definition):
         self.name = name
         self.language = definition.pop('language', name)
-        self.executable = definition.pop('executable', name)
+        executable = definition.pop('executable', None)
+        if executable is None:
+            if name != 'python':
+                executable = name
+            else:
+                # Windows can have python3, and Arch Linux uses python,
+                # so use python3 if it exists and otherwise python
+                try:
+                    subprocess.run(['python3', '--version'], check=True)
+                    executable = 'python3'
+                except FileNotFoundError:
+                    executable = 'python'
+        self.executable = executable
         self.extension = definition['extension']
         pre_run_commands = definition.pop('pre_run_commands', [])
         if not isinstance(pre_run_commands, list):
