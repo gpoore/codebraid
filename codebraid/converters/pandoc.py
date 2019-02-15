@@ -241,7 +241,7 @@ class PandocCodeChunk(CodeChunk):
                     if self.expr_lines is not None:
                         nodes.append({'t': t_code, 'c': [['', ['expr'], []], ' '.join(self.expr_lines)]})
                     else:
-                        nodes.append({'t': t_code, 'c': [['', ['expr'], []], ' ']})
+                        nodes.append({'t': t_code, 'c': [['', ['expr'], []], '\xa0']})
                 elif format == 'raw':
                     if self.expr_lines is not None:
                         nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.expr_lines)]})
@@ -262,9 +262,9 @@ class PandocCodeChunk(CodeChunk):
                             nodes.append({'t': t_code, 'c': [['', ['stdout'], []], '\n'.join(self.stdout_lines)]})
                     else:
                         if self.inline:
-                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], ' ']})
+                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], '\xa0']})
                         else:
-                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], '\n']})
+                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], '\xa0\n']})
                 elif format == 'raw':
                     if self.stdout_lines is not None:
                         if self.inline:
@@ -288,9 +288,9 @@ class PandocCodeChunk(CodeChunk):
                             nodes.append({'t': t_code, 'c': [['', ['stderr'], []], '\n'.join(self.stderr_lines)]})
                     else:
                         if self.inline:
-                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], ' ']})
+                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], '\xa0']})
                         else:
-                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], '\n']})
+                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], '\xa0\n']})
                 elif format == 'raw':
                     if self.stderr_lines is not None:
                         if self.inline:
@@ -383,8 +383,6 @@ class PandocConverter(Converter):
         if from_format is not None and not isinstance(from_format, str):
             raise TypeError
         from_format, from_format_pandoc_extensions = self._split_format_extensions(from_format)
-        super().__init__(from_format=from_format, **kwargs)
-
         if pandoc_path is None:
             pandoc_path = pathlib.Path('pandoc')
         else:
@@ -403,6 +401,10 @@ class PandocConverter(Converter):
         elif float(pandoc_version_match.group()) < 2.4:
             raise RuntimeError('Pandoc at "{0}" is version {1}, but >= 2.4 is required'.format(pandoc_path, float(pandoc_version_match.group())))
         self.pandoc_path = pandoc_path
+        proc = subprocess.run([str(pandoc_path), '--list-output-formats'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        self.to_formats = set([x for x in (line.strip() for line in proc.stdout.decode('utf8').splitlines()) if x])
+        super().__init__(from_format=from_format, **kwargs)
+
 
         if not isinstance(pandoc_file_scope, bool):
             raise TypeError
@@ -439,7 +441,7 @@ class PandocConverter(Converter):
 
 
     from_formats = set(['markdown'])
-    to_formats = set(['markdown', 'html', 'latex'])
+    to_formats = None
     multi_source_formats = set(['markdown'])
 
 
