@@ -11,12 +11,14 @@
 import argparse
 import sys
 from . import converters
+from .version import __version__ as version
 
 
 
 
 def main():
     parser = argparse.ArgumentParser(prog='codebraid')
+    parser.add_argument('--version', action='version', version='Codebraid {0}'.format(version))
     subparsers = parser.add_subparsers(dest='subparser_name')
 
     parser_pandoc = subparsers.add_parser('pandoc',
