@@ -60,7 +60,7 @@ def _cb_option_hide(code_chunk, key, value, options):
         if not all(v in ('code', 'stdout', 'stderr', 'expr') for v in hide_values):
             code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
             return
-        if 'expr' in hide_values and code_chunk.command != 'expr':
+        if 'expr' in hide_values and code_chunk.command != 'expr' and not (code_chunk.command == 'nb' and code_chunk.inline):
             code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
             return
         for v in hide_values:
@@ -256,6 +256,7 @@ class Converter(object):
     def __init__(self, *,
                  strings: Optional[Union[str, Sequence[str]]]=None,
                  paths: Optional[Union[str, Sequence[str], pathlib.Path, Sequence[pathlib.Path]]]=None,
+                 no_cache: Optional[bool]=False,
                  cache_path: Optional[Union[str, pathlib.Path]]=None,
                  cross_source_sessions: bool=True,
                  expanduser: bool=False,
@@ -338,6 +339,9 @@ class Converter(object):
             raise TypeError
         if len(self.source_strings) > 1 and from_format not in self.multi_source_formats:
             raise TypeError('Multiple sources are not supported for format {0}'.format(from_format))
+        if not isinstance(no_cache, bool):
+            raise TypeError
+        self.no_cache = no_cache
         if cache_path is None:
             if paths is not None:
                 cache_path = self.expanded_source_paths[0].parent / '_codebraid'
@@ -345,7 +349,9 @@ class Converter(object):
             cache_path = pathlib.Path(cache_path)
         elif not isinstance(cache_path, pathlib.Path):
             raise TypeError
-        if cache_path is not None:
+        if no_cache:
+            cache_path = None
+        elif cache_path is not None:
             if expandvars:
                 cache_path = pathlib.Path(os.path.expandvars(str(cache_path.as_posix)))
             if expanduser:
