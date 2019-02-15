@@ -1,0 +1,155 @@
+body {
+    display: block;
+    text-align: left;
+    max-width: 40rem;
+    margin: auto;
+}
+/* customize Pandoc line numbering, for less indentation before numbers */
+pre.numberSource a.sourceLine {
+    position: relative;
+    left: -3em;
+}
+pre.numberSource a.sourceLine::before{
+    content: attr(title);
+    position: relative;
+    left: -1em;
+    text-align: right;
+    vertical-align: baseline;
+    border: none;
+    pointer-events: all;
+    display: inline-block;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    padding: 0 4px;
+    width: 3em;
+    color: #aaaaaa;
+}
+pre.numberSource {
+    margin-left: 2em;
+    border-left: 1px solid #aaaaaa;
+    padding-left: 4px;
+}
+/* end custom line numbering */
+pre.example:before{
+    content: "Markdown";
+    display: block;
+    height: 2em;
+    font-size: 150%;
+}
+pre.example {
+    padding: 0.5em;
+    background-color: honeydew;
+    border-style: solid;
+    border-width: 1px;
+    border-color: limegreen;
+    border-radius: 0.2em;
+}
+div.output:before{
+    content: "Output";
+    font-family: monospace;
+    display: block;
+    font-size: 150%;
+}
+div.output {
+    color: black;
+    padding-top: 0.5em;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
+    background-color: whitesmoke;
+    border-style: solid;
+    border-width: 1px;
+    border-color: lightgray;
+    border-radius: 0.2em;
+}
+div.sourceCode {
+    padding: 0.5em;
+    background-color: aliceblue;
+    border-style: solid;
+    border-width: 1px;
+    border-color: lightskyblue;
+    border-radius: 0.2em;
+}
+div.sourceCode:before{
+    content: "code";
+    font-family: monospace;
+    display: block;
+    height: 2em;
+    font-weight: bold;
+    font-size: 120%;
+}
+pre.stdout:before{
+    content: "stdout";
+    display: block;
+    height: 2em;
+    font-weight: bold;
+    font-size: 120%;
+}
+pre.stdout {
+    color: black;
+    padding: 0.5em;
+    background-color: azure;
+    border-style: solid;
+    border-width: 1px;
+    border-color: turquoise;
+    border-radius: 0.2em;
+    padding-left: 0.5em;
+}
+code.stdout {
+    color: black;
+    background-color: azure;
+    border-style: solid;
+    border-width: 1px;
+    border-color: turquoise;
+}
+pre.stderr:before{
+    content: "stderr";
+    display: block;
+    height: 2em;
+    font-weight: bold;
+    font-size: 120%;
+}
+pre.stderr {
+    color: red;
+    padding: 0.5em;
+    background-color: lavenderblush;
+    border-style: solid;
+    border-width: 1px;
+    border-color: pink;
+    border-radius: 0.2em;
+    padding-left: 0.5em;
+}
+code.stderr {
+    color: red;
+    background-color: lavenderblush;
+    border-style: solid;
+    border-width: 1px;
+    border-color: pink;
+}
+pre.sourceError:before{
+    content: "Source error";
+    display: block;
+    height: 2em;
+    font-weight: bold;
+    font-size: 120%;
+}
+pre.sourceError {
+    color: red;
+    padding: 0.5em;
+    background-color: lavenderblush;
+    border-style: solid;
+    border-width: 1px;
+    border-color: pink;
+    border-radius: 0.2em;
+    padding-left: 0.5em;
+}
+code.sourceError {
+    color: red;
+    background-color: lavenderblush;
+    border-style: solid;
+    border-width: 1px;
+    border-color: pink;
+}
