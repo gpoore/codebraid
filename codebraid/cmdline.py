@@ -35,6 +35,8 @@ def main():
                                help='Create Pandoc standalone document')
     parser_pandoc.add_argument('--file-scope', action='store_true', dest='pandoc_file_scope',
                                help='Pandoc parses multiple files individually before merging their output, instead of merging before parsing')
+    parser_pandoc.add_argument('--no-cache', action='store_true',
+                               help='Do not cache code output (all code will be executed on each run)')
     parser_pandoc.add_argument('--cache-dir',
                                help='Location for caching code output (default is "_codebraid" in document directory)')
     parser_pandoc.add_argument('files', nargs='+', metavar='FILE',
@@ -44,7 +46,7 @@ def main():
             parser_pandoc.add_argument(opt, action='store_true', dest=opt,
                                        help='Pandoc option; see Pandoc documentation or pandoc --help')
         elif narg == 1:
-            parser_pandoc.add_argument(opt, dest=opt,
+            parser_pandoc.add_argument(opt, dest=opt, metavar='PANDOC',
                                        help='Pandoc option; see Pandoc documentation or pandoc --help')
         else:
             raise ValueError
@@ -66,7 +68,8 @@ def pandoc(args):
     converter = converters.PandocConverter(paths=args.files,
                                            from_format=args.from_format,
                                            pandoc_file_scope=args.pandoc_file_scope,
-                                           cache_path=args.cache_dir,)
+                                           no_cache=args.no_cache,
+                                           cache_path=args.cache_dir)
     converter.code_braid()
     converter.convert(to_format=args.to_format, standalone=args.standalone,
                       output_path=args.output, overwrite=args.overwrite,
@@ -87,9 +90,6 @@ PANDOC_OPTIONS  = {
     '--metadata': 1,
     '--metadata-file': 1,
     '--variable': 1,
-    '--print-default-template': 1,
-    '--print-default-data-file': 1,
-    '--print-highlight-style': 1,
     '--dpi': 1,
     '--eol': 1,
     '--wrap': 1,
@@ -151,9 +151,4 @@ PANDOC_OPTIONS  = {
     '--fail-if-warnings': 0,
     '--log': 1,
     '--bash-completion': 0,
-    '--list-input-formats': 0,
-    '--list-output-formats': 0,
-    '--list-extensions': 1,
-    '--list-highlight-languages': 0,
-    '--list-highlight-styles': 0,
 }
