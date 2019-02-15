@@ -11,6 +11,8 @@ several other languages is nearly ready for release.
 
 **Development:**  https://github.com/gpoore/codebraid
 
+[View example HTML output](http://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/python.html), or [download it](https://github.com/gpoore/codebraid/blob/master/examples/python.html)
+
 
 ## Simple example
 
