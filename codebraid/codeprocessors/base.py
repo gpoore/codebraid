@@ -20,6 +20,7 @@ import platform
 import re
 import subprocess
 import shlex
+import shutil
 import sys
 import tempfile
 import zipfile
@@ -44,11 +45,7 @@ class Language(object):
             else:
                 # Windows can have python3, and Arch Linux uses python,
                 # so use python3 if it exists and otherwise python
-                try:
-                    subprocess.run(['python3', '--version'], check=True)
-                    executable = 'python3'
-                except FileNotFoundError:
-                    executable = 'python'
+                executable = 'python3' if shutil.which('python3') else 'python'
         self.executable = executable
         self.extension = definition['extension']
         pre_run_commands = definition.pop('pre_run_commands', [])
@@ -193,7 +190,10 @@ class CodeProcessor(object):
             if cache_config_path.is_file():
                 with zipfile.ZipFile(str(cache_config_path)) as zf:
                     with zf.open('config.json') as f:
-                        cache_config = json.load(f)
+                        if sys.version_info < (3, 6):
+                            cache_config = json.loads(f.read().decode('utf8'))
+                        else:
+                            cache_config = json.load(f)
         if not cache_config and sys.version_info < (3, 6):
             cache_config['hash_algorithm'] = 'sha512'
         self.cache_config = cache_config
@@ -284,7 +284,10 @@ class CodeProcessor(object):
                 if session_cache_path.is_file():
                     with zipfile.ZipFile(str(session_cache_path)) as zf:
                         with zf.open('cache.json') as f:
-                            saved_cache = json.load(f)
+                            if sys.version_info < (3, 6):
+                                saved_cache = json.loads(f.read().decode('utf8'))
+                            else:
+                                saved_cache = json.load(f)
                     if saved_cache['codebraid_version'] == codebraid_version:
                         self._cache.update(saved_cache)
                     cache = self._cache.get(session.hash, None)
@@ -591,4 +594,4 @@ class CodeProcessor(object):
             if self.cache_config:
                 cache_config_path = self.cache_path / 'config.zip'
                 with zipfile.ZipFile(str(cache_config_path), 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-                    zf.writestr('cache.json', json.dumps(self.cache_config))
+                    zf.writestr('config.json', json.dumps(self.cache_config))

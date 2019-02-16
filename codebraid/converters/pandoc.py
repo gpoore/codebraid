@@ -708,19 +708,22 @@ class PandocConverter(Converter):
         from_format_pandoc_extensions = self.from_format_pandoc_extensions
         if self.from_format == 'markdown':
             from_format_pandoc_extensions += '-latex_macros-smart'
-        pandoc_stdout, pandoc_stderr = self._run_pandoc(input=source_string,
-                                                        input_name=single_source_name,
-                                                        from_format=self.from_format,
-                                                        from_format_pandoc_extensions=from_format_pandoc_extensions,
-                                                        to_format='json',
-                                                        file_scope=self.pandoc_file_scope,
-                                                        trace=True,
-                                                        decode_output=False)
+        pandoc_stdout_bytes, pandoc_stderr_bytes = self._run_pandoc(input=source_string,
+                                                                    input_name=single_source_name,
+                                                                    from_format=self.from_format,
+                                                                    from_format_pandoc_extensions=from_format_pandoc_extensions,
+                                                                    to_format='json',
+                                                                    file_scope=self.pandoc_file_scope,
+                                                                    trace=True,
+                                                                    decode_output=False)
         try:
-            ast = json.loads(pandoc_stdout)
+            if sys.version_info < (3, 6):
+                ast = json.loads(pandoc_stdout_bytes.decode('utf8'))
+            else:
+                ast = json.loads(pandoc_stdout_bytes)
         except Exception as e:
             raise PandocError('Failed to load AST (incompatible Pandoc version?):\n{0}'.format(e))
-        pandoc_stderr = pandoc_stderr.decode('utf8')
+        pandoc_stderr = pandoc_stderr_bytes.decode('utf8')
         if not (isinstance(ast, dict) and
                 'pandoc-api-version' in ast and 'blocks' in ast):
             raise PandocError('Incompatible Pandoc API version')
@@ -988,7 +991,10 @@ class PandocConverter(Converter):
                 if pandoc_stderr_bytes:
                     for line in pandoc_stderr_bytes.decode('utf8').splitlines():
                         print(line, file=sys.stderr)
-        final_ast = json.loads(final_ast_bytes)
+        if sys.version_info < (3, 6):
+            final_ast = json.loads(final_ast_bytes.decode('utf8'))
+        else:
+            final_ast = json.loads(final_ast_bytes)
         self._final_ast_bytes = final_ast_bytes
         self._final_ast = final_ast
 
