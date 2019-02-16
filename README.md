@@ -1,10 +1,11 @@
 # Codebraid – live code in Pandoc Markdown
 
 Codebraid is a Python command-line program that enables executable code in
-Pandoc Markdown documents.  Using Codebraid can be as simple as adding a class
-to your code blocks, and then running `codebraid` rather than `pandoc` to
-convert your document from Markdown to another format.  `codebraid` supports
-almost all of `pandoc`'s options and passes them to `pandoc` internally.
+[Pandoc](http://pandoc.org/) Markdown documents.  Using Codebraid can be as
+simple as adding a class to your code blocks, and then running `codebraid`
+rather than `pandoc` to convert your document from Markdown to another format.
+`codebraid` supports almost all of `pandoc`'s options and passes them to
+`pandoc` internally.
 
 Codebraid currently can run Python 3.5+ code.  Support for Julia, R, Rust, and
 several other languages is nearly ready for release.
@@ -40,10 +41,12 @@ Hello from Python! $2^8 = 256$
 
 ## Installation and requirements
 
-Installation:  `python3 setup.py install` (or on some Windows installations
-and Arch Linux, `python setup.py install`).
+**Installation:**  `pip3 install codebraid` or `pip install codebraid`
 
-Requirements:
+Manual installation:  `python3 setup.py install` (or on some Windows
+installations and Arch Linux, `python setup.py install`).
+
+**Requirements:**
 
   * [Pandoc](http://pandoc.org/) 2.4+
   * Python 3.5+ with `setuptools` and [`bespon`](https://bespon.org) 0.3
