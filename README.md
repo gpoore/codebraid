@@ -106,16 +106,16 @@ Codebraid adds support for additional keyword arguments.  In some cases,
 multiple keywords can be used for the same option.  This is primarily for
 Pandoc compatibility.
 
-* `session` [string] — By default, all code is executed in a single, shared
+* `session`={string} — By default, all code is executed in a single, shared
   session so that data and variables persist between code chunks.  This allows
   code to be separated into multiple independent sessions.
 
-* `hide` [`expr`, `code`, `stdout`, `stderr`, `all`] — Hide some or all of the
+* `hide`={`expr`, `code`, `stdout`, `stderr`, `all`} — Hide some or all of the
   elements that are displayed by default.  Elements can be combined.  For
   example, `hide=stdout+stderr`.  Note that `expr` only applies to `.cb.expr`
   or `.cb.nb` with inline code.
 
-* `show` [`expr`, `code`, `stdout`, `stderr`, `none`].  Override the elements
+* `show`={`expr`, `code`, `stdout`, `stderr`, `none`} — Override the elements
   that are displayed by default.  `expr` only applies to `.cb.expr` or
   `.cb.nb` with inline code.  Elements can be combined.  For example,
   `show=code+stdout`.  Each element displayed can optionally specify a format
@@ -134,9 +134,9 @@ Pandoc compatibility.
   The default format for all commands is `verbatim`, except for `.cb.expr` and
   inline `.cb.nb`, which default to `raw`.
 
-* `line_numbers`/`numberLines`/`number-lines`/`number_lines`
-  [`true`, `false`] — number code lines in code blocks.
+* `line_numbers`/`numberLines`/`number-lines`/`number_lines`={`true`, `false`}
+  — Number code lines in code blocks.
 
-* `first_number`/`startFrom`/`start-from`/`start_from` [integer or `next`] —
+* `first_number`/`startFrom`/`start-from`/`start_from`={integer or `next`} —
   Specify the first line number for code when line numbers are displayed.
   `next` means continue from the last code in the current session.
