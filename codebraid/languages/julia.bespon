@@ -1,0 +1,25 @@
+|=== julia
+extension = 'jl'
+
+run_encoding = 'utf8'
+
+chunk_wrapper =
+    |```
+    println("\n{stdoutdelim}")
+    flush(stdout)
+    write(stderr, "\n{stderrdelim}\n")
+    {code}
+    |```/
+
+inline_expression_formatter =
+    |```
+    _codebraid_temp_{tempsuffix} = string({code})
+    println("\n{stdoutdelim}")
+    flush(stdout)
+    write(stderr, "\n{stderrdelim}\n")
+    println(_codebraid_temp_{tempsuffix})
+    |```/
+
+error_patterns = 'ERROR:'
+warning_patterns = 'WARNING:'
+line_number_patterns = ':{number}'
