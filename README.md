@@ -7,12 +7,17 @@ rather than `pandoc` to convert your document from Markdown to another format.
 `codebraid` supports almost all of `pandoc`'s options and passes them to
 `pandoc` internally.
 
-Codebraid currently can run Python 3.5+ code.  Support for Julia, R, Rust, and
-several other languages is nearly ready for release.
+Codebraid currently can run **Python 3.5+** and **Julia**.  Support for R,
+Rust, and several other languages is nearly ready for release.
 
 **Development:**  https://github.com/gpoore/codebraid
 
-[View example HTML output](http://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/python.html), or [download it](https://github.com/gpoore/codebraid/blob/master/examples/python.html)
+View example HTML output, or see the self-contained HTML source:
+
+  * [Python](http://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/python.html)
+    ([source](https://github.com/gpoore/codebraid/blob/master/examples/python.html))
+  * [Julia](http://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/julia.html)
+    ([source](https://github.com/gpoore/codebraid/blob/master/examples/julia.html))
 
 
 ## Simple example
@@ -44,7 +49,7 @@ Hello from Python! $2^8 = 256$
 **Installation:**  `pip3 install codebraid` or `pip install codebraid`
 
 Manual installation:  `python3 setup.py install` (or on some Windows
-installations and Arch Linux, `python setup.py install`).
+installations and Arch Linux, `python setup.py install`)
 
 **Requirements:**
 
