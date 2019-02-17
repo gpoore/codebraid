@@ -34,31 +34,38 @@ pre.numberSource {
     padding-left: 4px;
 }
 /* end custom line numbering */
-pre.example:before{
+div.exampleMarkup:before{
     content: "Markdown";
+    font-family: monospace;
     display: block;
     height: 2em;
     font-size: 150%;
 }
-pre.example {
-    padding: 0.5em;
+div.exampleMarkup {
+    padding-top: 0.5em;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
+    margin-top: 2em;
+    margin-bottom: 1em;
     background-color: honeydew;
     border-style: solid;
     border-width: 1px;
     border-color: limegreen;
     border-radius: 0.2em;
 }
-div.output:before{
+div.exampleOutput:before{
     content: "Output";
     font-family: monospace;
     display: block;
     font-size: 150%;
 }
-div.output {
+div.exampleOutput {
     color: black;
     padding-top: 0.5em;
     padding-left: 0.5em;
     padding-right: 0.5em;
+    margin-top: 1em;
+    margin-bottom: 2em;
     background-color: whitesmoke;
     border-style: solid;
     border-width: 1px;
