@@ -134,7 +134,8 @@ def _pandoc_kv_line_numbers(code_chunk, key, value, options):
         options['line_numbers'] = value
 
 _pandoc_kv_processors = collections.defaultdict(lambda: _pandoc_kv_generic,
-                                                {'first_number': _pandoc_kv_first_number,
+                                                {'example': _pandoc_kv_bool,
+                                                 'first_number': _pandoc_kv_first_number,
                                                  'startFrom': _pandoc_kv_first_number,
                                                  'start-from': _pandoc_kv_first_number,
                                                  'start_from': _pandoc_kv_first_number,
@@ -157,7 +158,8 @@ class PandocCodeChunk(CodeChunk):
                  parent_node_list: list,
                  parent_node_list_index: int,
                  source_name: str,
-                 source_start_line_number: int):
+                 source_start_line_number: int,
+                 inline_parent_node: Optional[dict]=None):
         super().__pre_init__()
 
         self.node = node
@@ -165,6 +167,9 @@ class PandocCodeChunk(CodeChunk):
         self.parent_node_list_index = parent_node_list_index
 
         node_id, node_classes, node_kvpairs = node['c'][0]
+        self.node_id = node_id
+        self.node_classes = node_classes
+        self.node_kvpairs = node_kvpairs
         code = node['c'][1]
         options = {}
 
@@ -182,6 +187,12 @@ class PandocCodeChunk(CodeChunk):
         super().__init__(codebraid_command, code, options, source_name, source_start_line_number=source_start_line_number, inline=inline)
 
         # Work with processed options -- now use `self.options`
+        if inline:
+            if (self.options['example'] and (inline_parent_node is None or
+                    'codebraid_pseudonode' in inline_parent_node or len(parent_node_list) > 1)):
+                self.source_errors.insert(0, 'Option "example" is only allowed for inline code that is in a paragraph by itself')
+                self.options['example'] = False
+            self.inline_parent_node = inline_parent_node
         pandoc_id = self.options.get('label', '')
         pandoc_classes = []
         pandoc_kvpairs = []
@@ -199,24 +210,36 @@ class PandocCodeChunk(CodeChunk):
         self.pandoc_classes = pandoc_classes
         self.pandoc_kvpairs = pandoc_kvpairs
         self._output_nodes = None
+        self._as_markdown = None
 
 
     _class_processors = _pandoc_class_processors
     _kv_processors = _pandoc_kv_processors
 
+    # This may need additional refinement in future depending on allowed values
+    _unquoted_kv_value_re = re.compile(r'[A-Za-z$_+\-][A-Za-z0-9$_+\-:]')
+
+
+    @property
     def output_nodes(self):
+        '''
+        A list of nodes representing output, or representing source errors if
+        those prevented execution.
+        '''
+        if self._output_nodes is not None:
+            return self._output_nodes
+        nodes = []
         if self.source_errors:
             message = 'SOURCE ERROR in "{0}" near line {1}:'.format(self.source_name, self.source_start_line_number)
             if self.inline:
-                return [{'t': 'Code',
-                         'c': [['', ['sourceError'], []],
-                              message + ' ' + ' '.join(self.source_errors)]}]
-            return [{'t': 'CodeBlock',
-                     'c': [['', ['sourceError'], []],
-                     message + '\n' + '\n'.join(self.source_errors)]}]
-        if self._output_nodes is not None:
-            return self._output_nodes
+                nodes.append({'t': 'Code', 'c': [['', ['sourceError'], []], message + ' ' + ' '.join(self.source_errors)]})
+            else:
+                nodes.append({'t': 'CodeBlock', 'c': [['', ['sourceError'], []], message + '\n' + '\n'.join(self.source_errors)]})
+            self._output_nodes = nodes
+            return nodes
         if not self.inline and self.options['line_numbers']:
+            # Line numbers can't be precalculated since they are determined by
+            # how a session is assembled across potentially multiple sources
             first_number = self.options['first_number']
             if first_number == 'next':
                 first_number = str(self.code_start_line_number)
@@ -225,7 +248,6 @@ class PandocCodeChunk(CodeChunk):
             self.pandoc_kvpairs.append(['startFrom', first_number])
         t_code = 'Code' if self.inline else 'CodeBlock'
         t_raw = 'RawInline' if self.inline else 'RawBlock'
-        nodes = []
         for output, format in self.options['show'].items():
             if output == 'code':
                 if self.inline:
@@ -299,8 +321,80 @@ class PandocCodeChunk(CodeChunk):
                             nodes.append({'t': t_raw, 'c': ['markdown', '\n'.join(self.stderr_lines)]})
                 else:
                     raise ValueError
+            else:
+                raise ValueError
         self._output_nodes = nodes
         return nodes
+
+
+    @property
+    def as_markdown(self):
+        '''
+        Generate an approximation of the Markdown source that created the
+        node.  This is used in creating examples that show Markdown source
+        plus output.
+        '''
+        if self._as_markdown is not None:
+            return self._as_markdown
+        attr_list = []
+        if self.node_id:
+            attr_list.append('#{0}'.format(self.node_id))
+        for c in self.node_classes:
+            attr_list.append('.{0}'.format(c))
+        for k, v in self.node_kvpairs:
+            if k != 'example':
+                if not self._unquoted_kv_value_re.match(v):
+                    v = '"{0}"'.format(v.replace('\\', '\\\\').replace('"', '\\"'))
+                attr_list.append('{0}={1}'.format(k, v))
+        code = self.code
+        if self.inline:
+            code_strip = code.strip(' ')
+            if code_strip.startswith('`'):
+                code = ' ' + code
+            if code_strip.endswith('`'):
+                code = code + ' '
+            delim = '`'
+            while delim in code:
+                delim += '`'
+            md = '{delim}{code}{delim}{{{attr}}}'.format(delim=delim, code=code, attr=' '.join(attr_list))
+        else:
+            delim = '```'
+            while delim in code:
+                delim += '```'
+            md = '{delim}{{{attr}}}\n{code}\n{delim}'.format(delim=delim, attr=' '.join(attr_list), code=code)
+        self._as_markdown = md
+        return md
+
+
+    def update_parent_node(self):
+        '''
+        Update parent node with output.
+        '''
+        if not self.options['example']:
+            index = self.parent_node_list_index
+            self.parent_node_list[index:index+1] = self.output_nodes
+            return
+        markup_node = {'t': 'CodeBlock', 'c': [['', [], []], self.as_markdown]}
+        example_div_contents = [{'t': 'Div', 'c': [['', ['exampleMarkup'], []], [markup_node]]}]
+        output_nodes = self.output_nodes
+        if output_nodes:
+            if self.inline:
+                # `output_nodes` are all inline, but will be inserted into a
+                # div, so need a block-level wrapper
+                output_nodes = [{'t': 'Para', 'c': output_nodes}]
+            example_div_contents.append({'t': 'Div', 'c': [['', ['exampleOutput'], []], output_nodes]})
+        example_div_node = {'t': 'Div', 'c': [['', ['example'], []], example_div_contents]}
+        if self.inline:
+            # An inline node can't be replaced with a div directly.  Instead,
+            # its block-level parent node is redefined.  The validity of this
+            # operation is checked during initialization.
+            parent_para_plain_node = self.inline_parent_node
+            parent_para_plain_node['t'] = 'Div'
+            parent_para_plain_node['c'] = example_div_node['c']
+        else:
+            index = self.parent_node_list_index
+            self.parent_node_list[index] = example_div_node
+
 
 
 
@@ -315,7 +409,8 @@ def walk_node_list(node_list, enumerate=enumerate, isinstance=isinstance):
     typically make up the vast majority of nodes.
 
     DefinitionLists are handled specially to wrap terms in fake Plain
-    nodes.  This simplifies processing.
+    nodes, which are marked so that they can be identified later if necessary.
+    This simplifies processing.
 
     Returns nodes plus their parent lists with indices.
     '''
@@ -331,7 +426,7 @@ def walk_node_list(node_list, enumerate=enumerate, isinstance=isinstance):
                 else:
                     for elem in obj_contents:
                         term, definition = elem
-                        yield ({'t': 'Plain', 'c': term}, elem, 0)
+                        yield ({'t': 'Plain', 'c': term, 'codebraid_pseudonode': True}, elem, 0)
                         yield from walk_node_list(term)
                         yield from walk_node_list(definition)
 
@@ -357,7 +452,7 @@ def walk_node_list_less_note_contents(node_list, enumerate=enumerate, isinstance
                 else:
                     for elem in obj_contents:
                         term, definition = elem
-                        yield ({'t': 'Plain', 'c': term}, elem, 0)
+                        yield ({'t': 'Plain', 'c': term, 'codebraid_pseudonode': True}, elem, 0)
                         yield from walk_node_list_less_note_contents(term)
                         yield from walk_node_list_less_note_contents(definition)
 
@@ -859,7 +954,7 @@ class PandocConverter(Converter):
                 if node_type == 'Code':
                     if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb.*' in classes
                         code_chunk = PandocCodeChunk(node, parent_node_list, parent_node_list_index,
-                                                     source_name, line_number)
+                                                     source_name, line_number, inline_parent_node=para_plain_node)
                         self.code_chunks.append(code_chunk)
                 else:
                     freeze_raw_node(node, source_name, line_number)
@@ -891,7 +986,13 @@ class PandocConverter(Converter):
                 # guarantees that multiple empty `node_contents_line` won't
                 # keep matching the same `line`.
                 node_format, node_contents = node['c']
-                if node_format != 'html':
+                if node_format == 'html':
+                    if node_contents == '<!--codebraid.eof-->':
+                        node['t'] = 'Null'
+                        del node['c']
+                    else:
+                        freeze_raw_node(node, source_name, line_number)
+                else:
                     # While this almost always works for HTML, it does fail in
                     # at least some cases because the node contents do not
                     # necessarily correspond to the verbatim content of the
@@ -912,23 +1013,30 @@ class PandocConverter(Converter):
                                     source_name, line, line_number = next(source_name_line_and_number_iter)
                                     line_index = line.find(node_contents_line)
                             line_index += len(node_contents_line) or 1
-                if node_format == 'html' and node_contents == '<!--codebraid.eof-->':
-                    node['t'] = 'Null'
-                    del node['c']
-                else:
                     freeze_raw_node(node, source_name, line_number - len(node_contents_lines) + 1)
                 para_plain_node = None
             elif node_type == 'Note':
+                note_para_plain_node = None
                 for note_node_tuple in self._walk_node_list(node['c']):
                     note_node, note_parent_node_list, note_parent_node_list_index = note_node_tuple
                     note_node_type = node['t']
-                    if note_node_type in ('Code', 'CodeBlock'):
+                    if note_node_type in ('Para', 'Plain'):
+                        note_para_plain_node = note_node
+                    elif note_node_type in ('Code', 'CodeBlock'):
                         if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb.*' in classes
-                            code_chunk = PandocCodeChunk(note_node, note_parent_node_list, note_parent_node_list_index,
-                                                         source_name, line_number)
+                            if note_node_type == 'Code':
+                                code_chunk = PandocCodeChunk(note_node, note_parent_node_list, note_parent_node_list_index,
+                                                            source_name, line_number, note_para_plain_node)
+                            else:
+                                code_chunk = PandocCodeChunk(note_node, note_parent_node_list, note_parent_node_list_index,
+                                                            source_name, line_number)
                             self.code_chunks.append(code_chunk)
+                        note_para_plain_node = None
                     elif note_node_type in ('RawInline', 'RawBlock'):
                         freeze_raw_node(note_node, source_name, line_number)
+                        note_para_plain_node = None
+                    else:
+                        note_para_plain_node = None
             elif node_type in ('Para', 'Plain'):
                 para_plain_node = node
             elif node_type in block_node_types:
@@ -947,13 +1055,15 @@ class PandocConverter(Converter):
         for code_chunk in reversed(self.code_chunks):
             # Substitute code output into AST in reversed order to preserve
             # indices
-            index = code_chunk.parent_node_list_index
-            code_chunk.parent_node_list[index:index+1] = code_chunk.output_nodes()
+            code_chunk.update_parent_node()
         if self._io_map:
             # Insert tracking spans if needed
             io_map_span_node = self._io_map_span_node
             for source_name, node, line_number in self._para_plain_source_name_node_line_number:
-                node['c'].insert(0, io_map_span_node(source_name, line_number))
+                if node['t'] in ('Para', 'Plain'):
+                    # When `example` is in use, a node can be converted into
+                    # a different type
+                    node['c'].insert(0, io_map_span_node(source_name, line_number))
 
         # Convert modified AST to markdown, then back, so that raw output
         # can be reinterpreted as markdown

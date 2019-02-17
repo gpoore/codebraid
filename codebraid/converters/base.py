@@ -122,6 +122,7 @@ def _cb_option_show(code_chunk, key, value, options):
 
 _cb_option_processors = collections.defaultdict(lambda: _cb_option_unknown,
                                                 {'hide': _cb_option_hide,
+                                                 'example': _cb_option_bool,
                                                  'first_number': _cb_option_first_number,
                                                  'label': _cb_option_label,
                                                  'lang': _cb_option_str,
@@ -143,11 +144,13 @@ _cb_default_show_options = collections.defaultdict(lambda: ODict(),
                                                     ('run', False): ODict([('stdout', 'raw'),
                                                                            ('stderr', 'verbatim')])})
 
-_cb_default_block_options = {'first_number': 'next',
+_cb_default_block_options = {'example': False,
+                             'first_number': 'next',
                              'lang': None,
                              'line_numbers': True,
                              'session': None}
-_cb_default_inline_options = {'lang': None,
+_cb_default_inline_options = {'example': False,
+                              'lang': None,
                               'session': None}
 
 
@@ -207,6 +210,11 @@ class CodeChunk(object):
 
 
     def __pre_init__(self):
+        '''
+        Create lists of errors and warnings.  Subclasses may need to register
+        errors or warnings during preprocessing, before they are ready
+        for `super().__init__()`
+        '''
         if not hasattr(self, 'source_errors'):
             self.source_errors = []
             self.source_warnings = []
