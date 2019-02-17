@@ -1,0 +1,120 @@
+---
+title: "Codebraid with Julia"
+---
+
+
+## Inline code
+
+
+### Run
+
+Inline code with `.cb.run` gives raw stdout.
+
+`println(1 + 2)`{.julia .cb.run example=true}
+
+
+### Expression and inline notebook
+
+Inline code with `.cb.expr` and `.cb.nb` (`nb` is short for `notebook`)
+evaluate an expression and then insert the raw output into the document, where
+it is interpreted as Markdown.
+
+`"\$\\sin(30^\\circ) = $(sind(30))\$"`{.julia .cb.expr example=true}
+
+`"\$e^{\\pi/4} = $(exp(pi/4))\$"`{.julia .cb.nb example=true}
+
+
+
+### Stderr
+
+In the event of an error, inline code automatically shows stderr by default.
+This code is executed in its own session, `inline_error`, so that it does
+not impact other examples.
+
+`1 + "a"`{.julia .cb.run session=inline_error example=true}
+
+
+### Source errors
+
+A message is also displayed for errors in the Markdown source.  This usually
+includes the name of the document source and the approximate line number.
+
+`println(1 + 2)`{.jlia .cb.run session=inline_source_error example=true}
+
+
+
+## Block code
+
+
+### Run
+
+Code blocks with `.cb.run` give raw stdout.  There is continuity between code
+blocks so long as they are in the same session; variables persist.
+
+
+```{.julia .cb.run session=hello example=true}
+x = "Hello from *Julia!*"
+```
+
+```{.julia .cb.run session=hello example=true}
+println(x)
+```
+
+
+
+### Notebook
+
+Code blocks with `.cb.nb` show the code and also the verbatim stdout.
+
+```{.julia .cb.nb session=random example=true}
+using Random
+using Statistics
+Random.seed!(1)
+rnums = rand(1:100, 10)
+println("Random numbers: $(rnums)")
+println("Median: $(median(rnums))")
+println("Mean: $(mean(rnums))")
+```
+
+
+### Stderr
+
+Code blocks automatically show stderr by default.
+
+```{.julia .cb.nb .line_numbers session=block_error example=true}
+var = 123
+println(var)
+flush(stdout)
+var += "a"
+```
+
+
+### Source errors
+
+A message is also displayed for errors in the Markdown source.  This usually
+includes the name of the document source and the approximate line number.
+
+```{.julia .cb.ruuun session=block_source_error example=true}
+println(1 + 2)
+```
+
+
+## Other options
+
+By default, stdout and stderr are only shown if they are non-empty.  In some
+situations, it may be useful to represent empty output visually as
+confirmation that there indeed was none.
+
+```{.julia .cb.run show=code+stdout+stderr:verbatim_or_empty example=true}
+x = 1 + 2
+```
+
+
+It is also possible to selectively hide output from a code chunk.
+
+```{.julia .cb.nb hide=stdout example=true}
+println(x)
+```
+
+`hide` takes any combination of `code`, `stderr`, and `stdout`, or simply
+`all`.

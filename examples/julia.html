@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Codebraid with Julia</title>
+  <style>
+      code{white-space: pre-wrap;}
+      span.smallcaps{font-variant: small-caps;}
+      span.underline{text-decoration: underline;}
+      div.column{display: inline-block; vertical-align: top; width: 50%;}
+  </style>
+  <style>
+a.sourceLine { display: inline-block; line-height: 1.25; }
+a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
+a.sourceLine:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode { white-space: pre; position: relative; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+code.sourceCode { white-space: pre-wrap; }
+a.sourceLine { text-indent: -1em; padding-left: 1em; }
+}
+pre.numberSource a.sourceLine
+  { position: relative; left: -4em; }
+pre.numberSource a.sourceLine::before
+  { content: attr(title);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; pointer-events: all; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {  }
+@media screen {
+a.sourceLine::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <style type="text/css">body {display: block;text-align: left;max-width: 40rem;margin: auto;}pre.numberSource a.sourceLine {position: relative;left: -3em;}pre.numberSource a.sourceLine::before{content: attr(title);position: relative;left: -1em;text-align: right;vertical-align: baseline;border: none;pointer-events: all;display: inline-block;-webkit-touch-callout: none;-webkit-user-select: none;-khtml-user-select: none;-moz-user-select: none;-ms-user-select: none;user-select: none;padding: 0 4px;width: 3em;color: #aaaaaa;}pre.numberSource {margin-left: 2em;border-left: 1px solid #aaaaaa;padding-left: 4px;}div.exampleMarkup:before{content: "Markdown";font-family: monospace;display: block;height: 2em;font-size: 150%;}div.exampleMarkup {padding-top: 0.5em;padding-left: 0.5em;padding-right: 0.5em;margin-top: 2em;margin-bottom: 1em;background-color: honeydew;border-style: solid;border-width: 1px;border-color: limegreen;border-radius: 0.2em;}div.exampleOutput:before{content: "Output";font-family: monospace;display: block;font-size: 150%;}div.exampleOutput {color: black;padding-top: 0.5em;padding-left: 0.5em;padding-right: 0.5em;margin-top: 1em;margin-bottom: 2em;background-color: whitesmoke;border-style: solid;border-width: 1px;border-color: lightgray;border-radius: 0.2em;}div.sourceCode {padding: 0.5em;background-color: aliceblue;border-style: solid;border-width: 1px;border-color: lightskyblue;border-radius: 0.2em;}div.sourceCode:before{content: "code";font-family: monospace;display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stdout:before{content: "stdout";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stdout {color: black;padding: 0.5em;background-color: azure;border-style: solid;border-width: 1px;border-color: turquoise;border-radius: 0.2em;padding-left: 0.5em;}code.stdout {color: black;background-color: azure;border-style: solid;border-width: 1px;border-color: turquoise;}pre.stderr:before{content: "stderr";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stderr {color: red;padding: 0.5em;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;border-radius: 0.2em;padding-left: 0.5em;}code.stderr {color: red;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;}pre.sourceError:before{content: "Source error";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.sourceError {color: red;padding: 0.5em;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;border-radius: 0.2em;padding-left: 0.5em;}code.sourceError {color: red;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;}</style>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Codebraid with Julia</h1>
+</header>
+<h2 id="inline-code">Inline code</h2>
+<h3 id="run">Run</h3>
+<p>Inline code with <code>.cb.run</code> gives raw stdout.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`println(1 + 2)`{.julia .cb.run}</code></pre>
+</div>
+<div class="exampleOutput">
+<p>3</p>
+</div>
+</div>
+<h3 id="expression-and-inline-notebook">Expression and inline notebook</h3>
+<p>Inline code with <code>.cb.expr</code> and <code>.cb.nb</code> (<code>nb</code> is short for <code>notebook</code>) evaluate an expression and then insert the raw output into the document, where it is interpreted as Markdown.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`&quot;\$\\sin(30^\\circ) = $(sind(30))\$&quot;`{.julia .cb.expr}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><span class="math inline">sin (30<sup>∘</sup>) = 0.5</span></p>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`&quot;\$e^{\\pi/4} = $(exp(pi/4))\$&quot;`{.julia .cb.nb}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><span class="math inline"><em>e</em><sup><em>π</em>/4</sup> = 2.1932800507380152</span></p>
+</div>
+</div>
+<h3 id="stderr">Stderr</h3>
+<p>In the event of an error, inline code automatically shows stderr by default. This code is executed in its own session, <code>inline_error</code>, so that it does not impact other examples.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`1 + &quot;a&quot;`{.julia .cb.run session=inline_error}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="stderr">ERROR: LoadError: MethodError: no method matching +(::Int64, ::String) Closest candidates are:   +(::Any, ::Any, !Matched::Any, !Matched::Any...) at operators.jl:502   +(::T&lt;:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8}, !Matched::T&lt;:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8}) where T&lt;:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at int.jl:53   +(::Integer, !Matched::Integer) at int.jl:797   ... Stacktrace:  [1] top-level scope at none:0  [2] include at .\boot.jl:326 [inlined]  [3] include_relative(::Module, ::String) at .\loading.jl:1038  [4] include(::Module, ::String) at .\sysimg.jl:29  [5] exec_options(::Base.JLOptions) at .\client.jl:267  [6] _start() at .\client.jl:436 in expression starting at &lt;string&gt;:1</code></p>
+</div>
+</div>
+<h3 id="source-errors">Source errors</h3>
+<p>A message is also displayed for errors in the Markdown source. This usually includes the name of the document source and the approximate line number.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`println(1 + 2)`{.jlia .cb.run session=inline_source_error}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="sourceError">SOURCE ERROR in &quot;julia.cb.md&quot; near line 42: Language definition for &quot;jlia&quot; does not exist, or is not indexed</code></p>
+</div>
+</div>
+<h2 id="block-code">Block code</h2>
+<h3 id="run-1">Run</h3>
+<p>Code blocks with <code>.cb.run</code> give raw stdout. There is continuity between code blocks so long as they are in the same session; variables persist.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.julia .cb.run session=hello}
+x = &quot;Hello from *Julia!*&quot;
+```</code></pre>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.julia .cb.run session=hello}
+println(x)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<p>Hello from <em>Julia!</em></p>
+</div>
+</div>
+<h3 id="notebook">Notebook</h3>
+<p>Code blocks with <code>.cb.nb</code> show the code and also the verbatim stdout.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.julia .cb.nb session=random}
+using Random
+using Statistics
+Random.seed!(1)
+rnums = rand(1:100, 10)
+println(&quot;Random numbers: $(rnums)&quot;)
+println(&quot;Median: $(median(rnums))&quot;)
+println(&quot;Mean: $(mean(rnums))&quot;)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb9" data-startFrom="1"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia"><a class="sourceLine" id="cb9-1" title="1">using Random</a>
+<a class="sourceLine" id="cb9-2" title="2">using Statistics</a>
+<a class="sourceLine" id="cb9-3" title="3">Random.seed!(<span class="fl">1</span>)</a>
+<a class="sourceLine" id="cb9-4" title="4">rnums = rand(<span class="fl">1</span>:<span class="fl">100</span>, <span class="fl">10</span>)</a>
+<a class="sourceLine" id="cb9-5" title="5">println(<span class="st">&quot;Random numbers: $(rnums)&quot;</span>)</a>
+<a class="sourceLine" id="cb9-6" title="6">println(<span class="st">&quot;Median: $(median(rnums))&quot;</span>)</a>
+<a class="sourceLine" id="cb9-7" title="7">println(<span class="st">&quot;Mean: $(mean(rnums))&quot;</span>)</a></code></pre></div>
+<pre class="stdout"><code>Random numbers: [47, 3, 66, 54, 67, 60, 83, 52, 93, 81]
+Median: 63.0
+Mean: 60.6</code></pre>
+</div>
+</div>
+<h3 id="stderr-1">Stderr</h3>
+<p>Code blocks automatically show stderr by default.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.julia .cb.nb .line_numbers session=block_error}
+var = 123
+println(var)
+flush(stdout)
+var += &quot;a&quot;
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb12" data-startFrom="1"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia"><a class="sourceLine" id="cb12-1" title="1">var = <span class="fl">123</span></a>
+<a class="sourceLine" id="cb12-2" title="2">println(var)</a>
+<a class="sourceLine" id="cb12-3" title="3">flush(stdout)</a>
+<a class="sourceLine" id="cb12-4" title="4">var += <span class="st">&quot;a&quot;</span></a></code></pre></div>
+<pre class="stdout"><code>123</code></pre>
+<pre class="stderr"><code>ERROR: LoadError: MethodError: no method matching +(::Int64, ::String)
+Closest candidates are:
+  +(::Any, ::Any, !Matched::Any, !Matched::Any...) at operators.jl:502
+  +(::T&lt;:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8}, !Matched::T&lt;:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8}) where T&lt;:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at int.jl:53
+  +(::Integer, !Matched::Integer) at int.jl:797
+  ...
+Stacktrace:
+ [1] top-level scope at none:0
+ [2] include at .\boot.jl:326 [inlined]
+ [3] include_relative(::Module, ::String) at .\loading.jl:1038
+ [4] include(::Module, ::String) at .\sysimg.jl:29
+ [5] exec_options(::Base.JLOptions) at .\client.jl:267
+ [6] _start() at .\client.jl:436
+in expression starting at source.jl:4</code></pre>
+</div>
+</div>
+<h3 id="source-errors-1">Source errors</h3>
+<p>A message is also displayed for errors in the Markdown source. This usually includes the name of the document source and the approximate line number.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.julia .cb.ruuun session=block_source_error}
+println(1 + 2)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<pre class="sourceError"><code>SOURCE ERROR in &quot;julia.cb.md&quot; near line 98:
+Unknown or unsupported Codebraid command &quot;cb.ruuun&quot;
+Missing valid Codebraid command</code></pre>
+</div>
+</div>
+<h2 id="other-options">Other options</h2>
+<p>By default, stdout and stderr are only shown if they are non-empty. In some situations, it may be useful to represent empty output visually as confirmation that there indeed was none.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.julia .cb.run show=code+stdout+stderr:verbatim_or_empty}
+x = 1 + 2
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb18" data-startFrom="1"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia"><a class="sourceLine" id="cb18-1" title="1">x = <span class="fl">1</span> + <span class="fl">2</span></a></code></pre></div>
+<pre class="stderr"><code> </code></pre>
+</div>
+</div>
+<p>It is also possible to selectively hide output from a code chunk.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.julia .cb.nb hide=stdout}
+println(x)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb21" data-startFrom="2"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia"><a class="sourceLine" id="cb21-2" title="2">println(x)</a></code></pre></div>
+</div>
+</div>
+<p><code>hide</code> takes any combination of <code>code</code>, <code>stderr</code>, and <code>stdout</code>, or simply <code>all</code>.</p>
+</body>
+</html>
