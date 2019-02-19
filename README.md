@@ -12,12 +12,14 @@ Rust, and several other languages is nearly ready for release.
 
 **Development:**  https://github.com/gpoore/codebraid
 
-View example HTML output, or see the self-contained HTML source:
+View example HTML output, or see the Markdown source or raw HTML:
 
-  * [Python](http://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/python.html)
-    ([source](https://github.com/gpoore/codebraid/blob/master/examples/python.html))
-  * [Julia](http://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/julia.html)
-    ([source](https://github.com/gpoore/codebraid/blob/master/examples/julia.html))
+  * [Python example](http://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/python.html)
+    [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/python.cbmd)]
+    [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/python.html)]
+  * [Julia example](http://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/julia.html)
+    [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/julia.cbmd)]
+    [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/julia.html)]
 
 
 ## Simple example
@@ -65,7 +67,8 @@ Python 3 installations.
 
 ## Converting a document
 
-Simply run `codebraid pandoc <normal pandoc options>`.
+Simply run `codebraid pandoc <normal pandoc options>`.  Note that
+`--overwrite` is required for existing files.
 
 
 ## Caching
@@ -114,21 +117,22 @@ Codebraid adds support for additional keyword arguments.  In some cases,
 multiple keywords can be used for the same option.  This is primarily for
 Pandoc compatibility.
 
-* `session`={string} — By default, all code is executed in a single, shared
-  session so that data and variables persist between code chunks.  This allows
-  code to be separated into multiple independent sessions.
+* `session`={string} — By default, all code for a given language is executed
+  in a single, shared session so that data and variables persist between code
+  chunks.  This allows code to be separated into multiple independent
+  sessions.
 
 * `hide`={`expr`, `code`, `stdout`, `stderr`, `all`} — Hide some or all of the
   elements that are displayed by default.  Elements can be combined.  For
   example, `hide=stdout+stderr`.  Note that `expr` only applies to `.cb.expr`
-  or `.cb.nb` with inline code.
+  or `.cb.nb` with inline code, since only these evaluate an expression.
 
 * `show`={`expr`, `code`, `stdout`, `stderr`, `none`} — Override the elements
   that are displayed by default.  `expr` only applies to `.cb.expr` or
-  `.cb.nb` with inline code.  Elements can be combined.  For example,
-  `show=code+stdout`.  Each element displayed can optionally specify a format
-  from `raw`, `verbatim`, or `verbatim_or_empty`.  For example,
-  `show=code:verbatim+stdout:raw`.
+  `.cb.nb` with inline code, since only these evaluate an expression.
+  Elements can be combined.  For example, `show=code+stdout`.  Each element
+  displayed can optionally specify a format from `raw`, `verbatim`, or
+  `verbatim_or_empty`.  For example, `show=code:verbatim+stdout:raw`.
 
     - `raw` means interpreted as Markdown.
     - `verbatim` produces inline code or a code block, depending on context.
@@ -139,8 +143,8 @@ Pandoc compatibility.
       event that there is no content.  It is useful when a placeholder is
       desired, or a visual confirmation that there is indeed no output.
 
-  The default format for all commands is `verbatim`, except for `.cb.expr` and
-  inline `.cb.nb`, which default to `raw`.
+  `expr` defaults to `raw` if a format is not specified.  All others default
+  to `verbatim`.
 
 * `line_numbers`/`numberLines`/`number-lines`/`number_lines`={`true`, `false`}
   — Number code lines in code blocks.
