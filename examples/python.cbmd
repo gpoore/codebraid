@@ -89,7 +89,10 @@ plt.plot(x, np.sin(x))
 plt.xlabel('$x$')
 plt.ylabel('$y=\\sin(x)$')
 plt.savefig('plot.png', transparent=True, bbox_inches='tight')
-print('![The function $y=\\sin(x)$](plot.png)')
+markdown = '''
+![The function $y=\\sin(x)$](plot.png){width=100% max-width=400px}
+'''
+print(markdown)
 ```
 
 

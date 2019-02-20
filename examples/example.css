@@ -2,6 +2,8 @@ body {
     display: block;
     text-align: left;
     max-width: 40rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
     margin: auto;
 }
 /* customize Pandoc line numbering, for less indentation before numbers */
@@ -80,7 +82,7 @@ div.sourceCode {
     border-color: lightskyblue;
     border-radius: 0.2em;
 }
-div.sourceCode:before{
+div.exampleOutput div.sourceCode:before{
     content: "code";
     font-family: monospace;
     display: block;
