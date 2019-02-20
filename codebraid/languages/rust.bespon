@@ -1,0 +1,47 @@
+|=== rust
+extension = 'rs'
+
+executable = 'rustc'
+
+compile_encoding = 'utf8'
+compile_commands = '{executable} --crate-type bin -o {source_without_extension}.exe {source}'
+
+run_encoding = 'utf8'
+run_command = '{source_without_extension}.exe'
+
+source_start =
+    |```
+    #![allow(unused)]
+    fn main() {{
+    use std::fmt::Write as FmtWrite;
+    use std::io::Write as IoWrite;
+    |```/
+
+source_end =
+    |```
+    }}
+    |```/
+
+chunk_wrapper =
+    |```
+    println!("\n{stdoutdelim}");
+    writeln!(std::io::stderr(), "\n{stderrdelim}").expect("Could not write to stderr");
+    {code}
+    |```/
+
+inline_expression_formatter =
+    |```
+    {{
+        let codebraid_temp_{tempsuffix} = {{
+            {code}
+        }};
+        println!("\n{stdoutdelim}");
+        writeln!(std::io::stderr(), "\n{stderrdelim}").expect("Could not write to stderr");
+        println!("{{}}", codebraid_temp_{tempsuffix});
+    }}
+    |```/
+
+error_patterns = 'error:'
+warning_patterns = 'warning:'
+line_number_patterns = ':{number}'
+line_number_regex = `^\s*(\d+)\s*\|`

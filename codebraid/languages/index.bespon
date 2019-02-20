@@ -78,11 +78,15 @@
 #
 # line_number_patterns =
 #     string or list of strings
-#     used to identify line numbers in stderr
+#     used to identify line numbers in stderr that occur next to source path
 #     must contain field {number}; otherwise treated as literal patterns
+#
+# line_number_regex =
+#     string
+#     generates a regex that can match any other line numbers that need offset
 #-----------------------------------------------------------------------------
 #
 
 julia = "julia.bespon"
 python = "python.bespon"
-
+rust = "rust.bespon"

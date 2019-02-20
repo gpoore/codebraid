@@ -37,49 +37,67 @@ class Language(object):
     '''
     def __init__(self, name, definition):
         self.name = name
-        self.language = definition.pop('language', name)
-        executable = definition.pop('executable', None)
-        if executable is None:
-            if name != 'python':
-                executable = name
-            else:
-                # Windows can have python3, and Arch Linux uses python,
-                # so use python3 if it exists and otherwise python
-                executable = 'python3' if shutil.which('python3') else 'python'
-        self.executable = executable
-        self.extension = definition['extension']
-        pre_run_commands = definition.pop('pre_run_commands', [])
-        if not isinstance(pre_run_commands, list):
-            pre_run_commands = [pre_run_commands]
-        self.pre_run_commands = pre_run_commands
-        self.pre_run_encoding = definition.pop('pre_run_encoding', None)
-        self.run_command = definition.pop('run_command', '{executable} {source}')
-        self.run_encoding = definition.pop('run_encoding', None)
-        post_run_commands = definition.pop('post_run_commands', [])
-        if not isinstance(post_run_commands, list):
-            post_run_commands = [post_run_commands]
-        self.post_run_commands = post_run_commands
-        self.post_run_encoding = definition.pop('post_run_encoding', None)
-        self.source_start = definition.pop('source_start', '')
-        self.source_end = definition.pop('source_end', '')
-        self.chunk_wrapper = definition['chunk_wrapper']
-        self.inline_expression_formatter = definition['inline_expression_formatter']
-        error_patterns = definition['error_patterns']
-        if not isinstance(error_patterns, list):
-            error_patterns = [error_patterns]
-        self.error_patterns = error_patterns
-        warning_patterns = definition['warning_patterns']
-        if not isinstance(warning_patterns, list):
-            warning_patterns = [warning_patterns]
-        self.warning_patterns = warning_patterns
-        line_number_patterns = definition['line_number_patterns']
-        if not isinstance(line_number_patterns, list):
-            line_number_patterns = [line_number_patterns]
-        self.line_number_patterns = line_number_patterns
+        try:
+            self.language = definition.pop('language', name)
+            executable = definition.pop('executable', None)
+            if executable is None:
+                if name != 'python':
+                    executable = name
+                else:
+                    # Windows can have python3, and Arch Linux uses python,
+                    # so use python3 if it exists and otherwise python
+                    executable = 'python3' if shutil.which('python3') else 'python'
+            self.executable = executable
+            self.extension = definition.pop('extension')
+            self.pre_run_encoding = definition.pop('pre_run_encoding', None)
+            pre_run_commands = definition.pop('pre_run_commands', [])
+            if not isinstance(pre_run_commands, list):
+                pre_run_commands = [pre_run_commands]
+            self.pre_run_commands = pre_run_commands
+            self.compile_encoding = definition.pop('compile_encoding', None)
+            compile_commands = definition.pop('compile_commands', [])
+            if not isinstance(compile_commands, list):
+                compile_commands = [compile_commands]
+            self.compile_commands = compile_commands
+            self.run_encoding = definition.pop('run_encoding', None)
+            self.run_command = definition.pop('run_command', '{executable} {source}')
+            self.post_run_encoding = definition.pop('post_run_encoding', None)
+            post_run_commands = definition.pop('post_run_commands', [])
+            if not isinstance(post_run_commands, list):
+                post_run_commands = [post_run_commands]
+            self.post_run_commands = post_run_commands
+            self.source_start = definition.pop('source_start', '')
+            self.source_end = definition.pop('source_end', '')
+            self.chunk_wrapper = definition.pop('chunk_wrapper')
+            self.inline_expression_formatter = definition.pop('inline_expression_formatter')
+            error_patterns = definition.pop('error_patterns')
+            if not isinstance(error_patterns, list):
+                error_patterns = [error_patterns]
+            self.error_patterns = error_patterns
+            warning_patterns = definition.pop('warning_patterns')
+            if not isinstance(warning_patterns, list):
+                warning_patterns = [warning_patterns]
+            self.warning_patterns = warning_patterns
+            line_number_patterns = definition.pop('line_number_patterns')
+            if not isinstance(line_number_patterns, list):
+                line_number_patterns = [line_number_patterns]
+            self.line_number_patterns = line_number_patterns
+            self.line_number_regex = definition.pop('line_number_regex', None)
+        except KeyError as e:
+            raise err.CodebraidError('Missing key(s) in language definition for "{0}":\n  {1}'.format(name, e.args[0]))
+        if definition:
+            raise err.CodebraidError('Unknown key(s) in language definition for "{0}":\n  {1}'.format(name, ' '.join(k for k in definition)))
+
         re_patterns = []
         for lnp in line_number_patterns:
            re_patterns.append(r'(\d+)'.join(re.escape(x) for x in lnp.split('{number}')))
-        self.line_number_re = re.compile('({0})'.format('|'.join(re_patterns)))
+        self.line_number_pattern_re = re.compile('({0})'.format('|'.join(re_patterns)))
+        if self.line_number_regex is None:
+            self.line_number_regex_re = None
+        else:
+            self.line_number_regex_re = re.compile(self.line_number_regex, re.MULTILINE)
+
+
 
 
 
@@ -106,6 +124,7 @@ class Session(object):
         self.source_warning_chunks = []
         self.pre_run_error = False
         self.pre_run_error_lines = None
+        self.compile_errors = False
         self.run_errors = False
         self.run_error_chunks = []
         self.run_error_template_lines = None
@@ -329,6 +348,7 @@ class CodeProcessor(object):
                     run_code_line_number += inline_expression_formatter_n_lines
                 else:
                     code = cc.code
+                    run_code_to_user_code_dict[run_code_line_number] = (cc, 1)
                 run_code = session.lang_def.chunk_wrapper.format(stdoutdelim=stdstream_delim_escaped,
                                                                  stderrdelim=stdstream_delim_escaped,
                                                                  code=code)
@@ -360,12 +380,13 @@ class CodeProcessor(object):
                              'extension': session.lang_def.extension,
                              'source': source_path.as_posix(),
                              'source_dir': source_dir_path.as_posix(),
-                             'source_stem': source_dir_path.stem}
+                             'source_without_extension': (source_dir_path / 'source').as_posix()}
 
             for cmd_template in session.lang_def.pre_run_commands:
                 if error:
                     break
                 cmd = cmd_template.format(**template_dict)
+
                 pre_proc = subprocess.run(shlex.split(cmd),
                                           stdout=subprocess.PIPE,
                                           stderr=subprocess.STDOUT,)
@@ -374,6 +395,24 @@ class CodeProcessor(object):
                     session.pre_run_error = True
                     encoding = session.lang_def.pre_run_encoding or locale.getpreferredencoding(False)
                     session.pre_run_error_lines = pre_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
+
+            for cmd_template in session.lang_def.compile_commands:
+                if error:
+                    break
+                cmd = cmd_template.format(**template_dict)
+                comp_proc = subprocess.run(shlex.split(cmd),
+                                           stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE)
+                if comp_proc.returncode != 0:
+                    error = True
+                    session.compile_errors = True
+                    encoding = session.lang_def.compile_encoding or locale.getpreferredencoding(False)
+                    try:
+                        stdout_lines = comp_proc.stdout.decode(encoding).splitlines()
+                        stderr_lines = comp_proc.stderr.decode(encoding).splitlines()
+                    except UnicodeDecodeError:
+                        stdout_lines = comp_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
+                        stderr_lines = comp_proc.stderr.decode(encoding, errors='backslashreplace').splitlines()
 
             if not error:
                 cmd_template = session.lang_def.run_command
@@ -404,15 +443,18 @@ class CodeProcessor(object):
                 if post_proc.returncode != 0:
                     error = True
                     session.post_run_error = True
-                    encoding = encoding=session.lang_def.post_run_encoding,
-                    session.post_run_error_lines = post_proc.stdout.decode(errors='backslashreplace').splitlines()
+                    encoding = session.lang_def.post_run_encoding or locale.getpreferredencoding(False)
+                    session.post_run_error_lines = post_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
+        session.error = error
 
         if session.pre_run_error:
             chunk_stdout_dict = {}
             chunk_stderr_dict = {0: ['PRE-RUN ERROR:', *session.pre_run_error_lines]}
+            chunk_expr_dict = {}
         elif session.post_run_error:
             chunk_stdout_dict = {}
             chunk_stderr_dict = {0: ['POST-RUN ERROR:', *session.post_run_error_lines]}
+            chunk_expr_dict = {}
         else:
             # Ensure that there's at least one delimiter to serve as a
             # sentinel, even if the code never ran due to something like a
@@ -432,7 +474,8 @@ class CodeProcessor(object):
             source_pattern_final_inline = '<string>'
             error_patterns = session.lang_def.error_patterns
             warning_patterns = session.lang_def.warning_patterns
-            line_number_re = session.lang_def.line_number_re
+            line_number_pattern_re = session.lang_def.line_number_pattern_re
+            line_number_regex_re = session.lang_def.line_number_regex_re
             for (std_lines, storage_list) in [(stdout_lines, chunk_stdout_list), (stderr_lines, chunk_stderr_list)]:
                 chunk_start_index = -1
                 for index, line in enumerate(std_lines):
@@ -453,7 +496,8 @@ class CodeProcessor(object):
                                     # If the only delim is the sentinel that
                                     # was inserted, the code never ran.
                                     # This will be handled later.
-                                    session.run_errors = True
+                                    if not session.compile_errors:
+                                        session.run_errors = True
                                     storage_list.append(leading_err_lines)
                                 else:
                                     # Apparently the code ran, so this is
@@ -476,28 +520,29 @@ class CodeProcessor(object):
                             else:
                                 storage_list.append(None)
                             chunk_start_index = index + 1
-            for cc, cc_stdout_lines in zip(session.code_chunks, chunk_stdout_list):
-                # Process inline expressions by separating stdout from
-                # expression value.
-                if cc_stdout_lines is not None:
-                    if cc.command == 'expr' or (cc.inline and cc.command == 'nb'):
-                        index = 0
-                        for line in cc_stdout_lines:
-                            if line.startswith(expression_delim_start) and line == expression_delim:
-                                break
-                            index += 1
-                        if index < len(cc_stdout_lines):
-                            expr_lines = cc_stdout_lines[index+1:]
-                            if len(expr_lines) > 1 or expr_lines[0]:
-                                chunk_expr_dict[cc.session_index] = expr_lines
-                            if cc_stdout_lines[index-1]:
-                                del cc_stdout_lines[index:]
-                            else:
-                                del cc_stdout_lines[index-1:]
-                            if cc_stdout_lines and (len(cc_stdout_lines) > 1 or cc_stdout_lines[0]):
-                                chunk_stdout_dict[cc.session_index] = cc_stdout_lines
-                    else:
-                        chunk_stdout_dict[cc.session_index] = cc_stdout_lines
+            if not session.compile_errors:
+                for cc, cc_stdout_lines in zip(session.code_chunks, chunk_stdout_list):
+                    # Process inline expressions by separating stdout from
+                    # expression value.
+                    if cc_stdout_lines is not None:
+                        if cc.command == 'expr' or (cc.inline and cc.command == 'nb'):
+                            index = 0
+                            for line in cc_stdout_lines:
+                                if line.startswith(expression_delim_start) and line == expression_delim:
+                                    break
+                                index += 1
+                            if index < len(cc_stdout_lines):
+                                expr_lines = cc_stdout_lines[index+1:]
+                                if len(expr_lines) > 1 or expr_lines[0]:
+                                    chunk_expr_dict[cc.session_index] = expr_lines
+                                if cc_stdout_lines[index-1]:
+                                    del cc_stdout_lines[index:]
+                                else:
+                                    del cc_stdout_lines[index-1:]
+                                if cc_stdout_lines and (len(cc_stdout_lines) > 1 or cc_stdout_lines[0]):
+                                    chunk_stdout_dict[cc.session_index] = cc_stdout_lines
+                        else:
+                            chunk_stdout_dict[cc.session_index] = cc_stdout_lines
             for cc, cc_stderr_lines in zip(session.code_chunks, chunk_stderr_list):
                 if cc_stderr_lines is not None:
                     # Process inline expressions.  Currently, this just
@@ -505,19 +550,20 @@ class CodeProcessor(object):
                     # stderr due to expression evaluation from stderr due to
                     # converting the expressing to a string and printing it.
                     # The two varieties may be handled separately in future.
-                    if cc.inline and (cc.command == 'expr' or cc.command == 'nb'):
-                        index = 0
-                        for line in cc_stderr_lines:
-                            if line.startswith(expression_delim_start) and line == expression_delim:
-                                break
-                            index += 1
-                        if index < len(cc_stderr_lines):
-                            if cc_stderr_lines[index-1]:
-                                del cc_stderr_lines[index]
-                            else:
-                                del cc_stderr_lines[index-1:index+1]
-                        if not cc_stderr_lines or not (len(cc_stderr_lines) > 1 or cc_stderr_lines[0]):
-                            continue
+                    if not session.compile_errors:
+                        if cc.inline and (cc.command == 'expr' or cc.command == 'nb'):
+                            index = 0
+                            for line in cc_stderr_lines:
+                                if line.startswith(expression_delim_start) and line == expression_delim:
+                                    break
+                                index += 1
+                            if index < len(cc_stderr_lines):
+                                if cc_stderr_lines[index-1]:
+                                    del cc_stderr_lines[index]
+                                else:
+                                    del cc_stderr_lines[index-1:index+1]
+                            if not cc_stderr_lines or not (len(cc_stderr_lines) > 1 or cc_stderr_lines[0]):
+                                continue
                     # Sync error and warning line numbers with those in user
                     # code, and change path of code file.  This is somewhat
                     # complex because in cases like a syntax error, the code
@@ -525,9 +571,10 @@ class CodeProcessor(object):
                     # the real code chunk (`user_cc`) that the error belongs
                     # to.
                     user_cc = cc
+                    offset = None
                     for index, line in enumerate(cc_stderr_lines):
                         if source_pattern_posix in line or source_pattern_win in line:
-                            match = line_number_re.search(line)
+                            match = line_number_pattern_re.search(line)
                             if match:
                                 for match_number in match.groups()[1:]:
                                     if match_number is not None:
@@ -542,6 +589,7 @@ class CodeProcessor(object):
                                         user_number = 1
                                     else:
                                         user_cc, user_number = run_code_to_user_code_dict[lower_run_number]
+                                offset = run_number - user_number
                                 line = line.replace(match.group(0), match.group(0).replace(str(run_number), str(user_number)))
                             if user_cc.inline:
                                 line = line.replace(source_pattern_posix, source_pattern_final_inline)
@@ -550,7 +598,16 @@ class CodeProcessor(object):
                                 line = line.replace(source_pattern_posix, source_pattern_final)
                                 line = line.replace(source_pattern_win, source_pattern_final)
                             cc_stderr_lines[index] = line
-
+                    # Replace other line numbers that are identified by regex
+                    # instead of by being in the same line as the source name.
+                    # This works for syncing messages from a single chunk, but
+                    # will need to be revised if it is ever necessary to sync
+                    # messages across multiple chunks.
+                    if line_number_regex_re is not None and offset is not None:
+                        def replace_match(match):
+                            template = '{{:{0}d}}'.format(len(match.group(1)))
+                            return match.group(0).replace(match.group(1), template.format(int(match.group(1))-offset))
+                        cc_stderr_lines = line_number_regex_re.sub(replace_match, '\n'.join(cc_stderr_lines)).splitlines()
                     chunk_stderr_dict[user_cc.session_index] = cc_stderr_lines
                     # Update session error and warning status
                     for line in cc_stderr_lines:
