@@ -9,16 +9,13 @@ compile_commands = '{executable} --crate-type bin -o {source_without_extension}.
 run_encoding = 'utf8'
 run_command = '{source_without_extension}.exe'
 
-source_start =
+source_template =
     |```
     #![allow(unused)]
     fn main() {{
     use std::fmt::Write as FmtWrite;
     use std::io::Write as IoWrite;
-    |```/
-
-source_end =
-    |```
+    {code}
     }}
     |```/
 

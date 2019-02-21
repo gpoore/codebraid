@@ -3,7 +3,7 @@ extension = 'py'
 
 run_encoding = 'utf8'
 
-source_start =
+source_template =
     |```
     # -*- coding: utf-8 -*-
 
@@ -11,6 +11,8 @@ source_start =
     import sys
     sys.stdout = codecs.getwriter('utf8')(sys.stdout.buffer, 'strict')
     sys.stderr = codecs.getwriter('utf8')(sys.stderr.buffer, 'strict')
+
+    {code}
     |```/
 
 chunk_wrapper =
