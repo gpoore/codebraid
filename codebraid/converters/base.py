@@ -121,12 +121,14 @@ def _cb_option_show(code_chunk, key, value, options):
 
 
 _cb_option_processors = collections.defaultdict(lambda: _cb_option_unknown,
-                                                {'hide': _cb_option_hide,
+                                                {'complete': _cb_option_bool,
+                                                 'hide': _cb_option_hide,
                                                  'example': _cb_option_bool,
                                                  'first_number': _cb_option_first_number,
                                                  'label': _cb_option_label,
                                                  'lang': _cb_option_str,
                                                  'line_numbers': _cb_option_bool,
+                                                 'outside_main': _cb_option_bool,
                                                  'session': _cb_option_str,
                                                  'show': _cb_option_show})
 
@@ -144,13 +146,17 @@ _cb_default_show_options = collections.defaultdict(lambda: ODict(),
                                                     ('run', False): ODict([('stdout', 'raw'),
                                                                            ('stderr', 'verbatim')])})
 
-_cb_default_block_options = {'example': False,
+_cb_default_block_options = {'complete': True,
+                             'example': False,
                              'first_number': 'next',
                              'lang': None,
                              'line_numbers': True,
+                             'outside_main': False,
                              'session': None}
-_cb_default_inline_options = {'example': False,
+_cb_default_inline_options = {'complete': True,
+                              'example': False,
                               'lang': None,
+                              'outside_main': False,
                               'session': None}
 
 
@@ -199,6 +205,12 @@ class CodeChunk(object):
         final_options['show'] = self._default_show[(command, inline)].copy()
         for k, v in options.items():
             self._option_processors[k](self, k, v, final_options)
+        if not final_options['complete'] and inline and command in ('expr', 'nb'):
+            self.source_errors.append('Option "complete" value "false" is incompatible with inline expressions')
+        if final_options['outside_main']:
+            if options.get('complete', False):
+                self.source_errors.append('Option "complete" value "true" is incompatible with "outside_main" value "true"')
+            final_options['complete'] = False
         self.options = final_options
 
         self.session_index = None

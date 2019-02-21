@@ -134,7 +134,8 @@ def _pandoc_kv_line_numbers(code_chunk, key, value, options):
         options['line_numbers'] = value
 
 _pandoc_kv_processors = collections.defaultdict(lambda: _pandoc_kv_generic,
-                                                {'example': _pandoc_kv_bool,
+                                                {'complete': _pandoc_kv_bool,
+                                                 'example': _pandoc_kv_bool,
                                                  'first_number': _pandoc_kv_first_number,
                                                  'startFrom': _pandoc_kv_first_number,
                                                  'start-from': _pandoc_kv_first_number,
@@ -147,7 +148,8 @@ _pandoc_kv_processors = collections.defaultdict(lambda: _pandoc_kv_generic,
                                                  'line_numbers': _pandoc_kv_line_numbers,
                                                  'numberLines': _pandoc_kv_line_numbers,
                                                  'number-lines': _pandoc_kv_line_numbers,
-                                                 'number_lines': _pandoc_kv_line_numbers})
+                                                 'number_lines': _pandoc_kv_line_numbers,
+                                                 'outside_main': _pandoc_kv_bool})
 
 
 
@@ -632,9 +634,9 @@ class PandocConverter(Converter):
             if isinstance(input_paths, pathlib.Path) and input_name is None:
                 input_name = input_paths.as_posix()
             if input_name is None:
-                msg = 'Failed to run Pandoc:\n{0}'.format(e.stdout)
+                msg = 'Failed to run Pandoc:\n{0}'.format(e.stdout.decode('utf8'))
             else:
-                msg = 'Failed to run Pandoc on source {0}:\n{1}'.format(input_name, e)
+                msg = 'Failed to run Pandoc on source {0}:\n{1}'.format(input_name, e.stdout.decode('utf8'))
             raise PandocError(msg)
         if not decode_output:
             return (proc.stdout, proc.stderr)
@@ -932,25 +934,29 @@ class PandocConverter(Converter):
                     para_plain_source_name_node_line_number.append((source_name, para_plain_node, line_number))
                     para_plain_node = None
             elif node_type in ('Code', 'RawInline'):
-                node_contents = node['c'][1]
-                last_line_index = line_index
-                line_index = line.find(node_contents, line_index)
-                if line_index >= 0:
-                    line_index += len(node_contents)
-                else:
-                    line_index = last_line_index
-                    for node_contents_elem in node_contents.split(' '):
-                        line_index = line.find(node_contents_elem, line_index)
-                        if line_index >= 0:
-                            line_index += len(node_contents_elem)
-                        else:
-                            source_name, line, line_number = next(source_name_line_and_number_iter)
-                            line_index = line.find(node_contents_elem)
-                            if line_index < 0:
-                                while line_index < 0:
-                                    source_name, line, line_number = next(source_name_line_and_number_iter)
-                                    line_index = line.find(node_contents_elem)
-                            line_index += len(node_contents_elem)
+                if node_type == 'Code' or node['c'][0].lower() != 'html':
+                    # Long HTML comments can produce situations in which
+                    # searching fails.  This is likely related to the HTML
+                    # RawBlock issue.
+                    node_contents = node['c'][1]
+                    last_line_index = line_index
+                    line_index = line.find(node_contents, line_index)
+                    if line_index >= 0:
+                        line_index += len(node_contents)
+                    else:
+                        line_index = last_line_index
+                        for node_contents_elem in node_contents.split(' '):
+                            line_index = line.find(node_contents_elem, line_index)
+                            if line_index >= 0:
+                                line_index += len(node_contents_elem)
+                            else:
+                                source_name, line, line_number = next(source_name_line_and_number_iter)
+                                line_index = line.find(node_contents_elem)
+                                if line_index < 0:
+                                    while line_index < 0:
+                                        source_name, line, line_number = next(source_name_line_and_number_iter)
+                                        line_index = line.find(node_contents_elem)
+                                line_index += len(node_contents_elem)
                 if node_type == 'Code':
                     if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb.*' in classes
                         code_chunk = PandocCodeChunk(node, parent_node_list, parent_node_list_index,
@@ -986,6 +992,7 @@ class PandocConverter(Converter):
                 # guarantees that multiple empty `node_contents_line` won't
                 # keep matching the same `line`.
                 node_format, node_contents = node['c']
+                node_format = node_format.lower()
                 if node_format == 'html':
                     if node_contents == '<!--codebraid.eof-->':
                         node['t'] = 'Null'
