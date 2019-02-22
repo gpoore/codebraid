@@ -1,0 +1,249 @@
+---
+title: "Codebraid with Rust"
+---
+
+
+## Introduction
+
+Codebraid with Rust is slightly different than using some other languages.
+With a language like Python or Julia, it makes sense that you can just run
+the code in code blocks or inline code.  But with Rust, what about `main()`?
+
+By default, all executed code is inserted into a `main()` template like this:
+```rust
+#![allow(unused)]
+fn main() {
+    use std::fmt::Write as FmtWrite;
+    use std::io::Write as IoWrite;
+    <code>
+}
+```
+The template allows you to start running code without explicitly defining
+`main()`.  In some situations, though, it will be useful to define
+`main()` explicitly or otherwise have complete control over what is executed.
+For those situations, see [Advanced features](#advanced).
+
+
+## Inline code
+
+
+### Run
+
+Inline code with `.cb.run` gives raw stdout.
+
+`println!("{}", 1 + 2);`{.rust .cb.run example=true}
+
+
+### Expression and inline notebook
+
+Inline code with `.cb.expr` and `.cb.nb` (`nb` is short for `notebook`)
+evaluate an expression and then insert the raw output into the document, where
+it is interpreted as Markdown.  Notice that since these are expressions, a
+trailing semicolon must not be used.  This is only compatible with expressions
+that return Rust types implementing the `Display` trait.
+
+`(1..1000).map(|x| x*x).sum::<i32>()`{.rust .cb.expr example=true}
+
+`format!("*{}*", (1..1000).sum::<i32>())`{.rust .cb.nb example=true}
+
+If you need to work with an expression that returns a type without the
+`Display` trait, simply use `format!` with the `Debug` trait (`"{:?}"`, or
+`"{:#?}"` for pretty-print) to convert to a string manually.  Since the string
+implements `Display`, everything works:
+
+`format!("{:?}", ())`{.rust .cb.expr example=true}
+
+
+
+### Stderr
+
+In the event of a compilation error, inline code automatically shows stderr
+by default.  This code is compiled in its own session, `inline_error`, so that
+it does not impact other examples.
+
+`1 + "a";`{.rust .cb.run session=inline_error example=true}
+
+
+### Source errors
+
+A message is also displayed for errors in the Markdown source.  This usually
+includes the name of the document source and the approximate line number.
+
+`println!("{}", 1 + 2);`{.rus .cb.run session=inline_source_error example=true}
+
+
+
+## Block code
+
+
+### Run
+
+Code blocks with `.cb.run` give raw stdout.  There is continuity between code
+blocks so long as they are in the same session; variables persist.
+
+
+```{.rust .cb.run session=hello example=true}
+let x = "Hello from *Rust!*";
+```
+
+```{.rust .cb.run session=hello example=true}
+println!("{}", x);
+```
+
+
+
+### Notebook
+
+Code blocks with `.cb.nb` show the code and also the verbatim stdout.
+
+```{.rust .cb.nb session=loop example=true}
+fn pows_of_two(start: u32, end: u32) {
+    let n: i32 = 2;
+    for x in start..end {
+        if x == end - 1 {
+            println!("{}", n.pow(x));
+        }
+        else {
+            print!("{}, ", n.pow(x));
+        }
+    }
+}
+pows_of_two(1, 9);
+pows_of_two(1, 17);
+```
+
+
+### Stderr
+
+Code blocks automatically show compilation errors by default.  Errors are
+synchronized with code blocks so that they appear next to the correct code
+blocks.
+
+The first code block in this session is valid, so no compilation error is
+shown.
+
+```{.rust .cb.nb session=block_error example=true}
+let number = 123;
+let letter = "a";
+```
+
+The next code block in this sesssion produces a compilation error.  The error
+message appears automatically, with line numbers that correctly correspond to
+the code.  This last point is important.  Remember that by default, Codebraid
+inserts Rust code into an implicit `main()` function, so the line numbers of
+what is compiled typically do not correspond to those of the code entered by
+the user.
+
+```{.rust .cb.nb session=block_error example=true}
+number += 1;
+number += letter;
+```
+
+
+
+### Source errors
+
+A message is also displayed for errors in the Markdown source.  This usually
+includes the name of the document source and the approximate line number.
+
+```{.rust .cb.ruuun session=block_source_error example=true}
+println!("{}", 1 + 2);
+```
+
+
+## Other options
+
+By default, stdout and stderr are only shown if they are non-empty.  In some
+situations, it may be useful to represent empty output visually as
+confirmation that there indeed was none.
+
+```{.rust .cb.run show=code+stdout+stderr:verbatim_or_empty example=true}
+let x = 1 + 2;
+```
+
+It is also possible to selectively hide output from a code chunk.
+
+```{.rust .cb.nb hide=stdout example=true}
+println!("{}", x);
+```
+
+`hide` takes any combination of `code`, `stderr`, and `stdout`, or simply
+`all`.
+
+
+
+## Advanced features {#advanced}
+
+
+### `outside_main`
+
+By default, all executed code is inserted into a `main()` template.  It is
+possible to create your own `main()` or functions outside `main()` using
+the code chunk keyword `outside_main`.  If a session *starts* with one or more
+code chunks with `outside_main=true`, these are used instead of the beginning
+of the `main()` template.  Similarly, if a session *ends* with one or more
+code chunks with `outside_main=true`, these are used instead of the end of the
+`main()` template.  If there are any code chunks in between that lack
+`outside_main` (that is, default `outside_main=false`), then these will have
+their stdout collected on a per-chunk basis like normal.  Having code chunks
+that lack `outside_main` is not required; if there are none, the total
+accumulated stdout for a session belongs to the last code chunk in the session
+and can be controlled by modifying the `show` settings for that chunk.
+
+For example, it is possible to overwrite the `main()` template with a single,
+self-contained code block.  This is useful when the code is short enough that
+splitting it up into separate chunks, each with its associated stdout, is not
+necessary.
+
+```{.rust .cb.nb outside_main=true session=no_main_template_single_chunk example=true}
+fn main() {
+    use std::fmt::Write as FmtWrite;
+    use std::io::Write as IoWrite;
+    println!("Hello from Rust!");
+}
+```
+
+Here is the same example, but broken up into multiple code chunks so that the
+stdout is more closely associated with the code that produced it.
+
+```{.rust .cb.nb outside_main=true session=no_main_template example=true}
+fn main() {
+    use std::fmt::Write as FmtWrite;
+    use std::io::Write as IoWrite;
+```
+
+```{.rust .cb.nb session=no_main_template example=true}
+    println!("Hello from Rust!");
+```
+
+```{.rust .cb.nb outside_main=true session=no_main_template example=true}
+}
+```
+
+
+### `complete`
+
+By default, a code chunk must contain a complete unit of code.  A function
+definition, loop, or expression cannot be split between multiple chunks (with
+the exception of code chunks with `outside_main=True`).  The code chunk
+keyword `complete` allows code chunks that do not contain a complete unit of
+code.
+
+```{.rust .cb.nb session=split complete=false example=true}
+fn pows_of_two(start: u32, end: u32) {
+    let n: i32 = 2;
+    for x in start..end {
+```
+
+```{.rust .cb.nb session=split example=true}
+        if x == end - 1 {
+            println!("{}", n.pow(x));
+        }
+        else {
+            print!("{}, ", n.pow(x));
+        }
+    }
+}
+pows_of_two(1, 9);
+```
+

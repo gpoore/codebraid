@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Codebraid with Rust</title>
+  <style>
+      code{white-space: pre-wrap;}
+      span.smallcaps{font-variant: small-caps;}
+      span.underline{text-decoration: underline;}
+      div.column{display: inline-block; vertical-align: top; width: 50%;}
+  </style>
+  <style>
+a.sourceLine { display: inline-block; line-height: 1.25; }
+a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
+a.sourceLine:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode { white-space: pre; position: relative; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+code.sourceCode { white-space: pre-wrap; }
+a.sourceLine { text-indent: -1em; padding-left: 1em; }
+}
+pre.numberSource a.sourceLine
+  { position: relative; left: -4em; }
+pre.numberSource a.sourceLine::before
+  { content: attr(title);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; pointer-events: all; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {  }
+@media screen {
+a.sourceLine::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <style type="text/css">body {display: block;text-align: left;max-width: 40rem;padding-left: 0.5rem;padding-right: 0.5rem;margin: auto;}pre.numberSource a.sourceLine {position: relative;left: -3em;}pre.numberSource a.sourceLine::before{content: attr(title);position: relative;left: -1em;text-align: right;vertical-align: baseline;border: none;pointer-events: all;display: inline-block;-webkit-touch-callout: none;-webkit-user-select: none;-khtml-user-select: none;-moz-user-select: none;-ms-user-select: none;user-select: none;padding: 0 4px;width: 3em;color: #aaaaaa;}pre.numberSource {margin-left: 2em;border-left: 1px solid #aaaaaa;padding-left: 4px;}div.exampleMarkup:before{content: "Markdown";font-family: monospace;display: block;height: 2em;font-size: 150%;}div.exampleMarkup {padding-top: 0.5em;padding-left: 0.5em;padding-right: 0.5em;margin-top: 2em;margin-bottom: 1em;background-color: honeydew;border-style: solid;border-width: 1px;border-color: limegreen;border-radius: 0.2em;}div.exampleOutput:before{content: "Output";font-family: monospace;display: block;font-size: 150%;}div.exampleOutput {color: black;padding-top: 0.5em;padding-left: 0.5em;padding-right: 0.5em;margin-top: 1em;margin-bottom: 2em;background-color: whitesmoke;border-style: solid;border-width: 1px;border-color: lightgray;border-radius: 0.2em;}div.sourceCode {padding: 0.5em;background-color: aliceblue;border-style: solid;border-width: 1px;border-color: lightskyblue;border-radius: 0.2em;}div.exampleOutput div.sourceCode:before{content: "code";font-family: monospace;display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stdout:before{content: "stdout";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stdout {color: black;padding: 0.5em;background-color: azure;border-style: solid;border-width: 1px;border-color: turquoise;border-radius: 0.2em;padding-left: 0.5em;}code.stdout {color: black;background-color: azure;border-style: solid;border-width: 1px;border-color: turquoise;}pre.stderr:before{content: "stderr";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stderr {color: red;padding: 0.5em;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;border-radius: 0.2em;padding-left: 0.5em;}code.stderr {color: red;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;}pre.sourceError:before{content: "Source error";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.sourceError {color: red;padding: 0.5em;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;border-radius: 0.2em;padding-left: 0.5em;}code.sourceError {color: red;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;}</style>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Codebraid with Rust</h1>
+</header>
+<h2 id="introduction">Introduction</h2>
+<p>Codebraid with Rust is slightly different than using some other languages. With a language like Python or Julia, it makes sense that you can just run the code in code blocks or inline code. But with Rust, what about <code>main()</code>?</p>
+<p>By default, all executed code is inserted into a <code>main()</code> template like this:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode rust"><code class="sourceCode rust"><a class="sourceLine" id="cb1-1" title="1"><span class="at">#![</span>allow<span class="at">(</span>unused<span class="at">)]</span></a>
+<a class="sourceLine" id="cb1-2" title="2"><span class="kw">fn</span> main() <span class="op">{</span></a>
+<a class="sourceLine" id="cb1-3" title="3">    <span class="kw">use</span> <span class="pp">std::fmt::</span>Write <span class="kw">as</span> FmtWrite;</a>
+<a class="sourceLine" id="cb1-4" title="4">    <span class="kw">use</span> <span class="pp">std::io::</span>Write <span class="kw">as</span> IoWrite;</a>
+<a class="sourceLine" id="cb1-5" title="5">    &lt;code&gt;</a>
+<a class="sourceLine" id="cb1-6" title="6"><span class="op">}</span></a></code></pre></div>
+<p>The template allows you to start running code without explicitly defining <code>main()</code>. In some situations, though, it will be useful to define <code>main()</code> explicitly or otherwise have complete control over what is executed. For those situations, see <a href="#advanced">Advanced features</a>.</p>
+<h2 id="inline-code">Inline code</h2>
+<h3 id="run">Run</h3>
+<p>Inline code with <code>.cb.run</code> gives raw stdout.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`println!(&quot;{}&quot;, 1 + 2);`{.rust .cb.run}</code></pre>
+</div>
+<div class="exampleOutput">
+<p>3</p>
+</div>
+</div>
+<h3 id="expression-and-inline-notebook">Expression and inline notebook</h3>
+<p>Inline code with <code>.cb.expr</code> and <code>.cb.nb</code> (<code>nb</code> is short for <code>notebook</code>) evaluate an expression and then insert the raw output into the document, where it is interpreted as Markdown. Notice that since these are expressions, a trailing semicolon must not be used. This is only compatible with expressions that return Rust types implementing the <code>Display</code> trait.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`(1..1000).map(|x| x*x).sum::&lt;i32&gt;()`{.rust .cb.expr}</code></pre>
+</div>
+<div class="exampleOutput">
+<p>332833500</p>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`format!(&quot;*{}*&quot;, (1..1000).sum::&lt;i32&gt;())`{.rust .cb.nb}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><em>499500</em></p>
+</div>
+</div>
+<p>If you need to work with an expression that returns a type without the <code>Display</code> trait, simply use <code>format!</code> with the <code>Debug</code> trait (<code>&quot;{:?}&quot;</code>, or <code>&quot;{:#?}&quot;</code> for pretty-print) to convert to a string manually. Since the string implements <code>Display</code>, everything works:</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`format!(&quot;{:?}&quot;, ())`{.rust .cb.expr}</code></pre>
+</div>
+<div class="exampleOutput">
+<p>()</p>
+</div>
+</div>
+<h3 id="stderr">Stderr</h3>
+<p>In the event of a compilation error, inline code automatically shows stderr by default. This code is compiled in its own session, <code>inline_error</code>, so that it does not impact other examples.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`1 + &quot;a&quot;;`{.rust .cb.run session=inline_error}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="stderr">error[E0277]: cannot add `&amp;str` to `{integer}`  --&gt; &lt;string&gt;:1:3   | 1 | 1 + &quot;a&quot;;   |   ^ no implementation for `{integer} + &amp;str`   |   = help: the trait `std::ops::Add&lt;&amp;str&gt;` is not implemented for `{integer}`  error: aborting due to previous error  For more information about this error, try `rustc --explain E0277`.</code></p>
+</div>
+</div>
+<h3 id="source-errors">Source errors</h3>
+<p>A message is also displayed for errors in the Markdown source. This usually includes the name of the document source and the approximate line number.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`println!(&quot;{}&quot;, 1 + 2);`{.rus .cb.run session=inline_source_error}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="sourceError">SOURCE ERROR in &quot;rust.cbmd&quot; near line 72: Language definition for &quot;rus&quot; does not exist, or is not indexed</code></p>
+</div>
+</div>
+<h2 id="block-code">Block code</h2>
+<h3 id="run-1">Run</h3>
+<p>Code blocks with <code>.cb.run</code> give raw stdout. There is continuity between code blocks so long as they are in the same session; variables persist.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.run session=hello}
+let x = &quot;Hello from *Rust!*&quot;;
+```</code></pre>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.run session=hello}
+println!(&quot;{}&quot;, x);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<p>Hello from <em>Rust!</em></p>
+</div>
+</div>
+<h3 id="notebook">Notebook</h3>
+<p>Code blocks with <code>.cb.nb</code> show the code and also the verbatim stdout.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.nb session=loop}
+fn pows_of_two(start: u32, end: u32) {
+    let n: i32 = 2;
+    for x in start..end {
+        if x == end - 1 {
+            println!(&quot;{}&quot;, n.pow(x));
+        }
+        else {
+            print!(&quot;{}, &quot;, n.pow(x));
+        }
+    }
+}
+pows_of_two(1, 9);
+pows_of_two(1, 17);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb11" data-startFrom="1"><pre class="sourceCode numberSource rust numberLines"><code class="sourceCode rust"><a class="sourceLine" id="cb11-1" title="1"><span class="kw">fn</span> pows_of_two(start: <span class="dt">u32</span>, end: <span class="dt">u32</span>) <span class="op">{</span></a>
+<a class="sourceLine" id="cb11-2" title="2">    <span class="kw">let</span> n: <span class="dt">i32</span> = <span class="dv">2</span>;</a>
+<a class="sourceLine" id="cb11-3" title="3">    <span class="kw">for</span> x <span class="kw">in</span> start..end <span class="op">{</span></a>
+<a class="sourceLine" id="cb11-4" title="4">        <span class="kw">if</span> x == end - <span class="dv">1</span> <span class="op">{</span></a>
+<a class="sourceLine" id="cb11-5" title="5">            <span class="pp">println!</span>(<span class="st">&quot;{}&quot;</span>, n.pow(x));</a>
+<a class="sourceLine" id="cb11-6" title="6">        <span class="op">}</span></a>
+<a class="sourceLine" id="cb11-7" title="7">        <span class="kw">else</span> <span class="op">{</span></a>
+<a class="sourceLine" id="cb11-8" title="8">            <span class="pp">print!</span>(<span class="st">&quot;{}, &quot;</span>, n.pow(x));</a>
+<a class="sourceLine" id="cb11-9" title="9">        <span class="op">}</span></a>
+<a class="sourceLine" id="cb11-10" title="10">    <span class="op">}</span></a>
+<a class="sourceLine" id="cb11-11" title="11"><span class="op">}</span></a>
+<a class="sourceLine" id="cb11-12" title="12">pows_of_two(<span class="dv">1</span>, <span class="dv">9</span>);</a>
+<a class="sourceLine" id="cb11-13" title="13">pows_of_two(<span class="dv">1</span>, <span class="dv">17</span>);</a></code></pre></div>
+<pre class="stdout"><code>2, 4, 8, 16, 32, 64, 128, 256
+2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536</code></pre>
+</div>
+</div>
+<h3 id="stderr-1">Stderr</h3>
+<p>Code blocks automatically show compilation errors by default. Errors are synchronized with code blocks so that they appear next to the correct code blocks.</p>
+<p>The first code block in this session is valid, so no compilation error is shown.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.nb session=block_error}
+let number = 123;
+let letter = &quot;a&quot;;
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb14" data-startFrom="1"><pre class="sourceCode numberSource rust numberLines"><code class="sourceCode rust"><a class="sourceLine" id="cb14-1" title="1"><span class="kw">let</span> number = <span class="dv">123</span>;</a>
+<a class="sourceLine" id="cb14-2" title="2"><span class="kw">let</span> letter = <span class="st">&quot;a&quot;</span>;</a></code></pre></div>
+</div>
+</div>
+<p>The next code block in this sesssion produces a compilation error. The error message appears automatically, with line numbers that correctly correspond to the code. This last point is important. Remember that by default, Codebraid inserts Rust code into an implicit <code>main()</code> function, so the line numbers of what is compiled typically do not correspond to those of the code entered by the user.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.nb session=block_error}
+number += 1;
+number += letter;
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb16" data-startFrom="3"><pre class="sourceCode numberSource rust numberLines"><code class="sourceCode rust"><a class="sourceLine" id="cb16-3" title="3">number += <span class="dv">1</span>;</a>
+<a class="sourceLine" id="cb16-4" title="4">number += letter;</a></code></pre></div>
+<pre class="stderr"><code>error[E0277]: cannot add-assign `&amp;str` to `{integer}`
+  --&gt; source.rs:4:8
+   |
+ 4 | number += letter;
+   |        ^^ no implementation for `{integer} += &amp;str`
+   |
+   = help: the trait `std::ops::AddAssign&lt;&amp;str&gt;` is not implemented for `{integer}`
+
+error: aborting due to previous error
+
+For more information about this error, try `rustc --explain E0277`.</code></pre>
+</div>
+</div>
+<h3 id="source-errors-1">Source errors</h3>
+<p>A message is also displayed for errors in the Markdown source. This usually includes the name of the document source and the approximate line number.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.ruuun session=block_source_error}
+println!(&quot;{}&quot;, 1 + 2);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<pre class="sourceError"><code>SOURCE ERROR in &quot;rust.cbmd&quot; near line 150:
+Unknown or unsupported Codebraid command &quot;cb.ruuun&quot;
+Missing valid Codebraid command</code></pre>
+</div>
+</div>
+<h2 id="other-options">Other options</h2>
+<p>By default, stdout and stderr are only shown if they are non-empty. In some situations, it may be useful to represent empty output visually as confirmation that there indeed was none.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.run show=code+stdout+stderr:verbatim_or_empty}
+let x = 1 + 2;
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb21" data-startFrom="1"><pre class="sourceCode numberSource rust numberLines"><code class="sourceCode rust"><a class="sourceLine" id="cb21-1" title="1"><span class="kw">let</span> x = <span class="dv">1</span> + <span class="dv">2</span>;</a></code></pre></div>
+<pre class="stderr"><code> </code></pre>
+</div>
+</div>
+<p>It is also possible to selectively hide output from a code chunk.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.nb hide=stdout}
+println!(&quot;{}&quot;, x);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb24" data-startFrom="2"><pre class="sourceCode numberSource rust numberLines"><code class="sourceCode rust"><a class="sourceLine" id="cb24-2" title="2"><span class="pp">println!</span>(<span class="st">&quot;{}&quot;</span>, x);</a></code></pre></div>
+</div>
+</div>
+<p><code>hide</code> takes any combination of <code>code</code>, <code>stderr</code>, and <code>stdout</code>, or simply <code>all</code>.</p>
+<h2 id="advanced">Advanced features</h2>
+<h3 id="outside_main"><code>outside_main</code></h3>
+<p>By default, all executed code is inserted into a <code>main()</code> template. It is possible to create your own <code>main()</code> or functions outside <code>main()</code> using the code chunk keyword <code>outside_main</code>. If a session <em>starts</em> with one or more code chunks with <code>outside_main=true</code>, these are used instead of the beginning of the <code>main()</code> template. Similarly, if a session <em>ends</em> with one or more code chunks with <code>outside_main=true</code>, these are used instead of the end of the <code>main()</code> template. If there are any code chunks in between that lack <code>outside_main</code> (that is, default <code>outside_main=false</code>), then these will have their stdout collected on a per-chunk basis like normal. Having code chunks that lack <code>outside_main</code> is not required; if there are none, the total accumulated stdout for a session belongs to the last code chunk in the session and can be controlled by modifying the <code>show</code> settings for that chunk.</p>
+<p>For example, it is possible to overwrite the <code>main()</code> template with a single, self-contained code block. This is useful when the code is short enough that splitting it up into separate chunks, each with its associated stdout, is not necessary.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.nb outside_main=true session=no_main_template_single_chunk}
+fn main() {
+    use std::fmt::Write as FmtWrite;
+    use std::io::Write as IoWrite;
+    println!(&quot;Hello from Rust!&quot;);
+}
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb26" data-startFrom="1"><pre class="sourceCode numberSource rust numberLines"><code class="sourceCode rust"><a class="sourceLine" id="cb26-1" title="1"><span class="kw">fn</span> main() <span class="op">{</span></a>
+<a class="sourceLine" id="cb26-2" title="2">    <span class="kw">use</span> <span class="pp">std::fmt::</span>Write <span class="kw">as</span> FmtWrite;</a>
+<a class="sourceLine" id="cb26-3" title="3">    <span class="kw">use</span> <span class="pp">std::io::</span>Write <span class="kw">as</span> IoWrite;</a>
+<a class="sourceLine" id="cb26-4" title="4">    <span class="pp">println!</span>(<span class="st">&quot;Hello from Rust!&quot;</span>);</a>
+<a class="sourceLine" id="cb26-5" title="5"><span class="op">}</span></a></code></pre></div>
+<pre class="stdout"><code>Hello from Rust!</code></pre>
+</div>
+</div>
+<p>Here is the same example, but broken up into multiple code chunks so that the stdout is more closely associated with the code that produced it.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.nb outside_main=true session=no_main_template}
+fn main() {
+    use std::fmt::Write as FmtWrite;
+    use std::io::Write as IoWrite;
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb29" data-startFrom="1"><pre class="sourceCode numberSource rust numberLines"><code class="sourceCode rust"><a class="sourceLine" id="cb29-1" title="1"><span class="kw">fn</span> main() <span class="op">{</span></a>
+<a class="sourceLine" id="cb29-2" title="2">    <span class="kw">use</span> <span class="pp">std::fmt::</span>Write <span class="kw">as</span> FmtWrite;</a>
+<a class="sourceLine" id="cb29-3" title="3">    <span class="kw">use</span> <span class="pp">std::io::</span>Write <span class="kw">as</span> IoWrite;</a></code></pre></div>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.nb session=no_main_template}
+    println!(&quot;Hello from Rust!&quot;);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb31" data-startFrom="4"><pre class="sourceCode numberSource rust numberLines"><code class="sourceCode rust"><a class="sourceLine" id="cb31-4" title="4">    <span class="pp">println!</span>(<span class="st">&quot;Hello from Rust!&quot;</span>);</a></code></pre></div>
+<pre class="stdout"><code>Hello from Rust!</code></pre>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.nb outside_main=true session=no_main_template}
+}
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb34" data-startFrom="5"><pre class="sourceCode numberSource rust numberLines"><code class="sourceCode rust"><a class="sourceLine" id="cb34-5" title="5"><span class="op">}</span></a></code></pre></div>
+</div>
+</div>
+<h3 id="complete"><code>complete</code></h3>
+<p>By default, a code chunk must contain a complete unit of code. A function definition, loop, or expression cannot be split between multiple chunks (with the exception of code chunks with <code>outside_main=True</code>). The code chunk keyword <code>complete</code> allows code chunks that do not contain a complete unit of code.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.nb session=split complete=false}
+fn pows_of_two(start: u32, end: u32) {
+    let n: i32 = 2;
+    for x in start..end {
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb36" data-startFrom="1"><pre class="sourceCode numberSource rust numberLines"><code class="sourceCode rust"><a class="sourceLine" id="cb36-1" title="1"><span class="kw">fn</span> pows_of_two(start: <span class="dt">u32</span>, end: <span class="dt">u32</span>) <span class="op">{</span></a>
+<a class="sourceLine" id="cb36-2" title="2">    <span class="kw">let</span> n: <span class="dt">i32</span> = <span class="dv">2</span>;</a>
+<a class="sourceLine" id="cb36-3" title="3">    <span class="kw">for</span> x <span class="kw">in</span> start..end <span class="op">{</span></a></code></pre></div>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.rust .cb.nb session=split}
+        if x == end - 1 {
+            println!(&quot;{}&quot;, n.pow(x));
+        }
+        else {
+            print!(&quot;{}, &quot;, n.pow(x));
+        }
+    }
+}
+pows_of_two(1, 9);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb38" data-startFrom="4"><pre class="sourceCode numberSource rust numberLines"><code class="sourceCode rust"><a class="sourceLine" id="cb38-4" title="4">        <span class="kw">if</span> x == end - <span class="dv">1</span> <span class="op">{</span></a>
+<a class="sourceLine" id="cb38-5" title="5">            <span class="pp">println!</span>(<span class="st">&quot;{}&quot;</span>, n.pow(x));</a>
+<a class="sourceLine" id="cb38-6" title="6">        <span class="op">}</span></a>
+<a class="sourceLine" id="cb38-7" title="7">        <span class="kw">else</span> <span class="op">{</span></a>
+<a class="sourceLine" id="cb38-8" title="8">            <span class="pp">print!</span>(<span class="st">&quot;{}, &quot;</span>, n.pow(x));</a>
+<a class="sourceLine" id="cb38-9" title="9">        <span class="op">}</span></a>
+<a class="sourceLine" id="cb38-10" title="10">    <span class="op">}</span></a>
+<a class="sourceLine" id="cb38-11" title="11"><span class="op">}</span></a>
+<a class="sourceLine" id="cb38-12" title="12">pows_of_two(<span class="dv">1</span>, <span class="dv">9</span>);</a></code></pre></div>
+<pre class="stdout"><code>2, 4, 8, 16, 32, 64, 128, 256</code></pre>
+</div>
+</div>
+</body>
+</html>
