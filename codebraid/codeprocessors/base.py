@@ -31,6 +31,21 @@ from ..version import __version__ as codebraid_version
 
 
 
+class FailedProcess(object):
+    '''
+    Represent a failed `subprocess.run()` with an object analogous to
+    CompletedProcess.  This allows FileNotFoundError to be handled just like
+    other errors that do produce a CompletedProcess.
+    '''
+    def __init__(self, args, stderr=None, stdout=None):
+        self.returncode = 1
+        self.args = args
+        self.stderr = stderr
+        self.stdout = stdout
+
+
+
+
 class Language(object):
     '''
     Process language definition and insert default values.
@@ -66,8 +81,7 @@ class Language(object):
             if not isinstance(post_run_commands, list):
                 post_run_commands = [post_run_commands]
             self.post_run_commands = post_run_commands
-            self.source_start = definition.pop('source_start', '')
-            self.source_end = definition.pop('source_end', '')
+            self.source_template = definition.pop('source_template', '{code}\n')
             self.chunk_wrapper = definition.pop('chunk_wrapper')
             self.inline_expression_formatter = definition.pop('inline_expression_formatter')
             error_patterns = definition.pop('error_patterns')
@@ -91,7 +105,7 @@ class Language(object):
         re_patterns = []
         for lnp in line_number_patterns:
            re_patterns.append(r'(\d+)'.join(re.escape(x) for x in lnp.split('{number}')))
-        self.line_number_pattern_re = re.compile('({0})'.format('|'.join(re_patterns)))
+        self.line_number_pattern_re = re.compile('(?:{0})'.format('|'.join(re_patterns)))
         if self.line_number_regex is None:
             self.line_number_regex_re = None
         else:
@@ -110,6 +124,10 @@ class Session(object):
     def __init__(self, session_key):
         self.lang = session_key[0]
         self.name = session_key[1]
+        if self.name is None:
+            self._name_escaped = 'none'
+        else:
+            self._name_escaped = '"{0}"'.format(self.name.replace('\\', '\\\\').replace('"', '\\"'))
         if len(session_key) == 2:
             self.source_name = None
         else:
@@ -122,7 +140,7 @@ class Session(object):
         self._code_start_line_number = 1
         self.source_error_chunks = []
         self.source_warning_chunks = []
-        self.pre_run_error = False
+        self.pre_run_errors = False
         self.pre_run_error_lines = None
         self.compile_errors = False
         self.run_errors = False
@@ -132,7 +150,7 @@ class Session(object):
         self.run_warnings = False
         self.run_warning_chunks = []
         self.run_warning_template_lines = None
-        self.post_run_error = False
+        self.post_run_errors = False
         self.post_run_error_lines = None
 
 
@@ -152,13 +170,53 @@ class Session(object):
         Perform tasks that must wait until all code chunks are present,
         such as hashing.
         '''
+        if self.code_chunks[0].options['outside_main']:
+            from_outside_main_switches = 0
+        else:
+            from_outside_main_switches = 1
+        to_outside_main_switches = 0
+        incomplete = []
+        last_cc = None
         for cc in self.code_chunks:
+            if last_cc is not None and last_cc.options['outside_main'] != cc.options['outside_main']:
+                if last_cc.options['outside_main']:
+                    from_outside_main_switches += 1
+                    if from_outside_main_switches > 1:
+                        cc.source_errors.append('Invalid "outside_main" value; cannot switch back yet again')
+                    for icc in incomplete:
+                        # When switching from `outside_main`, all accumulated
+                        # output belongs to the last code chunk `outside_main`
+                        icc.session_output_index = last_cc.session_index
+                    incomplete = []
+                else:
+                    if not last_cc.options['complete']:
+                        last_cc.source_errors.append('The last code chunk before switching to "outside_main" must have "complete" value "true"')
+                        if self.source_error_chunks and self.source_error_chunks[-1] is not last_cc:
+                            self.source_error_chunks.append(last_cc)
+                            self.errors = True
+                    to_outside_main_switches += 1
+                    if to_outside_main_switches > 1:
+                        cc.source_errors.append('Invalid "outside_main" value; cannot switch back yet again')
+            if cc.options['complete']:
+                cc.session_output_index = cc.session_index
+                if incomplete:
+                    for icc in incomplete:
+                        icc.session_output_index = cc.session_index
+                    incomplete = []
+            else:
+                incomplete.append(cc)
             if cc.source_errors:
                 self.source_error_chunks.append(cc)
                 self.errors = True
             if cc.source_warnings:
                 self.source_warning_chunks.append(cc)
                 self.warnings = True
+            last_cc = cc
+        if incomplete:
+            # Last code chunk gets all accumulated output.  Last code chunk
+            # could be `outside_main`, or `complete=false`.
+            for icc in incomplete:
+                icc.session_output_index = last_cc.session_index
 
         if hash_alg is None:
             h = hashlib.blake2b()
@@ -170,12 +228,20 @@ class Session(object):
         # Hash needs to depend on the language definition
         h.update(lang_def_bytes)
         h.update(h.digest())
+        # Hash needs to depend on session name to avoid the possibility of
+        # collisions.  Some options can cause sessions with identical code to
+        # produce output that is processed differently.  `complete` is an
+        # example (though it is explicitly incorporated into the hash).
+        h.update('{{session={0}}}'.format(self._name_escaped).encode('utf8'))
+        h.update(h.digest())
         for cc in self.code_chunks:
             # Hash needs to depend on some code chunk details.  `command`
             # determines some wrapper code, while `inline` affects line count
             # and error sync currently, and might also affect code in the
             # future.
-            h.update('{{command="{0}", inline={1}}}'.format(cc.command, str(cc.inline).lower()).encode('utf8'))
+            h.update('{{command="{0}", inline={1}, complete={2}}}'.format(cc.command,
+                                                                          str(cc.inline).lower(),
+                                                                          str(cc.options['complete']).lower()).encode('utf8'))
             h.update(h.digest())
             code_bytes = cc.code.encode('utf8')
             h.update(code_bytes)
@@ -314,10 +380,46 @@ class CodeProcessor(object):
         return cache
 
 
+    def _subproc(self, cmd, tmpdir_path, hash, stderr_is_stdout=False):
+        '''
+        Wrapper around `subprocess.run()` that provides a single location for
+        customizing handling.
+        '''
+        # Note that `shlex.split()` only works correctly on posix paths.  If
+        # it is ever necessary to switch to non-posix paths under Windows, the
+        # backslashes will require extra escaping.
+        args = shlex.split(cmd)
+        # When stdout and stderr are stored in files rather than accessed
+        # through pipes, the files are named using a session-derived hash as
+        # a precaution against code accessing them and against collisions.
+        stdout_path = tmpdir_path / '{0}.stdout'.format(hash)
+        stderr_path = tmpdir_path / '{0}.stderr'.format(hash)
+        if stderr_is_stdout:
+            with open(str(stdout_path), 'wb') as fout:
+                try:
+                    proc = subprocess.run(args, stdout=fout, stderr=subprocess.STDOUT)
+                except FileNotFoundError:
+                    proc = FailedProcess(args, stderr='COMMAND FAILED (missing program or file): {0}'.format(cmd))
+            if not isinstance(proc, FailedProcess):
+                proc.stdout = stdout_path.read_bytes()
+        else:
+            with open(str(stdout_path), 'wb') as fout:
+                with open(str(stderr_path), 'wb') as ferr:
+                    try:
+                        proc = subprocess.run(args, stdout=fout, stderr=ferr)
+                    except FileNotFoundError:
+                        proc = FailedProcess(args, stderr='COMMAND FAILED (missing program or file): {0}'.format(cmd))
+            if not isinstance(proc, FailedProcess):
+                proc.stdout = stdout_path.read_bytes()
+                proc.stderr = stderr_path.read_bytes()
+        return proc
+
+
     def _run(self, session):
         stdstream_delim_start = 'CodebraidStd'
-        stdstream_delim = r'{0}(hash="{1}")'.format(stdstream_delim_start, session.hash[:64])
+        stdstream_delim = r'{0}(hash="{1}", chunk={{}})'.format(stdstream_delim_start, session.hash[:64])
         stdstream_delim_escaped = stdstream_delim.replace('"', '\\"')
+        stdstream_delim_start_hash = stdstream_delim.split(',', 1)[0]
         expression_delim_start = 'CodebraidExpr'
         expression_delim = r'{0}(hash="{1}")'.format(expression_delim_start, session.hash[64:])
         expression_delim_escaped = expression_delim.replace('"', '\\"')
@@ -330,52 +432,68 @@ class CodeProcessor(object):
         # code chunks before the one that produced an error won't have
         # anything in stderr that belongs to them.
         run_code_to_user_code_dict = {}
-        chunk_wrapper_n_lines_before, chunk_wrapper_n_lines_after = [x.count('\n') for x in session.lang_def.chunk_wrapper.split('{code}')]
+        source_template_before, source_template_after = session.lang_def.source_template.split('{code}')
+        chunk_wrapper_before, chunk_wrapper_after = session.lang_def.chunk_wrapper.split('{code}')
+        chunk_wrapper_before_n_lines = chunk_wrapper_before.count('\n')
+        chunk_wrapper_after_n_lines = chunk_wrapper_after.count('\n')
         inline_expression_formatter_n_lines = session.lang_def.inline_expression_formatter.count('\n')
         inline_expression_formatter_n_leading_lines = session.lang_def.inline_expression_formatter.split('{code}')[0].count('\n')
 
-        run_code_list.append(session.lang_def.source_start.encode('utf8'))
-        run_code_line_number += session.lang_def.source_start.count('\n')
+        if not session.code_chunks[0].options['outside_main']:
+            run_code_list.append(source_template_before)
+            run_code_line_number += source_template_before.count('\n')
+        last_cc = None
         for cc in session.code_chunks:
-            run_code_line_number += chunk_wrapper_n_lines_before
+            delim = stdstream_delim_escaped.format(cc.session_output_index)
+            if last_cc is None:
+                if not cc.options['outside_main']:
+                    run_code_list.append(chunk_wrapper_before.format(stdoutdelim=delim, stderrdelim=delim))
+                    run_code_line_number += chunk_wrapper_before_n_lines
+            elif last_cc.options['complete']:
+                run_code_list.append(chunk_wrapper_after)
+                run_code_line_number += chunk_wrapper_after_n_lines
+                run_code_list.append(chunk_wrapper_before.format(stdoutdelim=delim, stderrdelim=delim))
+                run_code_line_number += chunk_wrapper_before_n_lines
+            elif last_cc.options['outside_main'] and not cc.options['outside_main']:
+                run_code_list.append(chunk_wrapper_before.format(stdoutdelim=delim, stderrdelim=delim))
+                run_code_line_number += chunk_wrapper_before_n_lines
             if cc.inline:
-                if cc.command == 'expr' or cc.command == 'nb':
-                    code = session.lang_def.inline_expression_formatter.format(stdoutdelim=expression_delim_escaped,
-                                                                               stderrdelim=expression_delim_escaped,
-                                                                               tempsuffix=session.tempsuffix,
-                                                                               code=cc.code)
+                # Only block code contributes toward line numbers.  No need to
+                # check expr compatibility with `complete`, etc.; that's
+                # handled in creating sessions.
+                if cc.is_expr:
+                    expr_code = session.lang_def.inline_expression_formatter.format(stdoutdelim=expression_delim_escaped,
+                                                                                    stderrdelim=expression_delim_escaped,
+                                                                                    tempsuffix=session.tempsuffix,
+                                                                                    code=cc.code)
+                    run_code_list.append(expr_code)
                     run_code_to_user_code_dict[run_code_line_number+inline_expression_formatter_n_leading_lines] = (cc, 1)
                     run_code_line_number += inline_expression_formatter_n_lines
                 else:
-                    code = cc.code
+                    run_code_list.append(cc.code)
+                    run_code_list.append('\n')
                     run_code_to_user_code_dict[run_code_line_number] = (cc, 1)
-                run_code = session.lang_def.chunk_wrapper.format(stdoutdelim=stdstream_delim_escaped,
-                                                                 stderrdelim=stdstream_delim_escaped,
-                                                                 code=code)
-
+                    run_code_line_number += 1
             else:
+                run_code_list.append(cc.code)
+                run_code_list.append('\n')
                 for _ in range(len(cc.code_lines)):
                     run_code_to_user_code_dict[run_code_line_number] = (cc, user_code_line_number)
                     user_code_line_number += 1
                     run_code_line_number += 1
-                run_code = session.lang_def.chunk_wrapper.format(stdoutdelim=stdstream_delim_escaped,
-                                                                 stderrdelim=stdstream_delim_escaped,
-                                                                 code=cc.code+'\n')
-            run_code_list.append(run_code.encode('utf8'))
-            run_code_line_number += chunk_wrapper_n_lines_after
-        run_code_list.append(session.lang_def.source_end.encode('utf8'))
+            last_cc = cc
+        if session.code_chunks[-1].options['complete']:
+            run_code_list.append(chunk_wrapper_after)
+        if not session.code_chunks[-1].options['outside_main']:
+            run_code_list.append(source_template_after)
 
         error = False
         with tempfile.TemporaryDirectory() as tempdir:
-            # Note that `shlex.split()` only works correctly on posix paths.
-            # If it is ever necessary to switch to non-posix paths under
-            # Windows, the backslashes will require extra escaping.
             source_dir_path = pathlib.Path(tempdir)
             source_path = source_dir_path / 'source.{0}'.format(session.lang_def.extension)
-            with open(str(source_path), 'wb') as f:
-                for x in run_code_list:
-                    f.write(x)
+            source_path.write_text(''.join(run_code_list), encoding='utf8')
 
+            # All paths use `.as_posix()` for `shlex.split()` compatibility
             template_dict = {'executable': session.lang_def.executable,
                              'extension': session.lang_def.extension,
                              'source': source_path.as_posix(),
@@ -385,86 +503,67 @@ class CodeProcessor(object):
             for cmd_template in session.lang_def.pre_run_commands:
                 if error:
                     break
-                cmd = cmd_template.format(**template_dict)
-
-                pre_proc = subprocess.run(shlex.split(cmd),
-                                          stdout=subprocess.PIPE,
-                                          stderr=subprocess.STDOUT,)
+                pre_proc = self._subproc(cmd_template.format(**template_dict), source_dir_path, session.hash_root, stderr_is_stdout=True)
                 if pre_proc.returncode != 0:
                     error = True
-                    session.pre_run_error = True
+                    session.pre_run_errors = True
                     encoding = session.lang_def.pre_run_encoding or locale.getpreferredencoding(False)
                     session.pre_run_error_lines = pre_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
 
             for cmd_template in session.lang_def.compile_commands:
                 if error:
                     break
-                cmd = cmd_template.format(**template_dict)
-                comp_proc = subprocess.run(shlex.split(cmd),
-                                           stdout=subprocess.PIPE,
-                                           stderr=subprocess.PIPE)
+                comp_proc = self._subproc(cmd_template.format(**template_dict), source_dir_path, session.hash_root, stderr_is_stdout=True)
                 if comp_proc.returncode != 0:
                     error = True
                     session.compile_errors = True
                     encoding = session.lang_def.compile_encoding or locale.getpreferredencoding(False)
-                    try:
-                        stdout_lines = comp_proc.stdout.decode(encoding).splitlines()
-                        stderr_lines = comp_proc.stderr.decode(encoding).splitlines()
-                    except UnicodeDecodeError:
-                        stdout_lines = comp_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
-                        stderr_lines = comp_proc.stderr.decode(encoding, errors='backslashreplace').splitlines()
+                    stdout_lines = []
+                    stderr_lines = comp_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
 
             if not error:
                 cmd_template = session.lang_def.run_command
-                cmd = cmd_template.format(**template_dict)
-
-                proc = subprocess.run(shlex.split(cmd),
-                                      stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE)
-                if proc.returncode != 0:
+                run_proc = self._subproc(cmd_template.format(**template_dict), source_dir_path, session.hash_root)
+                if run_proc.returncode != 0:
                     error = True
                     session.run_errors = True
                 encoding = session.lang_def.run_encoding or locale.getpreferredencoding(False)
                 try:
-                    stdout_lines = proc.stdout.decode(encoding).splitlines()
-                    stderr_lines = proc.stderr.decode(encoding).splitlines()
+                    stdout_lines = run_proc.stdout.decode(encoding).splitlines()
+                    stderr_lines = run_proc.stderr.decode(encoding).splitlines()
                 except UnicodeDecodeError:
                     session.decode_error = True
-                    stdout_lines = proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
-                    stderr_lines = proc.stderr.decode(encoding, errors='backslashreplace').splitlines()
+                    stdout_lines = run_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
+                    stderr_lines = run_proc.stderr.decode(encoding, errors='backslashreplace').splitlines()
 
             for cmd_template in session.lang_def.post_run_commands:
                 if error:
                     break
-                cmd = cmd_template.format(**template_dict)
-                post_proc = subprocess.run(shlex.split(cmd),
-                                           stdout=subprocess.PIPE,
-                                           stderr=subprocess.STDOUT)
+                post_proc = self._subproc(cmd_template.format(**template_dict), source_dir_path, session.hash_root, stderr_is_stdout=True)
                 if post_proc.returncode != 0:
                     error = True
-                    session.post_run_error = True
+                    session.post_run_errors = True
                     encoding = session.lang_def.post_run_encoding or locale.getpreferredencoding(False)
                     session.post_run_error_lines = post_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
         session.error = error
 
-        if session.pre_run_error:
+        if session.pre_run_errors:
             chunk_stdout_dict = {}
             chunk_stderr_dict = {0: ['PRE-RUN ERROR:', *session.pre_run_error_lines]}
             chunk_expr_dict = {}
-        elif session.post_run_error:
+        elif session.post_run_errors:
             chunk_stdout_dict = {}
             chunk_stderr_dict = {0: ['POST-RUN ERROR:', *session.post_run_error_lines]}
             chunk_expr_dict = {}
         else:
             # Ensure that there's at least one delimiter to serve as a
             # sentinel, even if the code never ran due to something like a
-            # syntax error
+            # syntax error or compilation error
+            sentinel_delim = stdstream_delim.format(-1)
             stdout_lines.append('')
-            stdout_lines.append(stdstream_delim)
+            stdout_lines.append(sentinel_delim)
             stderr_lines.append('')
-            stderr_lines.append(stdstream_delim)
-            chunk_stdout_list = []
-            chunk_stderr_list = []
+            stderr_lines.append(sentinel_delim)
             chunk_stdout_dict = {}
             chunk_stderr_dict = {}
             chunk_expr_dict = {}
@@ -476,151 +575,173 @@ class CodeProcessor(object):
             warning_patterns = session.lang_def.warning_patterns
             line_number_pattern_re = session.lang_def.line_number_pattern_re
             line_number_regex_re = session.lang_def.line_number_regex_re
-            for (std_lines, storage_list) in [(stdout_lines, chunk_stdout_list), (stderr_lines, chunk_stderr_list)]:
-                chunk_start_index = -1
-                for index, line in enumerate(std_lines):
-                    if line.startswith(stdstream_delim_start) and line == stdstream_delim:
-                        if chunk_start_index < 0:
-                            # Handle possibility of errors or warnings from
-                            # initial template code, or that occur before
-                            # execution begins (for example, syntax errors).
-                            # At least for basic language support, there
-                            # typically won't be any final template code, so
-                            # that case isn't handled currently.
-                            if index > 1 and std_lines is stderr_lines:
-                                chunk_end_index = index - 1
-                                if std_lines[chunk_end_index]:
-                                    chunk_end_index = index
-                                leading_err_lines = std_lines[0:chunk_end_index]
-                                if index == len(stderr_lines) - 1:
-                                    # If the only delim is the sentinel that
-                                    # was inserted, the code never ran.
-                                    # This will be handled later.
-                                    if not session.compile_errors:
-                                        session.run_errors = True
-                                    storage_list.append(leading_err_lines)
-                                else:
-                                    # Apparently the code ran, so this is
-                                    # probably a template issue.
-                                    for err_line in leading_err_lines:
-                                        if any(x in err_line for x in error_patterns):
-                                            session.run_errors = True
-                                            session.run_error_template_lines = leading_err_lines
-                                            break
-                                        elif any(x in line for x in warning_patterns):
-                                            session.run_warnings = True
-                                            session.run_warning_template_lines = leading_err_lines
-                            chunk_start_index = index + 1
-                        else:
-                            chunk_end_index = index - 1
-                            if std_lines[chunk_end_index]:
-                                chunk_end_index = index
-                            if chunk_end_index > chunk_start_index:
-                                storage_list.append(std_lines[chunk_start_index:chunk_end_index])
-                            else:
-                                storage_list.append(None)
-                            chunk_start_index = index + 1
-            if not session.compile_errors:
-                for cc, cc_stdout_lines in zip(session.code_chunks, chunk_stdout_list):
-                    # Process inline expressions by separating stdout from
-                    # expression value.
-                    if cc_stdout_lines is not None:
-                        if cc.command == 'expr' or (cc.inline and cc.command == 'nb'):
-                            index = 0
-                            for line in cc_stdout_lines:
-                                if line.startswith(expression_delim_start) and line == expression_delim:
+
+            session_output_index = -1
+            chunk_start_index = 0
+            chunk_end_index = 0
+            for index, line in enumerate(stdout_lines):
+                if line.startswith(stdstream_delim_start) and line.startswith(stdstream_delim_start_hash):
+                    next_session_output_index = int(line.split('chunk=', 1)[1].split(')', 1)[0])
+                    if index > 0:
+                        chunk_end_index = index - 1
+                        if stdout_lines[chunk_end_index]:
+                            chunk_end_index = index
+                    if chunk_end_index > chunk_start_index:
+                        if session_output_index >= 0 and session.code_chunks[session_output_index].is_expr:
+                            combined_lines = stdout_lines[chunk_start_index:chunk_end_index]
+                            for combined_index, combined_line in enumerate(combined_lines):
+                                if combined_line.startswith(expression_delim_start) and combined_line.startswith(expression_delim):
+                                    if combined_index + 1 < len(combined_lines):
+                                        chunk_expr_dict[session_output_index] = combined_lines[combined_index+1:]
+                                    if not combined_lines[combined_index-1]:
+                                        combined_index -= 1
+                                    if combined_index > 0:
+                                        chunk_stdout_dict[session_output_index] = combined_lines[:combined_index]
                                     break
-                                index += 1
-                            if index < len(cc_stdout_lines):
-                                expr_lines = cc_stdout_lines[index+1:]
-                                if len(expr_lines) > 1 or expr_lines[0]:
-                                    chunk_expr_dict[cc.session_index] = expr_lines
-                                if cc_stdout_lines[index-1]:
-                                    del cc_stdout_lines[index:]
-                                else:
-                                    del cc_stdout_lines[index-1:]
-                                if cc_stdout_lines and (len(cc_stdout_lines) > 1 or cc_stdout_lines[0]):
-                                    chunk_stdout_dict[cc.session_index] = cc_stdout_lines
                         else:
-                            chunk_stdout_dict[cc.session_index] = cc_stdout_lines
-            for cc, cc_stderr_lines in zip(session.code_chunks, chunk_stderr_list):
-                if cc_stderr_lines is not None:
-                    # Process inline expressions.  Currently, this just
-                    # amounts to deleting a stderr delimiter that separate
-                    # stderr due to expression evaluation from stderr due to
-                    # converting the expressing to a string and printing it.
-                    # The two varieties may be handled separately in future.
-                    if not session.compile_errors:
-                        if cc.inline and (cc.command == 'expr' or cc.command == 'nb'):
-                            index = 0
-                            for line in cc_stderr_lines:
-                                if line.startswith(expression_delim_start) and line == expression_delim:
+                            chunk_stdout_dict[session_output_index] = stdout_lines[chunk_start_index:chunk_end_index]
+                    chunk_start_index = index + 1
+                    session_output_index = next_session_output_index
+            if -1 in chunk_stdout_dict:
+                # Stdout with index -1 results from template or `outside_main`
+                cc_unclaimed_stdout_index = session.code_chunks[0].session_output_index
+                if cc_unclaimed_stdout_index in chunk_stdout_dict:
+                    chunk_stdout_dict[cc_unclaimed_stdout_index] = chunk_stdout_dict[-1] + chunk_stdout_dict[cc_unclaimed_stdout_index]
+                else:
+                    chunk_stdout_dict[cc_unclaimed_stdout_index] = chunk_stdout_dict[-1]
+                del chunk_stdout_dict[-1]
+
+            session_output_index = -1
+            chunk_start_index = 0
+            chunk_end_index = 0
+            for index, line in enumerate(stderr_lines):
+                if line.startswith(stdstream_delim_start) and line.startswith(stdstream_delim_start_hash):
+                    next_session_output_index = int(line.split('chunk=', 1)[1].split(')', 1)[0])
+                    if next_session_output_index == session_output_index and session_output_index >= 0:
+                        # A code chunk that is not complete used the default
+                        # `complete=true`, and this resulted in a delimiter
+                        # being printed multiple times.  Since this error can
+                        # only be detected at runtime, it is stored in stderr
+                        # rather than being reported as a normal source error.
+                        # This guarantees that the code won't run again until
+                        # this is fixed.
+                        duplicate_cc = session.code_chunks[session_output_index]
+                        message_lines = ['RUNTIME SOURCE ERROR in "{0}" near line {1}:'.format(duplicate_cc.source_name, duplicate_cc.source_start_line_number),
+                                         'This ran with "complete" value "true" but is not a complete unit of code.']
+                        session.errors = True
+                        session.run_errors = True
+                        chunk_stdout_dict = {}
+                        chunk_stderr_dict = {session_output_index: message_lines}
+                        chunk_expr_dict = {}
+                        break
+                    if index > 0:
+                        chunk_end_index = index - 1
+                        if stderr_lines[chunk_end_index]:
+                            chunk_end_index = index
+                    if chunk_end_index > chunk_start_index:
+                        cc_stderr_lines = stderr_lines[chunk_start_index:chunk_end_index]
+                        if session_output_index >= 0 and session.code_chunks[session_output_index].is_expr:
+                            for combined_index, combined_line in enumerate(cc_stderr_lines):
+                                if combined_line.startswith(expression_delim_start) and combined_line.startswith(expression_delim):
+                                    if cc_stderr_lines[combined_index-1]:
+                                        del cc_stderr_lines[combined_index]
+                                    else:
+                                        del cc_stderr_lines[combined_index-1:combined_index+1]
                                     break
-                                index += 1
-                            if index < len(cc_stderr_lines):
-                                if cc_stderr_lines[index-1]:
-                                    del cc_stderr_lines[index]
-                                else:
-                                    del cc_stderr_lines[index-1:index+1]
-                            if not cc_stderr_lines or not (len(cc_stderr_lines) > 1 or cc_stderr_lines[0]):
+                            if not cc_stderr_lines:
+                                chunk_start_index = index + 1
+                                session_output_index = next_session_output_index
                                 continue
-                    # Sync error and warning line numbers with those in user
-                    # code, and change path of code file.  This is somewhat
-                    # complex because in cases like a syntax error, the code
-                    # chunk that the iteration is currently on (`cc`) isn't
-                    # the real code chunk (`user_cc`) that the error belongs
-                    # to.
-                    user_cc = cc
-                    offset = None
-                    for index, line in enumerate(cc_stderr_lines):
-                        if source_pattern_posix in line or source_pattern_win in line:
-                            match = line_number_pattern_re.search(line)
-                            if match:
-                                for match_number in match.groups()[1:]:
-                                    if match_number is not None:
-                                        run_number = int(match_number)
+                        # Sync error and warning line numbers with those in
+                        # user code, and replace source name.  This is
+                        # somewhat complex because in cases like a syntax
+                        # error, the code chunk that the iteration is
+                        # currently on isn't the real code chunk (`actual_cc`)
+                        # that the error belongs to.
+                        actual_cc = None
+                        for cc_index, cc_line in enumerate(cc_stderr_lines):
+                            if source_pattern_posix in cc_line or source_pattern_win in cc_line:
+                                match = line_number_pattern_re.search(cc_line)
+                                if match:
+                                    for mg in match.groups():
+                                        if mg is not None:
+                                            run_number = int(mg)
+                                        break
+                                    try:
+                                        user_cc, user_number = run_code_to_user_code_dict[run_number]
+                                    except KeyError:
+                                        lower_run_number = run_number - 1
+                                        while lower_run_number > 0 and lower_run_number not in run_code_to_user_code_dict:
+                                            lower_run_number -= 1
+                                        if lower_run_number == 0:
+                                            user_number = 1
+                                            user_cc = session.code_chunks[0]
+                                        else:
+                                            user_cc, user_number = run_code_to_user_code_dict[lower_run_number]
+                                    cc_line = cc_line.replace(match.group(0), match.group(0).replace(str(run_number), str(user_number)))
+                                    if actual_cc is None:
+                                        actual_cc = user_cc
+                                if user_cc.inline:
+                                    cc_line = cc_line.replace(source_pattern_posix, source_pattern_final_inline)
+                                    cc_line = cc_line.replace(source_pattern_win, source_pattern_final_inline)
+                                else:
+                                    cc_line = cc_line.replace(source_pattern_posix, source_pattern_final)
+                                    cc_line = cc_line.replace(source_pattern_win, source_pattern_final)
+                                cc_stderr_lines[cc_index] = cc_line
+                        if actual_cc is None:
+                            if session_output_index < 0:
+                                if session.compile_errors:
+                                    actual_cc = session.code_chunks[0]
+                                else:
+                                    actual_cc = session.code_chunks[session.code_chunks[0].session_output_index]
+                            else:
+                                actual_cc = session.code_chunks[session_output_index]
+                        # Replace other line numbers that are identified by
+                        # regex instead of by being in the same line as the
+                        # source name.  This works for syncing messages from a
+                        # single chunk, but will need to be revised if it is
+                        # ever necessary to sync messages across multiple
+                        # chunks.
+                        if line_number_regex_re is not None:
+                            def replace_match(match):
+                                for mg in match.groups():
+                                    if mg is not None:
+                                        run_number = int(mg)
+                                        before, after = match.group(0).split(mg, 1)
+                                        if before.strip(' \t'):
+                                            template = '{0}'
+                                        else:
+                                            template = '{{:{0}d}}'.format(len(mg))
+                                        break
                                 try:
-                                    user_cc, user_number = run_code_to_user_code_dict[run_number]
+                                    _, user_number = run_code_to_user_code_dict[run_number]
                                 except KeyError:
-                                    lower_run_number = run_number
-                                    while lower_run_number >= 0 and lower_run_number not in run_code_to_user_code_dict:
+                                    lower_run_number = run_number - 1
+                                    while lower_run_number > 0 and lower_run_number not in run_code_to_user_code_dict:
                                         lower_run_number -= 1
-                                    if lower_run_number < 0:
+                                    if lower_run_number == 0:
                                         user_number = 1
                                     else:
-                                        user_cc, user_number = run_code_to_user_code_dict[lower_run_number]
-                                offset = run_number - user_number
-                                line = line.replace(match.group(0), match.group(0).replace(str(run_number), str(user_number)))
-                            if user_cc.inline:
-                                line = line.replace(source_pattern_posix, source_pattern_final_inline)
-                                line = line.replace(source_pattern_win, source_pattern_final_inline)
-                            else:
-                                line = line.replace(source_pattern_posix, source_pattern_final)
-                                line = line.replace(source_pattern_win, source_pattern_final)
-                            cc_stderr_lines[index] = line
-                    # Replace other line numbers that are identified by regex
-                    # instead of by being in the same line as the source name.
-                    # This works for syncing messages from a single chunk, but
-                    # will need to be revised if it is ever necessary to sync
-                    # messages across multiple chunks.
-                    if line_number_regex_re is not None and offset is not None:
-                        def replace_match(match):
-                            template = '{{:{0}d}}'.format(len(match.group(1)))
-                            return match.group(0).replace(match.group(1), template.format(int(match.group(1))-offset))
-                        cc_stderr_lines = line_number_regex_re.sub(replace_match, '\n'.join(cc_stderr_lines)).splitlines()
-                    chunk_stderr_dict[user_cc.session_index] = cc_stderr_lines
-                    # Update session error and warning status
-                    for line in cc_stderr_lines:
-                        if any(x in line for x in error_patterns):
-                            session.run_errors = True
-                            session.run_error_chunks.append(user_cc)
-                            break
-                        elif any(x in line for x in warning_patterns):
-                            session.run_warnings = True
-                            if not (session.run_warning_chunks and session.run_warning_chunks[-1] is user_cc):
-                                session.warning_chunks.append(user_cc)
-
-
+                                        _, user_number = run_code_to_user_code_dict[lower_run_number]
+                                return match.group(0).replace(str(run_number), template.format(user_number))
+                            cc_stderr_lines = line_number_regex_re.sub(replace_match, '\n'.join(cc_stderr_lines)).splitlines()
+                        # Update session error and warning status
+                        if not session.compile_errors:
+                            for cc_line in cc_stderr_lines:
+                                if any(x in cc_line for x in error_patterns):
+                                    session.run_errors = True
+                                    session.run_error_chunks.append(actual_cc)
+                                    break
+                                elif any(x in cc_line for x in warning_patterns):
+                                    session.run_warnings = True
+                                    if not (session.run_warning_chunks and session.run_warning_chunks[-1] is actual_cc):
+                                        session.warning_chunks.append(actual_cc)
+                        if actual_cc.session_index in chunk_stderr_dict:
+                            chunk_stderr_dict[actual_cc.session_index].extend(cc_stderr_lines)
+                        else:
+                            chunk_stderr_dict[actual_cc.session_index] = cc_stderr_lines
+                    chunk_start_index = index + 1
+                    session_output_index = next_session_output_index
 
         cache = {'stdout_lines': chunk_stdout_dict, 'stderr_lines': chunk_stderr_dict, 'expr_lines': chunk_expr_dict}
         self._cache[session.hash] = cache
