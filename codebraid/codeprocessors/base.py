@@ -380,7 +380,8 @@ class CodeProcessor(object):
         return cache
 
 
-    def _subproc(self, cmd, tmpdir_path, hash, stderr_is_stdout=False):
+    def _subproc(self, cmd, tmpdir_path, hash,
+                 pipes=True, stderr_is_stdout=False):
         '''
         Wrapper around `subprocess.run()` that provides a single location for
         customizing handling.
@@ -389,29 +390,41 @@ class CodeProcessor(object):
         # it is ever necessary to switch to non-posix paths under Windows, the
         # backslashes will require extra escaping.
         args = shlex.split(cmd)
-        # When stdout and stderr are stored in files rather than accessed
-        # through pipes, the files are named using a session-derived hash as
-        # a precaution against code accessing them and against collisions.
-        stdout_path = tmpdir_path / '{0}.stdout'.format(hash)
-        stderr_path = tmpdir_path / '{0}.stderr'.format(hash)
-        if stderr_is_stdout:
-            with open(str(stdout_path), 'wb') as fout:
+        if pipes:
+            if stderr_is_stdout:
                 try:
-                    proc = subprocess.run(args, stdout=fout, stderr=subprocess.STDOUT)
+                    proc = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 except FileNotFoundError:
                     proc = FailedProcess(args, stderr='COMMAND FAILED (missing program or file): {0}'.format(cmd))
-            if not isinstance(proc, FailedProcess):
-                proc.stdout = stdout_path.read_bytes()
+            else:
+                try:
+                    proc = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                except FileNotFoundError:
+                    proc = FailedProcess(args, stderr='COMMAND FAILED (missing program or file): {0}'.format(cmd))
         else:
-            with open(str(stdout_path), 'wb') as fout:
-                with open(str(stderr_path), 'wb') as ferr:
+            # When stdout and stderr are stored in files rather than accessed
+            # through pipes, the files are named using a session-derived hash as
+            # a precaution against code accessing them and against collisions.
+            stdout_path = tmpdir_path / '{0}.stdout'.format(hash)
+            stderr_path = tmpdir_path / '{0}.stderr'.format(hash)
+            if stderr_is_stdout:
+                with open(str(stdout_path), 'wb') as fout:
                     try:
-                        proc = subprocess.run(args, stdout=fout, stderr=ferr)
+                        proc = subprocess.run(args, stdout=fout, stderr=subprocess.STDOUT)
                     except FileNotFoundError:
                         proc = FailedProcess(args, stderr='COMMAND FAILED (missing program or file): {0}'.format(cmd))
-            if not isinstance(proc, FailedProcess):
-                proc.stdout = stdout_path.read_bytes()
-                proc.stderr = stderr_path.read_bytes()
+                if not isinstance(proc, FailedProcess):
+                    proc.stdout = stdout_path.read_bytes()
+            else:
+                with open(str(stdout_path), 'wb') as fout:
+                    with open(str(stderr_path), 'wb') as ferr:
+                        try:
+                            proc = subprocess.run(args, stdout=fout, stderr=ferr)
+                        except FileNotFoundError:
+                            proc = FailedProcess(args, stderr='COMMAND FAILED (missing program or file): {0}'.format(cmd))
+                if not isinstance(proc, FailedProcess):
+                    proc.stdout = stdout_path.read_bytes()
+                    proc.stderr = stderr_path.read_bytes()
         return proc
 
 
@@ -490,7 +503,8 @@ class CodeProcessor(object):
         error = False
         with tempfile.TemporaryDirectory() as tempdir:
             source_dir_path = pathlib.Path(tempdir)
-            source_path = source_dir_path / 'source.{0}'.format(session.lang_def.extension)
+            source_name = 'source_{0}'.format(session.hash_root)
+            source_path = source_dir_path / '{0}.{1}'.format(source_name, session.lang_def.extension)
             source_path.write_text(''.join(run_code_list), encoding='utf8')
 
             # All paths use `.as_posix()` for `shlex.split()` compatibility
@@ -498,7 +512,7 @@ class CodeProcessor(object):
                              'extension': session.lang_def.extension,
                              'source': source_path.as_posix(),
                              'source_dir': source_dir_path.as_posix(),
-                             'source_without_extension': (source_dir_path / 'source').as_posix()}
+                             'source_without_extension': (source_dir_path / source_name).as_posix()}
 
             for cmd_template in session.lang_def.pre_run_commands:
                 if error:
@@ -569,7 +583,7 @@ class CodeProcessor(object):
             chunk_expr_dict = {}
             source_pattern_posix = source_path.as_posix()
             source_pattern_win = str(pathlib.PureWindowsPath(source_path))
-            source_pattern_final = source_path.name
+            source_pattern_final = 'source.{0}'.format(session.lang_def.extension)
             source_pattern_final_inline = '<string>'
             error_patterns = session.lang_def.error_patterns
             warning_patterns = session.lang_def.warning_patterns
