@@ -9,6 +9,7 @@
 
 
 import collections
+import random
 
 
 class KeyDefaultDict(collections.defaultdict):
@@ -22,3 +23,12 @@ class KeyDefaultDict(collections.defaultdict):
         else:
             self[key] = self.default_factory(key)
             return self[key]
+
+
+def random_ascii_lower_alpha(n):
+    '''
+    Create a random string of length n consisting of lowercase ASCII
+    letters.  Useful for creating more robust tempfile names when working in
+    `tempfile.TemporaryDirectory()`.
+    '''
+    return ''.join(chr(num) for num in (random.randrange(97, 122+1) for _ in range(n)))
