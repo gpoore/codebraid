@@ -60,7 +60,7 @@ def _cb_option_hide(code_chunk, key, value, options):
         if not all(v in ('code', 'stdout', 'stderr', 'expr') for v in hide_values):
             code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
             return
-        if 'expr' in hide_values and code_chunk.command != 'expr' and not (code_chunk.command == 'nb' and code_chunk.inline):
+        if 'expr' in hide_values and not code_chunk.is_expr:
             code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
             return
         for v in hide_values:
@@ -105,7 +105,7 @@ def _cb_option_show(code_chunk, key, value, options):
                     code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
                     continue
             elif output == 'expr':
-                if not (code_chunk.command == 'expr' or (code_chunk.command == 'nb' and code_chunk.inline)):
+                if not code_chunk.is_expr:
                     code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk (not expr chunk)'.format(key, value))
                     continue
                 if format is None:
@@ -182,8 +182,12 @@ class CodeChunk(object):
                 self.source_errors.append('Unknown Codebraid command "{0}"'.format(command))
         if command == 'expr' and not inline:
             self.source_errors.append('Codebraid command "{0}" is only allowed inline'.format(command))
-
         self.command = command
+
+        if command == 'expr' or (inline and command == 'nb'):
+            self.is_expr = True
+        else:
+            self.is_expr = False
 
         if isinstance(code, list):
             code_lines = code
@@ -205,7 +209,7 @@ class CodeChunk(object):
         final_options['show'] = self._default_show[(command, inline)].copy()
         for k, v in options.items():
             self._option_processors[k](self, k, v, final_options)
-        if not final_options['complete'] and inline and command in ('expr', 'nb'):
+        if not final_options['complete'] and self.is_expr:
             self.source_errors.append('Option "complete" value "false" is incompatible with inline expressions')
         if final_options['outside_main']:
             if options.get('complete', False):
@@ -214,9 +218,10 @@ class CodeChunk(object):
         self.options = final_options
 
         self.session_index = None
+        self.session_output_index = None
         self.stdout_lines = None
         self.stderr_lines = None
-        if command == 'expr' or (inline and command == 'nb'):
+        if self.is_expr:
             self.expr_lines = None
         self.code_start_line_number = None
 
