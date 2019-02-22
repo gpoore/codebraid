@@ -7,19 +7,23 @@ rather than `pandoc` to convert your document from Markdown to another format.
 `codebraid` supports almost all of `pandoc`'s options and passes them to
 `pandoc` internally.
 
-Codebraid currently can run **Python 3.5+** and **Julia**.  Support for R,
-Rust, and several other languages is nearly ready for release.
+Codebraid currently can run **Python 3.5+**, **Julia**, and **Rust** code.
+Support for R and several other languages is under development.
 
 **Development:**  https://github.com/gpoore/codebraid
 
-View example HTML output, or see the Markdown source or raw HTML:
+View example HTML output, or see the Markdown source or raw HTML (the Rust
+example demonstrates more advanced features):
 
-  * [Python example](http://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/python.html)
+  * [Python example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/python.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/python.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/python.html)]
-  * [Julia example](http://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/julia.html)
+  * [Julia example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/julia.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/julia.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/julia.html)]
+  * [Rust example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/rust.html)
+    [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/rust.cbmd)]
+    [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/rust.html)]
 
 
 ## Simple example
@@ -152,3 +156,22 @@ Pandoc compatibility.
 * `first_number`/`startFrom`/`start-from`/`start_from`={integer or `next`} —
   Specify the first line number for code when line numbers are displayed.
   `next` means continue from the last code in the current session.
+
+* `complete`={`true`, `false`} — By default, code chunks must contain complete
+  units of code (function definitions, loops, expressions, and so forth). With
+  `complete=false`, this is not required.  Any stdout from code chunks with
+  `complete=false` is accumulated until the next code chunk with
+  `complete=true` (the default).
+
+* `outside_main`={`true`, `false`} — This allows code chunks to overwrite the
+  Codebraid template code.  It is primarily useful for languages like Rust, in
+  which code is inserted by default into a `main()` template.  In that case,
+  if a session *starts* with one or more code chunks with `outside_main=true`,
+  these are used instead of the beginning of the `main()` template.
+  Similarly, if a session *ends* with one or more code chunks with
+  `outside_main=true`, these are used instead of the end of the `main()`
+  template.  If there are any code chunks in between that lack `outside_main`
+  (that is, default `outside_main=false`), then these will have their stdout
+  collected on a per-chunk basis like normal.  Having code chunks that lack
+  `outside_main` is not required; if there are none, the total accumulated
+  stdout for a session belongs to the last code chunk in the session
