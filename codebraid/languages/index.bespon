@@ -78,8 +78,9 @@
 #     must contain field {number}; otherwise treated as literal patterns
 #
 # line_number_regex =
-#     string
+#     optional string
 #     generates a regex that can match any other line numbers that need offset
+#     offset number is left-padded with spaces if match before number is spaces/tabs/empty
 #-----------------------------------------------------------------------------
 #
 
