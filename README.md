@@ -1,14 +1,14 @@
 # Codebraid – live code in Pandoc Markdown
 
-Codebraid is a Python command-line program that enables executable code in
+Codebraid is a Python program that enables executable code in
 [Pandoc](http://pandoc.org/) Markdown documents.  Using Codebraid can be as
 simple as adding a class to your code blocks, and then running `codebraid`
 rather than `pandoc` to convert your document from Markdown to another format.
 `codebraid` supports almost all of `pandoc`'s options and passes them to
 `pandoc` internally.
 
-Codebraid currently can run **Python 3.5+**, **Julia**, and **Rust** code.
-Support for R and several other languages is under development.
+Codebraid currently can run **Python 3.5+**, **Julia**, **Rust**, and **R**
+code.  Support for additional languages is coming soon.
 
 **Development:**  https://github.com/gpoore/codebraid
 
@@ -24,6 +24,9 @@ example demonstrates more advanced features):
   * [Rust example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/rust.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/rust.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/rust.html)]
+  * [R example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/R.html)
+    [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/R.cbmd)]
+    [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/R.html)]
 
 
 ## Simple example
@@ -41,7 +44,7 @@ Run `codebraid` (to save the output, add something like `-o test_out.md`, and
 add `--overwrite` if it already exists):
 
 ```shell
-codebraid pandoc -f markdown -t markdown test.md
+codebraid pandoc --from markdown --to markdown test.md
 ```
 
 Output:
@@ -50,17 +53,45 @@ Output:
 Hello from Python! $2^8 = 256$
 ```
 
+
+## Features
+
+**Easy debugging** — By default, stderr is shown automatically in the document
+whenever there is an error, right next to the code that caused it.  Even
+though user code is typically inserted into a template for execution, stderr
+line numbers will correctly correspond with those for code blocks, because
+Codebraid tracks the origin of each line of code and synchronizes stderr.
+
+**Simple language support** — Adding support for a new language can take only
+a few minutes.  Codebraid's default system for executing code is based on
+writing delimiters to stdout and stderr that allow it to associate code output
+with individual code chunks.  Adding a language is as simple as creating a
+config file that tells Codebraid which program to run, which file extension to
+use, and how to write to stdout and stderr.  See
+[`languages/`](https://github.com/gpoore/codebraid/tree/master/codebraid/languages)
+for examples.
+
+**Genuine Pandoc Markdown** — Unlike many systems for making code in Markdown
+executable, Codebraid is not a preprocessor.  Rather, Codebraid acts on the
+abstract syntax tree (AST) that Pandoc generates when parsing a document.
+Preprocessors often fail to disable commented-out code blocks because the
+preprocessor doesn't recognize Markdown comments.  Preprocessors can also fail
+due to the finer points of Markdown parsing.  None of this is an issue for
+Codebraid, since documents are always valid Pandoc Markdown and Pandoc does
+the parsing.
+
+
+
 ## Installation and requirements
 
 **Installation:**  `pip3 install codebraid` or `pip install codebraid`
 
-Manual installation:  `python3 setup.py install` (or on some Windows
-installations and Arch Linux, `python setup.py install`)
+Manual installation:  `python3 setup.py install` or `python setup.py install`
 
 **Requirements:**
 
   * [Pandoc](http://pandoc.org/) 2.4+
-  * Python 3.5+ with `setuptools` and [`bespon`](https://bespon.org) 0.3
+  * Python 3.5+ with `setuptools`, and [`bespon`](https://bespon.org) 0.3
     (`bespon` installation is typically managed by `setup.py`)
 
 By default, the `python3` executable will be used to execute code.  If it does
@@ -161,7 +192,7 @@ Pandoc compatibility.
   units of code (function definitions, loops, expressions, and so forth). With
   `complete=false`, this is not required.  Any stdout from code chunks with
   `complete=false` is accumulated until the next code chunk with
-  `complete=true` (the default).
+  `complete=true` (the default value).
 
 * `outside_main`={`true`, `false`} — This allows code chunks to overwrite the
   Codebraid template code.  It is primarily useful for languages like Rust, in
