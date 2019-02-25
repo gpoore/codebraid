@@ -47,13 +47,13 @@
 # chunk_wrapper =
 #     string
 #     template for code chunk
-#     must contain fields {stdoutdelim}, {stderrdelim}, {code}
+#     must contain fields {stdout_delim}, {stderr_delim}, {code}
 #     must write delims to output streams with a single leading and trailing \n
 #
 # inline_expression_formatter =
 #     string
 #     converts inline expressions into strings when show='expression'
-#     must contain fields {stdoutdelim}, {stderrdelim}, {code}
+#     must contain fields {stdout_delim}, {stderr_delim}, {code}
 #     must perform these tasks (or tasks that result in identical output):
 #         1.  convert {code} to a string
 #         2.  store the string in a tempory variable (to avoid collisions and
@@ -86,4 +86,5 @@
 
 julia = "julia.bespon"
 python = "python.bespon"
+R = "R.bespon"
 rust = "rust.bespon"

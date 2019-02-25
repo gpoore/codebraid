@@ -1,0 +1,32 @@
+|=== R
+extension = R
+
+executable = Rscript
+
+source_template =
+    |```
+    library(methods)
+    pdf(file=NULL)
+    {code}
+    |```/
+
+
+chunk_wrapper =
+    |```
+    write("\n{stdout_delim}", stdout())
+    flush(stdout())
+    write("\n{stderr_delim}", stderr())
+    {code}
+    |```/
+
+inline_expression_formatter =
+    |```
+    codebraid_temp_{tempsuffix} = toString({code})
+    write("\n{stdout_delim}", stdout())
+    write("\n{stderr_delim}", stderr())
+    write(codebraid_temp_{tempsuffix}, stdout())
+    |```/
+
+error_patterns = ['error', 'Error']
+warning_patterns = ['warning', 'Warning']
+line_number_patterns = 'line {number}'
