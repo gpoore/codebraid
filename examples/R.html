@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Codebraid with R</title>
+  <style>
+      code{white-space: pre-wrap;}
+      span.smallcaps{font-variant: small-caps;}
+      span.underline{text-decoration: underline;}
+      div.column{display: inline-block; vertical-align: top; width: 50%;}
+  </style>
+  <style>
+a.sourceLine { display: inline-block; line-height: 1.25; }
+a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
+a.sourceLine:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode { white-space: pre; position: relative; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+code.sourceCode { white-space: pre-wrap; }
+a.sourceLine { text-indent: -1em; padding-left: 1em; }
+}
+pre.numberSource a.sourceLine
+  { position: relative; left: -4em; }
+pre.numberSource a.sourceLine::before
+  { content: attr(title);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; pointer-events: all; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {  }
+@media screen {
+a.sourceLine::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <style type="text/css">body {display: block;text-align: left;max-width: 40rem;padding-left: 0.5rem;padding-right: 0.5rem;margin: auto;}pre.numberSource a.sourceLine {position: relative;left: -3em;}pre.numberSource a.sourceLine::before{content: attr(title);position: relative;left: -1em;text-align: right;vertical-align: baseline;border: none;pointer-events: all;display: inline-block;-webkit-touch-callout: none;-webkit-user-select: none;-khtml-user-select: none;-moz-user-select: none;-ms-user-select: none;user-select: none;padding: 0 4px;width: 3em;color: #aaaaaa;}pre.numberSource {margin-left: 2em;border-left: 1px solid #aaaaaa;padding-left: 4px;}div.exampleMarkup:before{content: "Markdown";font-family: monospace;display: block;height: 2em;font-size: 150%;}div.exampleMarkup {padding-top: 0.5em;padding-left: 0.5em;padding-right: 0.5em;margin-top: 2em;margin-bottom: 1em;background-color: honeydew;border-style: solid;border-width: 1px;border-color: limegreen;border-radius: 0.2em;}div.exampleOutput:before{content: "Output";font-family: monospace;display: block;font-size: 150%;}div.exampleOutput {color: black;padding-top: 0.5em;padding-left: 0.5em;padding-right: 0.5em;margin-top: 1em;margin-bottom: 2em;background-color: whitesmoke;border-style: solid;border-width: 1px;border-color: lightgray;border-radius: 0.2em;}div.sourceCode {padding: 0.5em;background-color: aliceblue;border-style: solid;border-width: 1px;border-color: lightskyblue;border-radius: 0.2em;}div.exampleOutput div.sourceCode:before{content: "code";font-family: monospace;display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stdout:before{content: "stdout";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stdout {color: black;padding: 0.5em;background-color: azure;border-style: solid;border-width: 1px;border-color: turquoise;border-radius: 0.2em;padding-left: 0.5em;}code.stdout {color: black;background-color: azure;border-style: solid;border-width: 1px;border-color: turquoise;}pre.stderr:before{content: "stderr";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stderr {color: red;padding: 0.5em;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;border-radius: 0.2em;padding-left: 0.5em;}code.stderr {color: red;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;}pre.sourceError:before{content: "Source error";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.sourceError {color: red;padding: 0.5em;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;border-radius: 0.2em;padding-left: 0.5em;}code.sourceError {color: red;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;}</style>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Codebraid with R</h1>
+</header>
+<h2 id="introduction">Introduction</h2>
+<p>R code is executed with <code>Rscript</code>. The <code>methods</code> library is loaded automatically by default as part of the template into which user code is inserted. A null graphics device, <code>pdf(file=NULL)</code>, is created by default to avoid the automatic, unintentional creation of plot files with default names. Saving plots requires explicit graphics commands.</p>
+<h2 id="inline-code">Inline code</h2>
+<h3 id="run">Run</h3>
+<p>Inline code with <code>.cb.run</code> gives raw stdout.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`cat(1 + 2)`{.R .cb.run}</code></pre>
+</div>
+<div class="exampleOutput">
+<p>3</p>
+</div>
+</div>
+<h3 id="expression-and-inline-notebook">Expression and inline notebook</h3>
+<p>Inline code with <code>.cb.expr</code> and <code>.cb.nb</code> (<code>nb</code> is short for <code>notebook</code>) evaluate an expression and then insert the raw output into the document, where it is interpreted as Markdown. Expressions are converted to strings via <code>toString()</code>.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`(x &lt;- 1:20)[x %% 3 == 0]`{.R .cb.expr}</code></pre>
+</div>
+<div class="exampleOutput">
+<p>3, 6, 9, 12, 15, 18</p>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`paste(&quot;$2^8 = &quot;, 2^8, &quot;$&quot;, sep=&quot;&quot;)`{.R .cb.nb}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><span class="math inline">2<sup>8</sup> = 256</span></p>
+</div>
+</div>
+<h3 id="stderr">Stderr</h3>
+<p>In the event of an error, inline code automatically shows stderr by default. This code is executed in its own session, <code>inline_error</code>, so that it does not impact other examples.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`1 + &quot;a&quot;`{.R .cb.run session=inline_error}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="stderr">Error in 1 + &quot;a&quot; : non-numeric argument to binary operator Execution halted</code></p>
+</div>
+</div>
+<h3 id="source-errors">Source errors</h3>
+<p>A message is also displayed for errors in the Markdown source. This usually includes the name of the document source and the approximate line number.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`cat(1 + 2)`{.R .cb.rn session=inline_source_error}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="sourceError">SOURCE ERROR in &quot;R.cbmd&quot; near line 52: Unknown or unsupported Codebraid command &quot;cb.rn&quot; Missing valid Codebraid command</code></p>
+</div>
+</div>
+<h2 id="block-code">Block code</h2>
+<h3 id="run-1">Run</h3>
+<p>Code blocks with <code>.cb.run</code> give raw stdout. There is continuity between code blocks so long as they are in the same session; variables persist.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.R .cb.run session=hello}
+x &lt;- &quot;Hello from *R!*&quot;
+```</code></pre>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.R .cb.run session=hello}
+cat(x)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<p>Hello from <em>R!</em></p>
+</div>
+</div>
+<h3 id="notebook">Notebook</h3>
+<p>Code blocks with <code>.cb.nb</code> show the code and also the verbatim stdout.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.R .cb.nb session=random}
+set.seed(1)
+random_ints &lt;- floor(runif(10, min=0, max=101))
+cat(&quot;Random integers: &quot;, random_ints, &quot;\n\n&quot;)
+summary(random_ints)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb9" data-startFrom="1"><pre class="sourceCode numberSource R numberLines"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" title="1"><span class="kw">set.seed</span>(<span class="dv">1</span>)</a>
+<a class="sourceLine" id="cb9-2" title="2">random_ints &lt;-<span class="st"> </span><span class="kw">floor</span>(<span class="kw">runif</span>(<span class="dv">10</span>, <span class="dt">min=</span><span class="dv">0</span>, <span class="dt">max=</span><span class="dv">101</span>))</a>
+<a class="sourceLine" id="cb9-3" title="3"><span class="kw">cat</span>(<span class="st">&quot;Random integers: &quot;</span>, random_ints, <span class="st">&quot;</span><span class="ch">\n\n</span><span class="st">&quot;</span>)</a>
+<a class="sourceLine" id="cb9-4" title="4"><span class="kw">summary</span>(random_ints)</a></code></pre></div>
+<pre class="stdout"><code>Random integers:  26 37 57 91 20 90 95 66 63 6 
+
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   6.00   28.75   60.00   55.10   84.00   95.00 </code></pre>
+</div>
+</div>
+<p>While there is not yet support for automatically including plots, including them manually is straightforward.</p>
+<p>Note that this example uses the <code>show</code> keyword argument for the code block so that the output is interpreted as raw Markdown rather than displayed verbatim (the default for <code>.cb.nb</code>).</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.R .cb.nb session=plot show=code+stdout:raw+stderr}
+png(&quot;plot.png&quot;, width=500, height=350, bg=&quot;transparent&quot;)
+x &lt;- seq(0, 6, 0.01)
+y &lt;- sin(x)
+plot(x, y, type=&quot;l&quot;, col=&quot;blue&quot;, lwd=3, xlab=&quot;x&quot;, ylab=&quot;y(x) = sin(x)&quot;)
+invisible(dev.off())
+markdown &lt;- paste(&quot;![The function $y=\\sin(x)$]&quot;,
+    &quot;(plot.png)&quot;,
+    &quot;{width=100% max-width=500px}&quot;, sep=&quot;&quot;)
+cat(markdown)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb12" data-startFrom="1"><pre class="sourceCode numberSource R numberLines"><code class="sourceCode r"><a class="sourceLine" id="cb12-1" title="1"><span class="kw">png</span>(<span class="st">&quot;plot.png&quot;</span>, <span class="dt">width=</span><span class="dv">500</span>, <span class="dt">height=</span><span class="dv">350</span>, <span class="dt">bg=</span><span class="st">&quot;transparent&quot;</span>)</a>
+<a class="sourceLine" id="cb12-2" title="2">x &lt;-<span class="st"> </span><span class="kw">seq</span>(<span class="dv">0</span>, <span class="dv">6</span>, <span class="fl">0.01</span>)</a>
+<a class="sourceLine" id="cb12-3" title="3">y &lt;-<span class="st"> </span><span class="kw">sin</span>(x)</a>
+<a class="sourceLine" id="cb12-4" title="4"><span class="kw">plot</span>(x, y, <span class="dt">type=</span><span class="st">&quot;l&quot;</span>, <span class="dt">col=</span><span class="st">&quot;blue&quot;</span>, <span class="dt">lwd=</span><span class="dv">3</span>, <span class="dt">xlab=</span><span class="st">&quot;x&quot;</span>, <span class="dt">ylab=</span><span class="st">&quot;y(x) = sin(x)&quot;</span>)</a>
+<a class="sourceLine" id="cb12-5" title="5"><span class="kw">invisible</span>(<span class="kw">dev.off</span>())</a>
+<a class="sourceLine" id="cb12-6" title="6">markdown &lt;-<span class="st"> </span><span class="kw">paste</span>(<span class="st">&quot;![The function $y=</span><span class="ch">\\</span><span class="st">sin(x)$]&quot;</span>,</a>
+<a class="sourceLine" id="cb12-7" title="7">    <span class="st">&quot;(plot.png)&quot;</span>,</a>
+<a class="sourceLine" id="cb12-8" title="8">    <span class="st">&quot;{width=100% max-width=500px}&quot;</span>, <span class="dt">sep=</span><span class="st">&quot;&quot;</span>)</a>
+<a class="sourceLine" id="cb12-9" title="9"><span class="kw">cat</span>(markdown)</a></code></pre></div>
+<figure>
+<img src="data:image/png;base64,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" alt="The function y=\sin(x)" data-max-width="500px" style="width:100.0%" /><figcaption>The function <span class="math inline"><em>y</em> = sin (<em>x</em>)</span></figcaption>
+</figure>
+</div>
+</div>
+<h3 id="stderr-1">Stderr</h3>
+<p>Code blocks show stderr automatically by default.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.R .cb.nb session=block_error}
+var &lt;- 123
+cat(var)
+flush(stdout())
+var &lt;- var + &quot;a&quot;
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb14" data-startFrom="1"><pre class="sourceCode numberSource R numberLines"><code class="sourceCode r"><a class="sourceLine" id="cb14-1" title="1">var &lt;-<span class="st"> </span><span class="dv">123</span></a>
+<a class="sourceLine" id="cb14-2" title="2"><span class="kw">cat</span>(var)</a>
+<a class="sourceLine" id="cb14-3" title="3"><span class="kw">flush</span>(<span class="kw">stdout</span>())</a>
+<a class="sourceLine" id="cb14-4" title="4">var &lt;-<span class="st"> </span>var <span class="op">+</span><span class="st"> &quot;a&quot;</span></a></code></pre></div>
+<pre class="stdout"><code>123</code></pre>
+<pre class="stderr"><code>Error in var + &quot;a&quot; : non-numeric argument to binary operator
+Execution halted</code></pre>
+</div>
+</div>
+<h3 id="source-errors-1">Source errors</h3>
+<p>A message is also displayed for errors in the Markdown source. This usually includes the name of the document source and the approximate line number.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.R .cb.ruuun session=block_source_error}
+cat(1 + 2)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<pre class="sourceError"><code>SOURCE ERROR in &quot;R.cbmd&quot; near line 122:
+Unknown or unsupported Codebraid command &quot;cb.ruuun&quot;
+Missing valid Codebraid command</code></pre>
+</div>
+</div>
+<h2 id="other-options">Other options</h2>
+<p>By default, stdout and stderr are only shown if they are non-empty. In some situations, it may be useful to represent empty output visually as confirmation that there indeed was none.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.R .cb.run show=code+stdout+stderr:verbatim_or_empty}
+x &lt;- 1 + 2
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb20" data-startFrom="1"><pre class="sourceCode numberSource R numberLines"><code class="sourceCode r"><a class="sourceLine" id="cb20-1" title="1">x &lt;-<span class="st"> </span><span class="dv">1</span> <span class="op">+</span><span class="st"> </span><span class="dv">2</span></a></code></pre></div>
+<pre class="stderr"><code> </code></pre>
+</div>
+</div>
+<p>It is also possible to selectively hide output from a code chunk.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.R .cb.nb hide=stdout}
+cat(x)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb23" data-startFrom="2"><pre class="sourceCode numberSource R numberLines"><code class="sourceCode r"><a class="sourceLine" id="cb23-2" title="2"><span class="kw">cat</span>(x)</a></code></pre></div>
+</div>
+</div>
+<p><code>hide</code> takes any combination of <code>code</code>, <code>stderr</code>, and <code>stdout</code>, or simply <code>all</code>.</p>
+</body>
+</html>

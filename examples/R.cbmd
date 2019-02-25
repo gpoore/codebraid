@@ -1,0 +1,144 @@
+---
+title: "Codebraid with R"
+---
+
+
+
+## Introduction
+
+R code is executed with `Rscript`.  The `methods` library is loaded
+automatically by default as part of the template into which user code is
+inserted.  A null graphics device, `pdf(file=NULL)`, is created by default to
+avoid the automatic, unintentional creation of plot files with default names.
+Saving plots requires explicit graphics commands.
+
+## Inline code
+
+
+### Run
+
+Inline code with `.cb.run` gives raw stdout.
+
+`cat(1 + 2)`{.R .cb.run example=true}
+
+
+### Expression and inline notebook
+
+Inline code with `.cb.expr` and `.cb.nb` (`nb` is short for `notebook`)
+evaluate an expression and then insert the raw output into the document, where
+it is interpreted as Markdown.  Expressions are converted to
+strings via `toString()`.
+
+`(x <- 1:20)[x %% 3 == 0]`{.R .cb.expr example=true}
+
+`paste("$2^8 = ", 2^8, "$", sep="")`{.R .cb.nb example=true}
+
+
+
+### Stderr
+
+In the event of an error, inline code automatically shows stderr by default.
+This code is executed in its own session, `inline_error`, so that it does
+not impact other examples.
+
+`1 + "a"`{.R .cb.run session=inline_error example=true}
+
+
+### Source errors
+
+A message is also displayed for errors in the Markdown source.  This usually
+includes the name of the document source and the approximate line number.
+
+`cat(1 + 2)`{.R .cb.rn session=inline_source_error example=true}
+
+
+
+## Block code
+
+
+### Run
+
+Code blocks with `.cb.run` give raw stdout.  There is continuity between code
+blocks so long as they are in the same session; variables persist.
+
+```{.R .cb.run session=hello example=true}
+x <- "Hello from *R!*"
+```
+
+```{.R .cb.run session=hello example=true}
+cat(x)
+```
+
+
+### Notebook
+
+Code blocks with `.cb.nb` show the code and also the verbatim stdout.
+
+```{.R .cb.nb session=random example=true}
+set.seed(1)
+random_ints <- floor(runif(10, min=0, max=101))
+cat("Random integers: ", random_ints, "\n\n")
+summary(random_ints)
+```
+
+While there is not yet support for automatically including plots, including
+them manually is straightforward.
+
+Note that this example uses the `show` keyword argument for the code block
+so that the output is interpreted as raw Markdown rather than displayed
+verbatim (the default for `.cb.nb`).
+
+```{.R .cb.nb session=plot show=code+stdout:raw+stderr example=true}
+png("plot.png", width=500, height=350, bg="transparent")
+x <- seq(0, 6, 0.01)
+y <- sin(x)
+plot(x, y, type="l", col="blue", lwd=3, xlab="x", ylab="y(x) = sin(x)")
+invisible(dev.off())
+markdown <- paste("![The function $y=\\sin(x)$]",
+    "(plot.png)",
+    "{width=100% max-width=500px}", sep="")
+cat(markdown)
+```
+
+
+### Stderr
+
+Code blocks show stderr automatically by default.
+
+```{.R .cb.nb session=block_error example=true}
+var <- 123
+cat(var)
+flush(stdout())
+var <- var + "a"
+```
+
+
+### Source errors
+
+A message is also displayed for errors in the Markdown source.  This usually
+includes the name of the document source and the approximate line number.
+
+```{.R .cb.ruuun session=block_source_error example=true}
+cat(1 + 2)
+```
+
+
+
+## Other options
+
+By default, stdout and stderr are only shown if they are non-empty.  In some
+situations, it may be useful to represent empty output visually as
+confirmation that there indeed was none.
+
+```{.R .cb.run show=code+stdout+stderr:verbatim_or_empty example=true}
+x <- 1 + 2
+```
+
+It is also possible to selectively hide output from a code chunk.
+
+```{.R .cb.nb hide=stdout example=true}
+cat(x)
+```
+
+`hide` takes any combination of `code`, `stderr`, and `stdout`, or simply
+`all`.
