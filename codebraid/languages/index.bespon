@@ -10,7 +10,7 @@
 #     for when <name> is really a custom task rather than language, etc.
 #
 # executable =
-#     string, default <name>
+#     optional string, default <name>
 #     program that is called to process source
 #
 # extension =
@@ -51,7 +51,7 @@
 #     must write delims to output streams with a single leading and trailing \n
 #
 # inline_expression_formatter =
-#     string
+#     optional string
 #     converts inline expressions into strings when show='expression'
 #     must contain fields {stdout_delim}, {stderr_delim}, {code}
 #     must perform these tasks (or tasks that result in identical output):
@@ -65,15 +65,15 @@
 #             conversion to be distinguished from the string itself)
 #
 # error_patterns =
-#     string or list of strings
+#     optional string or list of strings
 #     literal patterns used to identify errors in stderr
 #
 # warning_patterns =
-#     string or list of strings
+#     optional string or list of strings
 #     literal patterns used to identify warnings in stderr
 #
 # line_number_patterns =
-#     string or list of strings
+#     optional string or list of strings
 #     used to identify line numbers in stderr that occur next to source path
 #     must contain field {number}; otherwise treated as literal patterns
 #
