@@ -5,18 +5,17 @@ run_encoding = 'utf8'
 
 chunk_wrapper =
     |```
-    println("\n{stdoutdelim}")
+    println("\n{stdout_delim}")
     flush(stdout)
-    write(stderr, "\n{stderrdelim}\n")
+    write(stderr, "\n{stderr_delim}\n")
     {code}
     |```/
 
 inline_expression_formatter =
     |```
     _codebraid_temp_{tempsuffix} = string({code})
-    println("\n{stdoutdelim}")
-    flush(stdout)
-    write(stderr, "\n{stderrdelim}\n")
+    println("\n{stdout_delim}")
+    write(stderr, "\n{stderr_delim}\n")
     println(_codebraid_temp_{tempsuffix})
     |```/
 

@@ -17,16 +17,16 @@ source_template =
 
 chunk_wrapper =
     |```
-    print('\n{stdoutdelim}', flush=True)
-    sys.stderr.write('\n{stderrdelim}\n')
+    print('\n{stdout_delim}', flush=True)
+    sys.stderr.write('\n{stderr_delim}\n')
     {code}
     |```/
 
 inline_expression_formatter =
     |```
     _codebraid_temp_{tempsuffix} = str({code})
-    print('\n{stdoutdelim}')
-    sys.stderr.write('\n{stderrdelim}\n')
+    print('\n{stdout_delim}')
+    sys.stderr.write('\n{stderr_delim}\n')
     print(_codebraid_temp_{tempsuffix})
     |```/
 

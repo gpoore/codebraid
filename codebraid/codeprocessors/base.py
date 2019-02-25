@@ -460,23 +460,23 @@ class CodeProcessor(object):
             delim = stdstream_delim_escaped.format(cc.session_output_index)
             if last_cc is None:
                 if not cc.options['outside_main']:
-                    run_code_list.append(chunk_wrapper_before.format(stdoutdelim=delim, stderrdelim=delim))
+                    run_code_list.append(chunk_wrapper_before.format(stdout_delim=delim, stderr_delim=delim))
                     run_code_line_number += chunk_wrapper_before_n_lines
             elif last_cc.options['complete']:
                 run_code_list.append(chunk_wrapper_after)
                 run_code_line_number += chunk_wrapper_after_n_lines
-                run_code_list.append(chunk_wrapper_before.format(stdoutdelim=delim, stderrdelim=delim))
+                run_code_list.append(chunk_wrapper_before.format(stdout_delim=delim, stderr_delim=delim))
                 run_code_line_number += chunk_wrapper_before_n_lines
             elif last_cc.options['outside_main'] and not cc.options['outside_main']:
-                run_code_list.append(chunk_wrapper_before.format(stdoutdelim=delim, stderrdelim=delim))
+                run_code_list.append(chunk_wrapper_before.format(stdout_delim=delim, stderr_delim=delim))
                 run_code_line_number += chunk_wrapper_before_n_lines
             if cc.inline:
                 # Only block code contributes toward line numbers.  No need to
                 # check expr compatibility with `complete`, etc.; that's
                 # handled in creating sessions.
                 if cc.is_expr:
-                    expr_code = session.lang_def.inline_expression_formatter.format(stdoutdelim=expression_delim_escaped,
-                                                                                    stderrdelim=expression_delim_escaped,
+                    expr_code = session.lang_def.inline_expression_formatter.format(stdout_delim=expression_delim_escaped,
+                                                                                    stderr_delim=expression_delim_escaped,
                                                                                     tempsuffix=session.tempsuffix,
                                                                                     code=cc.code)
                     run_code_list.append(expr_code)
@@ -749,7 +749,7 @@ class CodeProcessor(object):
                                 elif any(x in cc_line for x in warning_patterns):
                                     session.run_warnings = True
                                     if not (session.run_warning_chunks and session.run_warning_chunks[-1] is actual_cc):
-                                        session.warning_chunks.append(actual_cc)
+                                        session.run_warning_chunks.append(actual_cc)
                         if actual_cc.session_index in chunk_stderr_dict:
                             chunk_stderr_dict[actual_cc.session_index].extend(cc_stderr_lines)
                         else:

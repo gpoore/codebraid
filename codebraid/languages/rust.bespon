@@ -21,8 +21,8 @@ source_template =
 
 chunk_wrapper =
     |```
-    println!("\n{stdoutdelim}");
-    writeln!(std::io::stderr(), "\n{stderrdelim}").expect("Could not write to stderr");
+    println!("\n{stdout_delim}");
+    writeln!(std::io::stderr(), "\n{stderr_delim}").expect("Could not write to stderr");
     {code}
     |```/
 
@@ -32,8 +32,8 @@ inline_expression_formatter =
         let codebraid_temp_{tempsuffix} = {{
             {code}
         }};
-        println!("\n{stdoutdelim}");
-        writeln!(std::io::stderr(), "\n{stderrdelim}").expect("Could not write to stderr");
+        println!("\n{stdout_delim}");
+        writeln!(std::io::stderr(), "\n{stderr_delim}").expect("Could not write to stderr");
         println!("{{}}", codebraid_temp_{tempsuffix});
     }}
     |```/
