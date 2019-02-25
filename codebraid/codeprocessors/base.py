@@ -83,16 +83,16 @@ class Language(object):
             self.post_run_commands = post_run_commands
             self.source_template = definition.pop('source_template', '{code}\n')
             self.chunk_wrapper = definition.pop('chunk_wrapper')
-            self.inline_expression_formatter = definition.pop('inline_expression_formatter')
-            error_patterns = definition.pop('error_patterns')
+            self.inline_expression_formatter = definition.pop('inline_expression_formatter', None)
+            error_patterns = definition.pop('error_patterns', ['error', 'Error', 'ERROR'])
             if not isinstance(error_patterns, list):
                 error_patterns = [error_patterns]
             self.error_patterns = error_patterns
-            warning_patterns = definition.pop('warning_patterns')
+            warning_patterns = definition.pop('warning_patterns', ['warning', 'Warning', 'WARNING'])
             if not isinstance(warning_patterns, list):
                 warning_patterns = [warning_patterns]
             self.warning_patterns = warning_patterns
-            line_number_patterns = definition.pop('line_number_patterns')
+            line_number_patterns = definition.pop('line_number_patterns', [':{number}', 'line {number}'])
             if not isinstance(line_number_patterns, list):
                 line_number_patterns = [line_number_patterns]
             self.line_number_patterns = line_number_patterns
@@ -178,6 +178,8 @@ class Session(object):
         incomplete = []
         last_cc = None
         for cc in self.code_chunks:
+            if cc.is_expr and lang_def.inline_expression_formatter is None:
+                cc.source_errors.append('Inline expressions are not supported for this language')
             if last_cc is not None and last_cc.options['outside_main'] != cc.options['outside_main']:
                 if last_cc.options['outside_main']:
                     from_outside_main_switches += 1
