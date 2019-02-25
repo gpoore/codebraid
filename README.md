@@ -2,10 +2,10 @@
 
 Codebraid is a Python program that enables executable code in
 [Pandoc](http://pandoc.org/) Markdown documents.  Using Codebraid can be as
-simple as adding a class to your code blocks, and then running `codebraid`
-rather than `pandoc` to convert your document from Markdown to another format.
-`codebraid` supports almost all of `pandoc`'s options and passes them to
-`pandoc` internally.
+simple as adding a class to your code blocks' attributes, and then running
+`codebraid` rather than `pandoc` to convert your document from Markdown to
+another format.  `codebraid` supports almost all of `pandoc`'s options and
+passes them to `pandoc` internally.
 
 Codebraid currently can run **Python 3.5+**, **Julia**, **Rust**, and **R**
 code.  Support for additional languages is coming soon.
@@ -58,9 +58,10 @@ Hello from Python! $2^8 = 256$
 
 **Easy debugging** — By default, stderr is shown automatically in the document
 whenever there is an error, right next to the code that caused it.  Even
-though user code is typically inserted into a template for execution, stderr
-line numbers will correctly correspond with those for code blocks, because
-Codebraid tracks the origin of each line of code and synchronizes stderr.
+though user code is typically inserted into a template for execution, line
+numbers in error messages will correctly correspond with line numbers in code
+blocks, because Codebraid tracks the origin of each line of code and
+synchronizes error messages.
 
 **Simple language support** — Adding support for a new language can take only
 a few minutes.  Codebraid's default system for executing code is based on
@@ -71,14 +72,17 @@ use, and how to write to stdout and stderr.  See
 [`languages/`](https://github.com/gpoore/codebraid/tree/master/codebraid/languages)
 for examples.
 
-**Genuine Pandoc Markdown** — Unlike many systems for making code in Markdown
+**No preprocessor** — Unlike many approaches to making code in Markdown
 executable, Codebraid is not a preprocessor.  Rather, Codebraid acts on the
 abstract syntax tree (AST) that Pandoc generates when parsing a document.
 Preprocessors often fail to disable commented-out code blocks because the
 preprocessor doesn't recognize Markdown comments.  Preprocessors can also fail
 due to the finer points of Markdown parsing.  None of this is an issue for
-Codebraid, since documents are always valid Pandoc Markdown and Pandoc does
-the parsing.
+Codebraid, because Pandoc does the Markdown parsing.
+
+**No custom syntax** — Codebraid introduces no additional Markdown syntax.
+Making a code block or inline code executable uses Pandoc's existing syntax
+for defining code attributes.
 
 
 
@@ -92,7 +96,7 @@ Manual installation:  `python3 setup.py install` or `python setup.py install`
 
   * [Pandoc](http://pandoc.org/) 2.4+
   * Python 3.5+ with `setuptools`, and [`bespon`](https://bespon.org) 0.3
-    (`bespon` installation is typically managed by `setup.py`)
+    (`bespon` installation is typically managed by `pip`/`setup.py`)
 
 By default, the `python3` executable will be used to execute code.  If it does
 not exist, `python` will be tried to account for Windows and Arch Linux.
@@ -104,6 +108,10 @@ Python 3 installations.
 
 Simply run `codebraid pandoc <normal pandoc options>`.  Note that
 `--overwrite` is required for existing files.
+
+`codebraid` should typically be run in the same directory as the document, so
+that the default working directory for code is the document directory.  Future
+releases will allow customization of the working directory.
 
 
 ## Caching
