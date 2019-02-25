@@ -634,9 +634,9 @@ class PandocConverter(Converter):
             if isinstance(input_paths, pathlib.Path) and input_name is None:
                 input_name = input_paths.as_posix()
             if input_name is None:
-                msg = 'Failed to run Pandoc:\n{0}'.format(e.stdout.decode('utf8'))
+                msg = 'Failed to run Pandoc:\n{0}'.format(e.stderr.decode('utf8'))
             else:
-                msg = 'Failed to run Pandoc on source {0}:\n{1}'.format(input_name, e.stdout.decode('utf8'))
+                msg = 'Failed to run Pandoc on source {0}:\n{1}'.format(input_name, e.stderr.decode('utf8'))
             raise PandocError(msg)
         if not decode_output:
             return (proc.stdout, proc.stderr)
