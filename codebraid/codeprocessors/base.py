@@ -179,7 +179,7 @@ class Session(object):
         last_cc = None
         for cc in self.code_chunks:
             if cc.is_expr and lang_def.inline_expression_formatter is None:
-                cc.source_errors.append('Inline expressions are not supported for this language')
+                cc.source_errors.append('Inline expressions are not supported for {0}'.format(lang_def.name))
             if last_cc is not None and last_cc.options['outside_main'] != cc.options['outside_main']:
                 if last_cc.options['outside_main']:
                     from_outside_main_switches += 1
@@ -392,17 +392,18 @@ class CodeProcessor(object):
         # it is ever necessary to switch to non-posix paths under Windows, the
         # backslashes will require extra escaping.
         args = shlex.split(cmd)
+        failed_proc_stderr = 'COMMAND FAILED (missing program or file): {0}'.format(cmd).encode('utf8')
         if pipes:
             if stderr_is_stdout:
                 try:
                     proc = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 except FileNotFoundError:
-                    proc = FailedProcess(args, stderr='COMMAND FAILED (missing program or file): {0}'.format(cmd))
+                    proc = FailedProcess(args, stdout=failed_proc_stderr)
             else:
                 try:
                     proc = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 except FileNotFoundError:
-                    proc = FailedProcess(args, stderr='COMMAND FAILED (missing program or file): {0}'.format(cmd))
+                    proc = FailedProcess(args, stdout=b'', stderr=failed_proc_stderr)
         else:
             # When stdout and stderr are stored in files rather than accessed
             # through pipes, the files are named using a session-derived hash as
@@ -414,7 +415,7 @@ class CodeProcessor(object):
                     try:
                         proc = subprocess.run(args, stdout=fout, stderr=subprocess.STDOUT)
                     except FileNotFoundError:
-                        proc = FailedProcess(args, stderr='COMMAND FAILED (missing program or file): {0}'.format(cmd))
+                        proc = FailedProcess(args, stdout=failed_proc_stderr)
                 if not isinstance(proc, FailedProcess):
                     proc.stdout = stdout_path.read_bytes()
             else:
@@ -423,7 +424,7 @@ class CodeProcessor(object):
                         try:
                             proc = subprocess.run(args, stdout=fout, stderr=ferr)
                         except FileNotFoundError:
-                            proc = FailedProcess(args, stderr='COMMAND FAILED (missing program or file): {0}'.format(cmd))
+                            proc = FailedProcess(args, stdout=b'', stderr=failed_proc_stderr)
                 if not isinstance(proc, FailedProcess):
                     proc.stdout = stdout_path.read_bytes()
                     proc.stderr = stderr_path.read_bytes()
@@ -451,8 +452,9 @@ class CodeProcessor(object):
         chunk_wrapper_before, chunk_wrapper_after = session.lang_def.chunk_wrapper.split('{code}')
         chunk_wrapper_before_n_lines = chunk_wrapper_before.count('\n')
         chunk_wrapper_after_n_lines = chunk_wrapper_after.count('\n')
-        inline_expression_formatter_n_lines = session.lang_def.inline_expression_formatter.count('\n')
-        inline_expression_formatter_n_leading_lines = session.lang_def.inline_expression_formatter.split('{code}')[0].count('\n')
+        if session.lang_def.inline_expression_formatter is not None:
+            inline_expression_formatter_n_lines = session.lang_def.inline_expression_formatter.count('\n')
+            inline_expression_formatter_n_leading_lines = session.lang_def.inline_expression_formatter.split('{code}')[0].count('\n')
 
         if not session.code_chunks[0].options['outside_main']:
             run_code_list.append(source_template_before)
@@ -675,6 +677,13 @@ class CodeProcessor(object):
                         # currently on isn't the real code chunk (`actual_cc`)
                         # that the error belongs to.
                         actual_cc = None
+                        if session_output_index < 0:
+                            if session.compile_errors:
+                                user_cc = session.code_chunks[0]
+                            else:
+                                user_cc = session.code_chunks[session.code_chunks[0].session_output_index]
+                        else:
+                            user_cc = session.code_chunks[session_output_index]
                         for cc_index, cc_line in enumerate(cc_stderr_lines):
                             if source_pattern_posix in cc_line or source_pattern_win in cc_line:
                                 match = line_number_pattern_re.search(cc_line)
@@ -682,7 +691,7 @@ class CodeProcessor(object):
                                     for mg in match.groups():
                                         if mg is not None:
                                             run_number = int(mg)
-                                        break
+                                            break
                                     try:
                                         user_cc, user_number = run_code_to_user_code_dict[run_number]
                                     except KeyError:
@@ -705,13 +714,7 @@ class CodeProcessor(object):
                                     cc_line = cc_line.replace(source_pattern_win, source_pattern_final)
                                 cc_stderr_lines[cc_index] = cc_line
                         if actual_cc is None:
-                            if session_output_index < 0:
-                                if session.compile_errors:
-                                    actual_cc = session.code_chunks[0]
-                                else:
-                                    actual_cc = session.code_chunks[session.code_chunks[0].session_output_index]
-                            else:
-                                actual_cc = session.code_chunks[session_output_index]
+                            actual_cc = user_cc
                         # Replace other line numbers that are identified by
                         # regex instead of by being in the same line as the
                         # source name.  This works for syncing messages from a
