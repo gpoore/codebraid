@@ -74,6 +74,7 @@ _pandoc_class_processors = collections.defaultdict(lambda: _pandoc_class_lang_or
                                                    {'cb.run': _pandoc_class_codebraid_command,
                                                     'cb.expr': _pandoc_class_codebraid_command,
                                                     'cb.nb': _pandoc_class_codebraid_command,
+                                                    'cb.paste': _pandoc_class_codebraid_command,
                                                     'lineAnchors': _pandoc_class_line_anchors,
                                                     'line-anchors': _pandoc_class_line_anchors,
                                                     'line_anchors': _pandoc_class_line_anchors,
@@ -107,15 +108,15 @@ def _pandoc_kv_first_number(code_chunk, key, value, options):
             pass
         options['first_number'] = value
 
-def _pandoc_kv_label(code_chunk, key, value, options,
+def _pandoc_kv_name(code_chunk, key, value, options,
                      pandoc_id_re=re.compile(r'(?!\d|_)(?:\w+|[-:.]+)+')):
-    if 'label' in options or 'name' in options:
-        code_chunk.source_errors.append('Duplicate label/name for code chunk')
+    if key in options:
+        code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
     elif not pandoc_id_re.match(value):
         # Identifier regex approximation for Pandoc/Readers/Markdown.hs
-        code_chunk.source_errors.append('Code chunk label/name must be valid Pandoc identifier: <letter>(<alphanum>|"-_:.")*')
+        code_chunk.source_errors.append('Code chunk "name" attribute must be valid Pandoc identifier: <letter>(<alphanum>|"-_:.")*')
     else:
-        options['label'] = value
+        options['name'] = value
 
 def _pandoc_kv_line_anchors(code_chunk, key, value, options):
     if 'lineAnchors' in options:
@@ -135,13 +136,13 @@ def _pandoc_kv_line_numbers(code_chunk, key, value, options):
 
 _pandoc_kv_processors = collections.defaultdict(lambda: _pandoc_kv_generic,
                                                 {'complete': _pandoc_kv_bool,
+                                                 'copy': _pandoc_kv_generic,
                                                  'example': _pandoc_kv_bool,
                                                  'first_number': _pandoc_kv_first_number,
                                                  'startFrom': _pandoc_kv_first_number,
                                                  'start-from': _pandoc_kv_first_number,
                                                  'start_from': _pandoc_kv_first_number,
-                                                 'label': _pandoc_kv_label,
-                                                 'name': _pandoc_kv_label,
+                                                 'name': _pandoc_kv_name,
                                                  'lineAnchors': _pandoc_kv_line_anchors,
                                                  'line-anchors': _pandoc_kv_line_anchors,
                                                  'line_anchors': _pandoc_kv_line_anchors,
@@ -177,7 +178,7 @@ class PandocCodeChunk(CodeChunk):
 
         # Preprocess options
         if node_id:
-            options['label'] = node_id
+            options['name'] = node_id
         inline = node['t'] == 'Code'
         for n, c in enumerate(node_classes):
             self._class_processors[c](self, n, c, options)
@@ -195,10 +196,10 @@ class PandocCodeChunk(CodeChunk):
                 self.source_errors.insert(0, 'Option "example" is only allowed for inline code that is in a paragraph by itself')
                 self.options['example'] = False
             self.inline_parent_node = inline_parent_node
-        pandoc_id = self.options.get('label', '')
+        pandoc_id = self.options.get('name', '')
         pandoc_classes = []
         pandoc_kvpairs = []
-        if 'lang' in self.options:
+        if 'lang' in options:
             pandoc_classes.insert(0, options['lang'])
         if self.options.pop('lineAnchors', False):
             pandoc_classes.append('lineAnchors')
@@ -219,7 +220,7 @@ class PandocCodeChunk(CodeChunk):
     _kv_processors = _pandoc_kv_processors
 
     # This may need additional refinement in future depending on allowed values
-    _unquoted_kv_value_re = re.compile(r'[A-Za-z$_+\-][A-Za-z0-9$_+\-:]')
+    _unquoted_kv_value_re = re.compile(r'[A-Za-z$_+\-][A-Za-z0-9$_+\-:]*')
 
 
     @property
@@ -348,7 +349,10 @@ class PandocCodeChunk(CodeChunk):
                 if not self._unquoted_kv_value_re.match(v):
                     v = '"{0}"'.format(v.replace('\\', '\\\\').replace('"', '\\"'))
                 attr_list.append('{0}={1}'.format(k, v))
-        code = self.code
+        if self.placeholder_code is not None:
+            code = self.placeholder_code
+        else:
+            code = self.code
         if self.inline:
             code_strip = code.strip(' ')
             if code_strip.startswith('`'):
@@ -359,11 +363,13 @@ class PandocCodeChunk(CodeChunk):
             while delim in code:
                 delim += '`'
             md = '{delim}{code}{delim}{{{attr}}}'.format(delim=delim, code=code, attr=' '.join(attr_list))
-        else:
+        elif self.placeholder_code is None or self.placeholder_code:
             delim = '```'
             while delim in code:
                 delim += '```'
             md = '{delim}{{{attr}}}\n{code}\n{delim}'.format(delim=delim, attr=' '.join(attr_list), code=code)
+        else:
+            md = '```{{{attr}}}\n```'.format(attr=' '.join(attr_list))
         self._as_markdown = md
         return md
 
