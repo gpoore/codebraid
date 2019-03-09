@@ -12,18 +12,18 @@ code.  Support for additional languages is coming soon.
 
 **Development:**  https://github.com/gpoore/codebraid
 
-View example HTML output, or see the Markdown source or raw HTML (the Rust
-example demonstrates more advanced features):
+View example HTML output, or see the Markdown source or raw HTML (the Python
+and Rust examples demonstrate more advanced features at the end):
 
   * [Python example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/python.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/python.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/python.html)]
-  * [Julia example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/julia.html)
-    [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/julia.cbmd)]
-    [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/julia.html)]
   * [Rust example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/rust.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/rust.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/rust.html)]
+  * [Julia example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/julia.html)
+    [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/julia.cbmd)]
+    [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/julia.html)]
   * [R example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/R.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/R.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/R.html)]
@@ -140,12 +140,20 @@ For example, `` `code`{.python}` `` becomes
 * `.cb.expr` — Evaluate an expression and interpret the result as Markdown.
   Only works with inline code.
 
-* `.cb.run` — Run code and interpret any printed content (stdout) as Markdown.
-  Also insert stderr verbatim (as code) if it exists.
+* `.cb.nb` — Execute code in notebook mode.  For inline code, this is
+  equivalent to `.cb.expr`.  For code blocks, this inserts the code verbatim,
+  followed by any printed output (stdout) verbatim.  If stderr exists, it is
+  also inserted verbatim.
 
-* `.cb.nb` — Notebook mode.  For inline code, this is equivalent to
-  `.cb.expr`.  For code blocks, this inserts the code verbatim, followed by
-  the stdout verbatim.  If stderr exists, it is also inserted verbatim.
+* `.cb.paste` — Insert code and/or output copied from one or more named code
+  chunks.  The `copy` keyword is used to specify chunks to be copied.  This
+  does not execute any code.  If content is copied from multiple code chunks,
+  all code chunks must be in the same session and must be in sequential order.
+  Unless `show` is specified, display options are inherited from the first
+  copied code chunk.
+
+* `.cb.run` — Run code and interpret any printed content (stdout) as Markdown.
+  Also insert stderr verbatim if it exists.
 
 ### Keyword arguments
 
@@ -160,15 +168,45 @@ Codebraid adds support for additional keyword arguments.  In some cases,
 multiple keywords can be used for the same option.  This is primarily for
 Pandoc compatibility.
 
+#### Execution
+
+* `complete`={`true`, `false`} — By default, code chunks must contain complete
+  units of code (function definitions, loops, expressions, and so forth). With
+  `complete=false`, this is not required.  Any stdout from code chunks with
+  `complete=false` is accumulated until the next code chunk with
+  `complete=true` (the default value).
+
+* `outside_main`={`true`, `false`} — This allows code chunks to overwrite the
+  Codebraid template code.  It is primarily useful for languages like Rust, in
+  which code is inserted by default into a `main()` template.  In that case,
+  if a session *starts* with one or more code chunks with `outside_main=true`,
+  these are used instead of the beginning of the `main()` template.
+  Similarly, if a session *ends* with one or more code chunks with
+  `outside_main=true`, these are used instead of the end of the `main()`
+  template.  If there are any code chunks in between that lack `outside_main`
+  (that is, default `outside_main=false`), then these will have their stdout
+  collected on a per-chunk basis like normal.  Having code chunks that lack
+  `outside_main` is not required; if there are none, the total accumulated
+  stdout for a session belongs to the last code chunk in the session
+
 * `session`={string} — By default, all code for a given language is executed
   in a single, shared session so that data and variables persist between code
   chunks.  This allows code to be separated into multiple independent
   sessions.
 
+#### Display
+
+* `first_number`/`startFrom`/`start-from`/`start_from`={integer or `next`} —
+  Specify the first line number for code when line numbers are displayed.
+  `next` means continue from the last code in the current session.
+
 * `hide`={`expr`, `code`, `stdout`, `stderr`, `all`} — Hide some or all of the
   elements that are displayed by default.  Elements can be combined.  For
   example, `hide=stdout+stderr`.  Note that `expr` only applies to `.cb.expr`
   or `.cb.nb` with inline code, since only these evaluate an expression.
+
+* `line_numbers`/`numberLines`/`number-lines`/`number_lines`={`true`, `false`}
+  — Number code lines in code blocks.
 
 * `show`={`expr`, `code`, `stdout`, `stderr`, `none`} — Override the elements
   that are displayed by default.  `expr` only applies to `.cb.expr` or
@@ -189,28 +227,17 @@ Pandoc compatibility.
   `expr` defaults to `raw` if a format is not specified.  All others default
   to `verbatim`.
 
-* `line_numbers`/`numberLines`/`number-lines`/`number_lines`={`true`, `false`}
-  — Number code lines in code blocks.
+#### Copying
 
-* `first_number`/`startFrom`/`start-from`/`start_from`={integer or `next`} —
-  Specify the first line number for code when line numbers are displayed.
-  `next` means continue from the last code in the current session.
+* `copy`={chunk name(s)} — Copy one or more code chunks.  When `copy` is used
+  with a command like `.cb.run` that executes code, only the code is copied.
+  When it is used with a command like `.cb.paste` that does not execute code,
+  both code and output are copied.  Multiple code chunks may be copied; for
+  example, `copy=name1+name2`.  In that case, the code from all chunks is
+  concatenated, as is any output that is copied.  Because `copy` brings in
+  code from other code chunks, the actual content of a code block or inline
+  code using `copy` is discarded.  As a result, this must be empty, or a space
+  or underscore can be used as a placeholder.
 
-* `complete`={`true`, `false`} — By default, code chunks must contain complete
-  units of code (function definitions, loops, expressions, and so forth). With
-  `complete=false`, this is not required.  Any stdout from code chunks with
-  `complete=false` is accumulated until the next code chunk with
-  `complete=true` (the default value).
-
-* `outside_main`={`true`, `false`} — This allows code chunks to overwrite the
-  Codebraid template code.  It is primarily useful for languages like Rust, in
-  which code is inserted by default into a `main()` template.  In that case,
-  if a session *starts* with one or more code chunks with `outside_main=true`,
-  these are used instead of the beginning of the `main()` template.
-  Similarly, if a session *ends* with one or more code chunks with
-  `outside_main=true`, these are used instead of the end of the `main()`
-  template.  If there are any code chunks in between that lack `outside_main`
-  (that is, default `outside_main=false`), then these will have their stdout
-  collected on a per-chunk basis like normal.  Having code chunks that lack
-  `outside_main` is not required; if there are none, the total accumulated
-  stdout for a session belongs to the last code chunk in the session
+* `name`={identifier-style string} — Name a code chunk so that it can later be
+  copied by name.
