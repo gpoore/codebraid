@@ -136,3 +136,48 @@ print(x)
 
 `hide` takes any combination of `code`, `stderr`, and `stdout`, or simply
 `all`.
+
+
+
+## Advanced features
+
+### Copying code and output
+
+Code chunks can be named using the `name` keyword, which takes an
+identifier-style name.  Then the `copy` keyword can be used in other code
+chunks to copy a named chunk or a combination of named chunks.  When `copy` is
+used with `cb.run`, `cb.expr`, or `cb.nb`, the code is copied and then
+executed as if it had been entered directly.  When `copy` is used with the
+special command `cb.paste`, both the code and output are copied but nothing is
+executed.  This is useful in executing code and then showing snippets of code
+and/or output in different parts of a document.
+
+`copy` works with named code chunks anywhere in a document; a named code chunk
+does not have to appear in a document before the location where it is copied.
+A code chunk that copies another code chunk can itself have a `name`, and then
+itself be copied.
+
+The next two code chunks are named.
+
+```{.python .cb.run name=part1 session=copy_source example=true}
+import random
+random.seed(2)
+rnums = [random.randrange(100) for n in range(10)]
+```
+
+```{.python .cb.run name=part2 session=copy_source example=true}
+print("Random numbers: {}".format(rnums))
+```
+
+Now the code and output of the previous two code chunks are copied and
+combined.  Because the content for this code block is copied from other code
+chunks, the code block itself should be empty, or may alternately contain a
+space or underscore as a placeholder.
+
+```{.python .cb.paste copy=part1+part2 show=code+stdout example=true}
+```
+
+It would also be possible to copy and re-execute the code.
+
+```{.python .cb.run copy=part1+part2 session=copied show=code+stdout:raw example=true}
+```

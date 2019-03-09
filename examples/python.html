@@ -276,5 +276,57 @@ print(x)
 </div>
 </div>
 <p><code>hide</code> takes any combination of <code>code</code>, <code>stderr</code>, and <code>stdout</code>, or simply <code>all</code>.</p>
+<h2 id="advanced-features">Advanced features</h2>
+<h3 id="copying-code-and-output">Copying code and output</h3>
+<p>Code chunks can be named using the <code>name</code> keyword, which takes an identifier-style name. Then the <code>copy</code> keyword can be used in other code chunks to copy a named chunk or a combination of named chunks. When <code>copy</code> is used with <code>cb.run</code>, <code>cb.expr</code>, or <code>cb.nb</code>, the code is copied and then executed as if it had been entered directly. When <code>copy</code> is used with the special command <code>cb.paste</code>, both the code and output are copied but nothing is executed. This is useful in executing code and then showing snippets of code and/or output in different parts of a document.</p>
+<p><code>copy</code> works with named code chunks anywhere in a document; a named code chunk does not have to appear in a document before the location where it is copied. A code chunk that copies another code chunk can itself have a <code>name</code>, and then itself be copied.</p>
+<p>The next two code chunks are named.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.python .cb.run name=part1 session=copy_source}
+import random
+random.seed(2)
+rnums = [random.randrange(100) for n in range(10)]
+```</code></pre>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.python .cb.run name=part2 session=copy_source}
+print(&quot;Random numbers: {}&quot;.format(rnums))
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<p>Random numbers: [7, 11, 10, 46, 21, 94, 85, 39, 32, 77]</p>
+</div>
+</div>
+<p>Now the code and output of the previous two code chunks are copied and combined. Because the content for this code block is copied from other code chunks, the code block itself should be empty, or may alternately contain a space or underscore as a placeholder.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.python .cb.paste copy=part1+part2 show=code+stdout}
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb27" data-startFrom="1"><pre class="sourceCode numberSource python numberLines"><code class="sourceCode python"><a class="sourceLine" id="cb27-1" title="1"><span class="im">import</span> random</a>
+<a class="sourceLine" id="cb27-2" title="2">random.seed(<span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb27-3" title="3">rnums <span class="op">=</span> [random.randrange(<span class="dv">100</span>) <span class="cf">for</span> n <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>)]</a>
+<a class="sourceLine" id="cb27-4" title="4"><span class="bu">print</span>(<span class="st">&quot;Random numbers: </span><span class="sc">{}</span><span class="st">&quot;</span>.<span class="bu">format</span>(rnums))</a></code></pre></div>
+<pre class="stdout"><code>Random numbers: [7, 11, 10, 46, 21, 94, 85, 39, 32, 77]</code></pre>
+</div>
+</div>
+<p>It would also be possible to copy and re-execute the code.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.python .cb.run copy=part1+part2 session=copied show=code+stdout:raw}
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb30" data-startFrom="1"><pre class="sourceCode numberSource python numberLines"><code class="sourceCode python"><a class="sourceLine" id="cb30-1" title="1"><span class="im">import</span> random</a>
+<a class="sourceLine" id="cb30-2" title="2">random.seed(<span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb30-3" title="3">rnums <span class="op">=</span> [random.randrange(<span class="dv">100</span>) <span class="cf">for</span> n <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>)]</a>
+<a class="sourceLine" id="cb30-4" title="4"><span class="bu">print</span>(<span class="st">&quot;Random numbers: </span><span class="sc">{}</span><span class="st">&quot;</span>.<span class="bu">format</span>(rnums))</a></code></pre></div>
+<p>Random numbers: [7, 11, 10, 46, 21, 94, 85, 39, 32, 77]</p>
+</div>
+</div>
 </body>
 </html>
