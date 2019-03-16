@@ -56,14 +56,65 @@ Hello from Python! $2^8 = 256$
 
 ## Features
 
-**Easy debugging** — By default, stderr is shown automatically in the document
+### Comparison with [Jupyter](https://jupyter.org/), [knitr](https://yihui.name/knitr/), and [Pweave](http://mpastell.com/pweave/)
+
+|                                                | Codebraid | Jupyter Notebook |  knitr   | Pweave   |
+|------------------------------------------------|-----------|------------------|----------|----------|
+| multiple programming languages per document    | &check;   | &check;&ast;     | &check;† |          |
+| multiple independent sessions per language     | &check;   |                  |          |          |
+| inline code execution within paragraphs        | &check;   |                  | &check;  | &check;  |
+| no out-of-order code execution                 | &check;   |                  | &check;‡ | &check;  |
+| no markdown preprocessor or custom syntax      | &check;   | &check;          |          |          |
+| minimal diffs for easy version control         | &check;   |                  | &check;  | &check;  |
+| hide or display code in final document         | &check;   |                  | &check;  | &check;  |
+| insert code output anywhere in a document      | &check;   |                  |          |          |
+| can divide code into incomplete snippets       | &check;   |                  | &check;  | &check;  |
+| support for literate programming               | &check;   |                  | &check;  |          |
+| compatible with any text editor                | &check;   |                  | &check;  | &check;  |
+
+<small>
+&ast; One primary language per notebook, plus additional languages via
+%%script magic.  There is no continuity between %%script cells, because
+each cell is executed in a separate process.
+<br>
+† knitr only provides continuity between code chunks for R, and more recently
+Python and Julia.  Code chunks in other languages are executed individually
+in separate processes.
+<br>
+‡ Out-of-order execution is possible with R Markdown notebooks.
+</small>
+
+<hr>
+
+The table above summarizes Codebraid features in comparison with Jupyter
+notebooks, knitr (R Markdown), and Pweave, emphasizing Codebraid's unique
+features.  Here are some additional points to consider:
+
+*Jupyter notebooks* — Notebooks have a dedicated, browser-based graphical user
+interface.  Jupyter kernels typically allow the code in a cell to be executed
+without re-executing any preceding code, providing superior interactivity.
+Codebraid has advantages for projects that are more focused on creating a
+document than on exploratory programming.
+
+*knitr* — R Markdown documents have a dedicated user interface in R Studio.
+knitr provides superior support for R, as well as significant Python and Julia
+support that includes R integration.  Codebraid offers continuity between code
+chunks for all supported languages, as well as multiple independent sessions
+per language.  It also provides unique options for displaying code and its
+output.
+
+
+
+### More about key features
+
+*Easy debugging* — By default, stderr is shown automatically in the document
 whenever there is an error, right next to the code that caused it.  Even
 though user code is typically inserted into a template for execution, line
 numbers in error messages will correctly correspond with line numbers in code
 blocks, because Codebraid tracks the origin of each line of code and
 synchronizes error messages.
 
-**Simple language support** — Adding support for a new language can take only
+*Simple language support* — Adding support for a new language can take only
 a few minutes.  Codebraid's default system for executing code is based on
 writing delimiters to stdout and stderr that allow it to associate code output
 with individual code chunks.  Adding a language is as simple as creating a
@@ -72,7 +123,7 @@ use, and how to write to stdout and stderr.  See
 [`languages/`](https://github.com/gpoore/codebraid/tree/master/codebraid/languages)
 for examples.
 
-**No preprocessor** — Unlike many approaches to making code in Markdown
+*No preprocessor* — Unlike many approaches to making code in Markdown
 executable, Codebraid is not a preprocessor.  Rather, Codebraid acts on the
 abstract syntax tree (AST) that Pandoc generates when parsing a document.
 Preprocessors often fail to disable commented-out code blocks because the
@@ -80,7 +131,7 @@ preprocessor doesn't recognize Markdown comments.  Preprocessors can also fail
 due to the finer points of Markdown parsing.  None of this is an issue for
 Codebraid, because Pandoc does the Markdown parsing.
 
-**No custom syntax** — Codebraid introduces no additional Markdown syntax.
+*No custom syntax* — Codebraid introduces no additional Markdown syntax.
 Making a code block or inline code executable uses Pandoc's existing syntax
 for defining code attributes.
 
@@ -229,15 +280,15 @@ Pandoc compatibility.
 
 #### Copying
 
-* `copy`={chunk name(s)} — Copy one or more code chunks.  When `copy` is used
-  with a command like `.cb.run` that executes code, only the code is copied.
-  When it is used with a command like `.cb.paste` that does not execute code,
-  both code and output are copied.  Multiple code chunks may be copied; for
-  example, `copy=name1+name2`.  In that case, the code from all chunks is
-  concatenated, as is any output that is copied.  Because `copy` brings in
-  code from other code chunks, the actual content of a code block or inline
-  code using `copy` is discarded.  As a result, this must be empty, or a space
-  or underscore can be used as a placeholder.
+* `copy`={chunk name(s)} — Copy one or more named code chunks.  When `copy` is
+  used with a command like `.cb.run` that executes code, only the code is
+  copied.  When it is used with a command like `.cb.paste` that does not
+  execute code, both code and output are copied.  Multiple code chunks may be
+  copied; for example, `copy=name1+name2`.  In that case, the code from all
+  chunks is concatenated, as is any output that is copied.  Because `copy`
+  brings in code from other code chunks, the actual content of a code block or
+  inline code using `copy` is discarded.  As a result, this must be empty, or
+  a space or underscore can be used as a placeholder.
 
 * `name`={identifier-style string} — Name a code chunk so that it can later be
   copied by name.
