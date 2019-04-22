@@ -335,7 +335,7 @@ class CodeProcessor(object):
 
         sessions_run = util.KeyDefaultDict(Session)
         for cc in self.code_chunks:
-            if cc.command in ('run', 'expr', 'nb'):
+            if cc.execute:
                 if self.cross_source_sessions:
                     key = (cc.options['lang'], cc.options['session'])
                 else:

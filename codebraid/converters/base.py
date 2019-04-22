@@ -154,19 +154,23 @@ _cb_option_processors = collections.defaultdict(lambda: _cb_option_unknown,
                                                  'session': _cb_option_str,
                                                  'show': _cb_option_show})
 
+_cb_default_execute = collections.defaultdict(lambda: False, {k: True for k in ('expr', 'nb', 'run')})
+
 ODict = collections.OrderedDict
 _cb_default_show_options = collections.defaultdict(lambda: ODict(),
-                                                   {('expr', True): ODict([('expr', 'raw'),
-                                                                           ('stderr', 'verbatim')]),
-                                                    ('nb', True):   ODict([('expr', 'raw'),
-                                                                           ('stderr', 'verbatim')]),
-                                                    ('nb', False):  ODict([('code', 'verbatim'),
-                                                                           ('stdout', 'verbatim'),
-                                                                           ('stderr', 'verbatim')]),
-                                                    ('run', True):  ODict([('stdout', 'raw'),
-                                                                           ('stderr', 'verbatim')]),
-                                                    ('run', False): ODict([('stdout', 'raw'),
-                                                                           ('stderr', 'verbatim')])})
+                                                   {('code', True):  ODict([('code', 'verbatim')]),
+                                                    ('code', False): ODict([('code', 'verbatim')]),
+                                                    ('expr', True):  ODict([('expr', 'raw'),
+                                                                            ('stderr', 'verbatim')]),
+                                                    ('nb', True):    ODict([('expr', 'raw'),
+                                                                            ('stderr', 'verbatim')]),
+                                                    ('nb', False):   ODict([('code', 'verbatim'),
+                                                                            ('stdout', 'verbatim'),
+                                                                            ('stderr', 'verbatim')]),
+                                                    ('run', True):   ODict([('stdout', 'raw'),
+                                                                            ('stderr', 'verbatim')]),
+                                                    ('run', False):  ODict([('stdout', 'raw'),
+                                                                            ('stderr', 'verbatim')])})
 
 _cb_default_block_options = {'complete': True,
                              'example': False,
@@ -180,6 +184,7 @@ _cb_default_inline_options = {'complete': True,
                               'lang': None,
                               'outside_main': False,
                               'session': None}
+
 
 
 
@@ -205,6 +210,7 @@ class CodeChunk(object):
         if command == 'expr' and not inline:
             self.source_errors.append('Codebraid command "{0}" is only allowed inline'.format(command))
         self.command = command
+        self.execute = self._default_execute[command]
 
         if isinstance(code, list):
             code_lines = code
@@ -229,9 +235,7 @@ class CodeChunk(object):
             self.placeholder_code = code
             self.code = None
             self.code_lines = None
-        if command == 'paste':
-            self.is_expr = False
-        elif command == 'expr' or (inline and command == 'nb'):
+        if command == 'expr' or (inline and command == 'nb'):
             self.is_expr = True
         else:
             self.is_expr = False
@@ -254,6 +258,12 @@ class CodeChunk(object):
                     self.source_warnings.append('Option "{0}" has no effect with command "paste"')
                     options[k] = None
             self.has_output = False
+        elif command == 'code':
+            for k in ('complete', 'outside_main', 'session'):
+                if k in options:
+                    self.source_warnings.append('Option "{0}" has no effect with command "code"')
+                    options[k] = None
+            self.has_output = True
         else:
             if not final_options['complete'] and self.is_expr:
                 self.source_errors.append('Option "complete" value "false" is incompatible with inline expressions')
@@ -342,7 +352,7 @@ class CodeChunk(object):
         self.code_start_line_number = others[0].code_start_line_number
         self.has_output = True
 
-
+    _default_execute = _cb_default_execute
     _default_options = {True: _cb_default_inline_options,
                         False: _cb_default_block_options}
     _default_show = _cb_default_show_options

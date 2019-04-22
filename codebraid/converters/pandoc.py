@@ -71,10 +71,11 @@ def _pandoc_class_line_numbers(code_chunk, class_index, class_name, options):
         options['line_numbers'] = True
 
 _pandoc_class_processors = collections.defaultdict(lambda: _pandoc_class_lang_or_unknown,
-                                                   {'cb.run': _pandoc_class_codebraid_command,
+                                                   {'cb.code': _pandoc_class_codebraid_command,
                                                     'cb.expr': _pandoc_class_codebraid_command,
                                                     'cb.nb': _pandoc_class_codebraid_command,
                                                     'cb.paste': _pandoc_class_codebraid_command,
+                                                    'cb.run': _pandoc_class_codebraid_command,
                                                     'lineAnchors': _pandoc_class_line_anchors,
                                                     'line-anchors': _pandoc_class_line_anchors,
                                                     'line_anchors': _pandoc_class_line_anchors,
