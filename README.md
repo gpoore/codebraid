@@ -35,8 +35,12 @@ Markdown source `test.md`:
 
 ``````markdown
 ```{.python .cb.run}
-print('Hello from Python!')
-print('$2^8 = {}$'.format(2**8))
+var = 'Hello from Python!'
+var += ' $2^8 = {}$'.format(2**8)
+```
+
+```{.python .cb.run}
+print(var)
 ```
 ``````
 
@@ -52,6 +56,10 @@ Output:
 ```markdown
 Hello from Python! $2^8 = 256$
 ```
+
+As this example illustrates, variables persist between code blocks; by
+default, code is executed within a single session.  Code output is also cached
+by default so that code is only re-executed when modified.
 
 
 ## Features
@@ -145,7 +153,7 @@ Manual installation:  `python3 setup.py install` or `python setup.py install`
 
 **Requirements:**
 
-  * [Pandoc](http://pandoc.org/) 2.4+
+  * [Pandoc](http://pandoc.org/) 2.4+ (2.7.2+ recommended)
   * Python 3.5+ with `setuptools`, and [`bespon`](https://bespon.org) 0.3
     (`bespon` installation is typically managed by `pip`/`setup.py`)
 
@@ -187,6 +195,10 @@ Code is made executable by adding a Codebraid class to its
 [Pandoc attributes](http://pandoc.org/MANUAL.html#fenced-code-blocks).
 For example, `` `code`{.python}` `` becomes
 `` `code`{.python .cb.run}` ``.
+
+* `.cb.code` — Insert code verbatim, but do not run it.  This is primarily
+  useful when combined with other features like naming and then copying code
+  chunks.
 
 * `.cb.expr` — Evaluate an expression and interpret the result as Markdown.
   Only works with inline code.
@@ -282,13 +294,15 @@ Pandoc compatibility.
 
 * `copy`={chunk name(s)} — Copy one or more named code chunks.  When `copy` is
   used with a command like `.cb.run` that executes code, only the code is
-  copied.  When it is used with a command like `.cb.paste` that does not
-  execute code, both code and output are copied.  Multiple code chunks may be
-  copied; for example, `copy=name1+name2`.  In that case, the code from all
-  chunks is concatenated, as is any output that is copied.  Because `copy`
-  brings in code from other code chunks, the actual content of a code block or
-  inline code using `copy` is discarded.  As a result, this must be empty, or
-  a space or underscore can be used as a placeholder.
+  copied, and it is executed as if it had been entered directly.  When `copy`
+  is used with `.cb.code`, only the code is copied and nothing is executed.
+  When `copy` is used with `.cb.paste`, both code and output are copied, and
+  nothing is executed.  Multiple code chunks may be copied; for example,
+  `copy=name1+name2`.  In that case, the code from all chunks is concatenated,
+  as is any output that is copied.  Because `copy` brings in code from other
+  code chunks, the actual content of a code block or inline code using `copy`
+  is discarded.  As a result, this must be empty, or a space or underscore can
+  be used as a placeholder.
 
 * `name`={identifier-style string} — Name a code chunk so that it can later be
   copied by name.
