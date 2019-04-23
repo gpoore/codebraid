@@ -593,7 +593,8 @@ class PandocConverter(Converter):
         '''
         if from_format not in self.from_formats and from_format != 'json':
             raise ValueError
-        if to_format not in self.to_formats and to_format != 'json':
+        if not (to_format in self.to_formats or to_format == 'json' or
+                (to_format is None and to_format_pandoc_extensions is None and output_path is not None)):
             raise ValueError
         if from_format_pandoc_extensions is None:
             from_format_pandoc_extensions = ''
@@ -606,8 +607,9 @@ class PandocConverter(Converter):
 
         cmd_list = [str(self.pandoc_path),
                     '--from', from_format + from_format_pandoc_extensions,
-                    '--to', to_format + to_format_pandoc_extensions,
                     '--eol', 'lf']
+        if to_format is not None:
+            cmd_list.extend(['--to', to_format + to_format_pandoc_extensions])
         if standalone:
             cmd_list.append('--standalone')
         if trace:
@@ -1146,11 +1148,16 @@ class PandocConverter(Converter):
 
     def convert(self, *, to_format, output_path=None, overwrite=False,
                 standalone=None, other_pandoc_args=None):
-        if not isinstance(to_format, str):
-            raise TypeError
-        to_format, to_format_pandoc_extensions = self._split_format_extensions(to_format)
-        if to_format not in self.to_formats:
-            raise ValueError
+        if to_format is None:
+            if output_path is None:
+                raise ValueError('Explicit output format is required when it cannot be inferred from output file name')
+            to_format_pandoc_extensions = None
+        else:
+            if not isinstance(to_format, str):
+                raise TypeError
+            to_format, to_format_pandoc_extensions = self._split_format_extensions(to_format)
+            if to_format not in self.to_formats:
+                raise ValueError
         if not isinstance(standalone, bool):
             raise TypeError
         if output_path is not None:
@@ -1171,7 +1178,11 @@ class PandocConverter(Converter):
                                             to_format=to_format,
                                             to_format_pandoc_extensions=to_format_pandoc_extensions,
                                             standalone=standalone,
+                                            output_path=output_path,
+                                            overwrite=overwrite,
                                             other_pandoc_args=other_pandoc_args)
+            if output_path is None:
+                print(converted, end='')
         else:
             for node in self._io_tracker_nodes:
                 node['c'][0] = to_format
@@ -1199,9 +1210,9 @@ class PandocConverter(Converter):
                     converted_lines[index] = line
             converted_lines[-1] = converted_lines[-1] + '\n'
             converted = '\n'.join(converted_lines)
-        if self.synctex:
-            self._save_synctex_data(converted_to_source_dict)
-        if output_path is not None:
-            output_path.write_text(converted, encoding='utf8')
-        else:
-            print(converted, end='')
+            if self.synctex:
+                self._save_synctex_data(converted_to_source_dict)
+            if output_path is not None:
+                output_path.write_text(converted, encoding='utf8')
+            else:
+                print(converted, end='')

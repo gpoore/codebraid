@@ -18,6 +18,7 @@ from .version import __version__ as version
 
 def main():
     parser = argparse.ArgumentParser(prog='codebraid')
+    parser.set_defaults(func=lambda x: parser.print_help())
     parser.add_argument('--version', action='version', version='Codebraid {0}'.format(version))
     subparsers = parser.add_subparsers(dest='subparser_name')
 
@@ -46,10 +47,10 @@ def main():
     for opt, narg in PANDOC_OPTIONS.items():
         if narg == 0:
             parser_pandoc.add_argument(opt, action='store_true', dest=opt,
-                                       help='Pandoc option; see Pandoc documentation or pandoc --help')
+                                       help='Pandoc option; see Pandoc documentation')
         elif narg == 1:
             parser_pandoc.add_argument(opt, dest=opt, metavar='PANDOC',
-                                       help='Pandoc option; see Pandoc documentation or pandoc --help')
+                                       help='Pandoc option; see Pandoc documentation')
         else:
             raise ValueError
 
