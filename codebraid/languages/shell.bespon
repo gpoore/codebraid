@@ -1,0 +1,17 @@
+|=== bash
+extension = 'sh'
+
+chunk_wrapper =
+    |```
+    printf "\n{stdout_delim}\n"
+    printf "\n{stderr_delim}\n" >&2
+    {code}
+    |```/
+
+inline_expression_formatter =
+    |```
+    _codebraid_temp_{tempsuffix}=$({code})
+    printf "\n{stdout_delim}\n"
+    printf "\n{stderr_delim}\n" >&2
+    printf "$_codebraid_temp_{tempsuffix}\n"
+    |```/

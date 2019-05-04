@@ -84,6 +84,7 @@
 #-----------------------------------------------------------------------------
 #
 
+bash = "shell.bespon"
 julia = "julia.bespon"
 python = "python.bespon"
 R = "R.bespon"
