@@ -1,0 +1,76 @@
+---
+title: "Codebraid with bash"
+---
+
+
+## Inline code
+
+
+### Run
+
+Inline code with `.cb.run` gives raw stdout.
+
+`echo $((1 + 2))`{.bash .cb.run example=true}
+
+
+### Expression and inline notebook
+
+Inline code with `.cb.expr` and `.cb.nb` (`nb` is short for `notebook`)
+evaluate an expression and then insert the raw output into the document, where
+it is interpreted as Markdown.  Expressions are evaluated via `$(<expr>)`.
+
+`(4 * 16)`{.bash .cb.expr example=true}
+
+`ls | grep "bash\.cbmd"`{.bash .cb.nb example=true}
+
+
+### Stderr
+
+In the event of an error, inline code automatically shows stderr by default.
+This code is executed in its own session, `inline_error`, so that it does
+not impact other examples.
+
+`echooo $((1 + 2))`{.bash .cb.run session=inline_error example=true}
+
+
+
+## Block code
+
+
+### Run
+
+Code blocks with `.cb.run` give raw stdout.  There is continuity between code
+blocks so long as they are in the same session; variables persist.
+
+```{.bash .cb.run example=true}
+message="Hello from *Bash!*"
+```
+
+```{.bash .cb.run example=true}
+echo "$message"
+```
+
+
+### Notebook
+
+Code blocks with `.cb.nb` show the code and also the verbatim stdout.
+
+
+```{.bash .cb.nb session=notebook example=true}
+ls | grep "bash"
+```
+
+```{.bash .cb.nb session=notebook example=true}
+which python3 && which python
+```
+
+
+### Stderr
+
+Code blocks show stderr automatically by default.
+
+```{.bash .cb.nb session=block_error example=true}
+set -u
+var="$((1 + 2))"
+echo "$varrr"
+```
