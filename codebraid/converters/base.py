@@ -12,6 +12,7 @@ import os
 import collections
 import json
 import pathlib
+import re
 import typing; from typing import List, Optional, Sequence, Union
 import zipfile
 from .. import err
@@ -29,23 +30,39 @@ from .. import codeprocessors
 # related to presentation result in warnings, while duplicate or invalid
 # options related to code execution result in errors.
 def _cb_option_unknown(code_chunk, key, value, options):
+    '''
+    Raise an error for unknown options.  There is no way to tell whether an
+    execution or presentation option was intended, so take the safer approach.
+    '''
     code_chunk.source_errors.append('Unknown option "{0}" for code chunk'.format(key))
 
-def _cb_option_bool(code_chunk, key, value, options):
+def _cb_option_bool_warning(code_chunk, key, value, options):
     if isinstance(value, bool):
         options[key] = value
     else:
         code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
 
-def _cb_option_str(code_chunk, key, value, options):
+def _cb_option_bool_error(code_chunk, key, value, options):
+    if isinstance(value, bool):
+        options[key] = value
+    else:
+        code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+def _cb_option_str_warning(code_chunk, key, value, options):
     if isinstance(value, str):
         options[key] = value
     else:
         code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
 
+def _cb_option_str_error(code_chunk, key, value, options):
+    if isinstance(value, str):
+        options[key] = value
+    else:
+        code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
 def _cb_option_copy(code_chunk, key, value, options):
     if 'include' in options:
-        code_chunk.source_errors.append('Options "copy" and "include" are mutually exclusive')
+        code_chunk.source_errors.append('Options "copy" and "include" in code chunk are mutually exclusive')
     elif isinstance(value, str):
         # No need to check whether names are valid identifier-style strings,
         # since that's done when they are defined
@@ -76,11 +93,10 @@ def _cb_option_hide(code_chunk, key, value, options):
             return
         for v in hide_values:
             options['show'].pop(v, None)
-    options[key] = hide_values
 
 def _cb_option_include(code_chunk, key, value, options):
     if 'copy' in options:
-        code_chunk.source_errors.append('Options "copy" and "include" are mutually exclusive')
+        code_chunk.source_errors.append('Options "copy" and "include" in code chunk are mutually exclusive')
     elif isinstance(value, str):
         options[key] = value
     else:
@@ -89,7 +105,7 @@ def _cb_option_include(code_chunk, key, value, options):
 
 def _cb_option_name(code_chunk, key, value, options):
     if isinstance(value, str):
-        if (value[:1] + value[1:].replace('-', '_')).isidentifier():
+        if value.isidentifier():
             options['name'] = value
         else:
             code_chunk.source_warnings.append('Option "{0}" has invalid, non-identifier value "{1}"'.format(key, value))
@@ -98,9 +114,11 @@ def _cb_option_name(code_chunk, key, value, options):
 
 def _cb_option_show(code_chunk, key, value, options):
     if not isinstance(value, str):
-        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-        return
-    if value == 'none' or value is None:
+        if value is None:
+            options[key] = collections.OrderedDict()
+        else:
+            code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+    elif value == 'none':
         options[key] = collections.OrderedDict()
     else:
         value_processed = collections.OrderedDict()
@@ -141,24 +159,26 @@ def _cb_option_show(code_chunk, key, value, options):
         options[key] = value_processed
 
 
-_cb_option_processors = collections.defaultdict(lambda: _cb_option_unknown,
-                                                {'complete': _cb_option_bool,
+_cb_option_processors = collections.defaultdict(lambda: _cb_option_unknown,  # Unknown option -> error
+                                                {'complete': _cb_option_bool_error,
                                                  'copy': _cb_option_copy,
                                                  'hide': _cb_option_hide,
-                                                 'example': _cb_option_bool,
+                                                 'example': _cb_option_bool_warning,
                                                  'first_number': _cb_option_first_number,
                                                  'name': _cb_option_name,
-                                                 'lang': _cb_option_str,
-                                                 'line_numbers': _cb_option_bool,
-                                                 'outside_main': _cb_option_bool,
-                                                 'session': _cb_option_str,
+                                                 'lang': _cb_option_str_error,
+                                                 'line_numbers': _cb_option_bool_warning,
+                                                 'outside_main': _cb_option_bool_error,
+                                                 'session': _cb_option_str_error,
                                                  'show': _cb_option_show})
 
-_cb_default_execute = collections.defaultdict(lambda: False, {k: True for k in ('expr', 'nb', 'run')})
+_cb_default_execute = collections.defaultdict(lambda: False,  # Unknown command -> do not run
+                                              {k: True for k in ('expr', 'nb', 'run')})
 
 ODict = collections.OrderedDict
-_cb_default_show_options = collections.defaultdict(lambda: ODict(),
-                                                   {('code', True):  ODict([('code', 'verbatim')]),
+_cb_default_show_options = collections.defaultdict(lambda: ODict(),  # Unknown -> show nothing
+                                                   {# key format (<command>, <inline>)
+                                                    ('code', True):  ODict([('code', 'verbatim')]),
                                                     ('code', False): ODict([('code', 'verbatim')]),
                                                     ('expr', True):  ODict([('expr', 'raw'),
                                                                             ('stderr', 'verbatim')]),
@@ -172,6 +192,7 @@ _cb_default_show_options = collections.defaultdict(lambda: ODict(),
                                                     ('run', False):  ODict([('stdout', 'raw'),
                                                                             ('stderr', 'verbatim')])})
 
+# Default value for 'show' is inserted before use
 _cb_default_block_options = {'complete': True,
                              'example': False,
                              'first_number': 'next',
@@ -185,6 +206,9 @@ _cb_default_inline_options = {'complete': True,
                               'outside_main': False,
                               'session': None}
 
+# This is used instead of `.splitlines()` because that also splits on other
+# code points like `\v` and `\f` that may occur within string literals.
+newlines_re=re.compile(r'\r?\n')
 
 
 
@@ -215,9 +239,9 @@ class CodeChunk(object):
         if isinstance(code, list):
             code_lines = code
         else:
-            code_lines = code.splitlines()
+            code_lines = newlines_re.split(code)
         if inline:
-            code = code_lines[0]
+            code = code_lines[0]  # Check for len(code_lines) > 1 later
         else:
             code = '\n'.join(code_lines)
         if 'copy' not in options and 'include' not in options:
@@ -244,6 +268,8 @@ class CodeChunk(object):
         self.source_start_line_number = source_start_line_number
         self.inline = inline
 
+        # No need to check for duplicate options, since `options` is a dict.
+        # That must be handled in subclasses or source parsing code.
         final_options = self._default_options[inline].copy()
         final_options['show'] = self._default_show[(command, inline)].copy()
         for k, v in options.items():
@@ -252,7 +278,7 @@ class CodeChunk(object):
             if 'copy' not in options:
                 self.source_errors.append('Command "paste" cannot be used without specifying a target via "copy"')
             if 'show' not in options and 'hide' not in options:
-                final_options['show'] = None
+                final_options['show'] = None  # Will inherit if not specified
             for k in ('complete', 'outside_main', 'session'):
                 if k in options:
                     self.source_warnings.append('Option "{0}" has no effect with command "paste"')
@@ -272,6 +298,8 @@ class CodeChunk(object):
                     self.source_errors.append('Option "complete" value "true" is incompatible with "outside_main" value "true"')
             self.has_output = True
         self.options = final_options
+        if 'copy' in self.options:
+            self.copy_chunks = []
 
         self.session_obj = None
         self.session_index = None
@@ -294,65 +322,77 @@ class CodeChunk(object):
             self.source_warnings = []
 
 
-    def copy_code(self, others):
+    def copy_code(self):
         if 'copy' not in self.options:
             raise TypeError
+        copy_chunks = self.copy_chunks
         if self.options['lang'] is None:
-            self.options['lang'] = others[0].options['lang']
+            self.options['lang'] = copy_chunks[0].options['lang']
         if self.options['show'] is None:
-            self.options['show'] = others[0].options['show'].copy()
-        if any(x.is_expr for x in others):
-            if len(others) > 1:
-                invalid_cc_names = ' '.join('"{0}"'.format(x.options['name']) for x in others if x.is_expr)
+            self.options['show'] = copy_chunks[0].options['show'].copy()
+        if not any(x.execute for x in copy_chunks) or all(k == 'code' for k in self.options['show']):
+            self.has_output = True
+        if any(x.is_expr for x in copy_chunks):
+            if len(copy_chunks) > 1:
+                invalid_cc_names = ', '.join(x.options['name'] for x in copy_chunks if x.is_expr)
                 message = 'Cannot copy multiple code chunks when one or more code chunks are expressions: {0}'.format(invalid_cc_names)
                 self.source_errors.append(message)
-            if self.command == 'paste':
+            if self.command in ('paste', 'code'):
+                # Some commands inherit expression status.  The code command
+                # inherits so that subsequent copying doesn't result in
+                # incorrectly concatenated expressions.  Since the code
+                # command never has output, this has no display side effects.
                 self.is_expr = True
             elif not self.is_expr:
                 self.source_errors.append('A non-expression command cannot copy an expression code chunk')
         elif self.is_expr:
             self.source_errors.append('An expression command cannot copy a non-expression code chunk')
-        if self.inline and 'code' in self.options['show'] and (len(others) > 1 or len(others[0].code_lines) > 1):
+        if self.inline and 'code' in self.options['show'] and (len(copy_chunks) > 1 or len(copy_chunks[0].code_lines) > 1):
             self.source_errors.append('Cannot copy and then display multiple lines of code in an inline context')
         if self.source_errors:
             return
-        if len(others) == 1:
-            self.code_lines = others[0].code_lines
-            self.code = others[0].code
+        if len(copy_chunks) == 1:
+            self.code_lines = copy_chunks[0].code_lines
+            self.code = copy_chunks[0].code
         else:
-            self.code_lines = [line for x in others for line in x.code_lines]
-            self.code = '\n'.join(x.code for x in others)
+            self.code_lines = [line for x in copy_chunks for line in x.code_lines]
+            self.code = '\n'.join(x.code for x in copy_chunks)
+        if self.command == 'paste':
+            self.code_start_line_number = copy_chunks[0].code_start_line_number
 
-    def copy_output(self, others):
+
+    def copy_output(self):
         if self.command != 'paste':
             raise TypeError
-        if 'expr' in self.options['show']:
+        copy_chunks = self.copy_chunks
+        if not self.is_expr and 'expr' in self.options['show']:
+            # Make sure 'show' is compatible with inherited expression status.
+            # Can't do this during option processing because that is before
+            # inheritance.
             del self.options['show']['expr']
             self.source_warnings.append('Invalid "show" value "expr" in paste code chunk')
-        if len(others) > 1:
-            if any(x.command not in ('run', 'expr', 'nb') for x in others):
-                self.source_errors.append('Cannot copy multiple code chunks when some chunks are copies or were not executed')
-            else:
-                if len(set(x.session_obj for x in others)) > 1:
-                    self.source_errors.append('Cannot copy multiple code chunks in different sessions')
-                if any(x.session_index >= y.session_index for x, y in zip(others[:-1], others[1:])):
-                    self.source_errors.append('Cannot copy multiple code chunks out of order, or single code chunks multiple times')
-            if self.source_errors:
-                self.code_lines = None
-                self.code = None
-                return
-        if len(others) == 1:
-            self.stdout_lines = others[0].stdout_lines
-            self.stderr_lines = others[0].stderr_lines
-        else:
-            self.stdout_lines = [line for x in others if x.stdout_lines is not None for line in x.stdout_lines] or None
-            self.stderr_lines = [line for x in others if x.stderr_lines is not None for line in x.stderr_lines] or None
+        if len(copy_chunks) > 1:
+            if len(set(x.session_obj for x in copy_chunks)) > 1:
+                self.source_errors.append('Cannot copy and concatenate output from code chunks in different sessions')
+            if any(x.session_index >= y.session_index for x, y in zip(copy_chunks[:-1], copy_chunks[1:])):
+                self.source_errors.append('Cannot copy output of code chunks out of order, or copy a single code chunk multiple times')
+        if self.source_errors:
+            self.code_lines = None
+            self.code = None
+            return
         if self.is_expr:
-            self.expr_lines = others[0].expr_lines
-        self.code_start_line_number = others[0].code_start_line_number
+            # For this case, already checked that len(copy_chunks) == 1
+            self.expr_lines = copy_chunks[0].expr_lines
+        if len(copy_chunks) == 1:
+            self.stdout_lines = copy_chunks[0].stdout_lines
+            self.stderr_lines = copy_chunks[0].stderr_lines
+        else:
+            self.stdout_lines = [line for x in copy_chunks if x.stdout_lines is not None for line in x.stdout_lines] or None
+            self.stderr_lines = [line for x in copy_chunks if x.stderr_lines is not None for line in x.stderr_lines] or None
         self.has_output = True
 
     _default_execute = _cb_default_execute
+    # <inline>: <options>
     _default_options = {True: _cb_default_inline_options,
                         False: _cb_default_block_options}
     _default_show = _cb_default_show_options
@@ -483,28 +523,28 @@ class Converter(object):
         if not isinstance(no_cache, bool):
             raise TypeError
         self.no_cache = no_cache
-        if cache_path is None:
-            if paths is not None:
-                cache_path = self.expanded_source_paths[0].parent / '_codebraid'
-        elif isinstance(cache_path, str):
+        if isinstance(cache_path, str):
             cache_path = pathlib.Path(cache_path)
-        elif not isinstance(cache_path, pathlib.Path):
+        elif not isinstance(cache_path, pathlib.Path) and cache_path is not None:
             raise TypeError
         if no_cache:
             cache_path = None
-        elif cache_path is not None:
+        elif cache_path is None:
+            if paths is not None:
+                cache_path = self.expanded_source_paths[0].parent / '_codebraid'
+        else:
             if expandvars:
-                cache_path = pathlib.Path(os.path.expandvars(str(cache_path.as_posix)))
+                cache_path = pathlib.Path(os.path.expandvars(str(cache_path.as_posix())))
             if expanduser:
                 cache_path = cache_path.expanduser()
-            if not cache_path.is_dir():
-                cache_path.mkdir(parents=True)
+        if cache_path is not None and not cache_path.is_dir():
+            cache_path.mkdir(parents=True)
         self.cache_path = cache_path
         self._io_map = False
         if not isinstance(synctex, bool):
             raise TypeError
         if synctex and cache_path is None:
-            raise ValueError
+            raise TypeError('Cache path must be specified')
         self.synctex = synctex
         if synctex:
             self._io_map = True
