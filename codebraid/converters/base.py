@@ -10,6 +10,7 @@
 
 import os
 import collections
+from collections import OrderedDict as ODict
 import json
 import pathlib
 import re
@@ -21,194 +22,168 @@ from .. import codeprocessors
 
 
 
-# Option processing functions
-#
-# These check options for validity and then store them.  There are no type
-# conversions.  Any desired type conversions should be performed in
-# format-specific subclasses of CodeChunk, which can take into account the
-# data types that the format allows for options.  Duplicate or invalid options
-# related to presentation result in warnings, while duplicate or invalid
-# options related to code execution result in errors.
-def _cb_option_unknown(code_chunk, key, value, options):
+def _get_option_processors():
     '''
-    Raise an error for unknown options.  There is no way to tell whether an
-    execution or presentation option was intended, so take the safer approach.
+    Create dict mapping code chunk options to processing functions.
+
+    These functions check options for validity and then store them.  There are
+    no type conversions.  Any desired type conversions should be performed in
+    format-specific subclasses of CodeChunk, which can take into account the
+    data types that the format allows for options.  Duplicate or invalid
+    options related to presentation result in warnings, while duplicate or
+    invalid options related to code execution result in errors.
     '''
-    code_chunk.source_errors.append('Unknown option "{0}" for code chunk'.format(key))
 
-def _cb_option_bool_warning(code_chunk, key, value, options):
-    if isinstance(value, bool):
-        options[key] = value
-    else:
-        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+    def option_unknown(code_chunk, options, key, value):
+        '''
+        Raise an error for unknown options.  There is no way to tell whether an
+        execution or presentation option was intended, so take the safer approach.
+        '''
+        code_chunk.source_errors.append('Unknown option "{0}" for code chunk'.format(key))
 
-def _cb_option_bool_error(code_chunk, key, value, options):
-    if isinstance(value, bool):
-        options[key] = value
-    else:
-        code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-
-def _cb_option_str_warning(code_chunk, key, value, options):
-    if isinstance(value, str):
-        options[key] = value
-    else:
-        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-
-def _cb_option_str_error(code_chunk, key, value, options):
-    if isinstance(value, str):
-        options[key] = value
-    else:
-        code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-
-def _cb_option_copy(code_chunk, key, value, options):
-    if 'include' in options:
-        code_chunk.source_errors.append('Options "copy" and "include" in code chunk are mutually exclusive')
-    elif isinstance(value, str):
-        # No need to check whether names are valid identifier-style strings,
-        # since that's done when they are defined
-        options[key] = [x.strip() for x in value.split('+')]
-    else:
-        # This is an error, because no functionality is possible
-        code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-
-def _cb_option_first_number(code_chunk, key, value, options):
-    if (isinstance(value, int) and value > 0) or (isinstance(value, str) and value == 'next'):
-        options[key] = value
-    else:
-        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-
-def _cb_option_hide(code_chunk, key, value, options):
-    if not isinstance(value, str):
-        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-        return
-    if value == 'all':
-        options['show'] = collections.OrderedDict()
-    else:
-        hide_values = value.replace(' ', '').split('+')
-        if not all(v in ('code', 'stdout', 'stderr', 'expr') for v in hide_values):
-            code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-            return
-        if 'expr' in hide_values and not code_chunk.is_expr and code_chunk.command != 'paste':
-            code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-            return
-        for v in hide_values:
-            options['show'].pop(v, None)
-
-def _cb_option_include(code_chunk, key, value, options):
-    if 'copy' in options:
-        code_chunk.source_errors.append('Options "copy" and "include" in code chunk are mutually exclusive')
-    elif isinstance(value, str):
-        options[key] = value
-    else:
-        # This is an error, because no functionality is possible
-        code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-
-def _cb_option_name(code_chunk, key, value, options):
-    if isinstance(value, str):
-        if value.isidentifier():
-            options['name'] = value
-        else:
-            code_chunk.source_warnings.append('Option "{0}" has invalid, non-identifier value "{1}"'.format(key, value))
-    else:
-        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-
-def _cb_option_show(code_chunk, key, value, options):
-    if not isinstance(value, str):
-        if value is None:
-            options[key] = collections.OrderedDict()
+    def option_bool_warning(code_chunk, options, key, value):
+        if isinstance(value, bool):
+            options[key] = value
         else:
             code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-    elif value == 'none':
-        options[key] = collections.OrderedDict()
-    else:
-        value_processed = collections.OrderedDict()
-        for output_and_format in value.replace(' ', '').split('+'):
-            if ':' not in output_and_format:
-                output = output_and_format
-                format = None
+
+    def option_bool_error(code_chunk, options, key, value):
+        if isinstance(value, bool):
+            options[key] = value
+        else:
+            code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+    def option_str_warning(code_chunk, options, key, value):
+        if isinstance(value, str):
+            options[key] = value
+        else:
+            code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+    def option_str_error(code_chunk, options, key, value):
+        if isinstance(value, str):
+            options[key] = value
+        else:
+            code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+    def option_copy(code_chunk, options, key, value):
+        if 'include' in options:
+            code_chunk.source_errors.append('Options "copy" and "include" in code chunk are mutually exclusive')
+        elif isinstance(value, str):
+            # No need to check whether names are valid identifier-style strings,
+            # since that's done when they are defined
+            options[key] = [x.strip() for x in value.split('+')]
+        else:
+            # This is an error, because no functionality is possible
+            code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+    def option_first_number(code_chunk, options, key, value):
+        if (isinstance(value, int) and value > 0) or (isinstance(value, str) and value == 'next'):
+            options[key] = value
+        else:
+            code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+    def option_hide(code_chunk, options, key, value):
+        if not isinstance(value, str):
+            code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+            return
+        if value == 'all':
+            options['show'] = collections.OrderedDict()
+        else:
+            hide_values = value.replace(' ', '').split('+')
+            if not all(v in ('code', 'stdout', 'stderr', 'expr') for v in hide_values):
+                code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                return
+            if 'expr' in hide_values and not code_chunk.is_expr and code_chunk.command != 'paste':
+                code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                return
+            for v in hide_values:
+                options['show'].pop(v, None)
+
+    def option_include(code_chunk, options, key, value):
+        if 'copy' in options:
+            code_chunk.source_errors.append('Options "copy" and "include" in code chunk are mutually exclusive')
+        elif isinstance(value, str):
+            options[key] = value
+        else:
+            # This is an error, because no functionality is possible
+            code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+    def option_name(code_chunk, options, key, value):
+        if isinstance(value, str):
+            if value.isidentifier():
+                options['name'] = value
             else:
-                output, format = output_and_format.split(':', 1)
-            if output in value_processed:
-                code_chunk.source_warnings.append('Option "{0}" value "{1}" contains duplicate "{2}" in code chunk'.format(key, value, output))
-                continue
-            if output == 'code':
-                if format is None:
-                    format = 'verbatim'
-                elif format != 'verbatim':
-                    code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-                    continue
-            elif output in ('stdout', 'stderr'):
-                if format is None:
-                    format = 'verbatim'
-                elif format not in ('verbatim', 'verbatim_or_empty', 'raw'):
-                    code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-                    continue
-            elif output == 'expr':
-                if not code_chunk.is_expr and code_chunk.command != 'paste':
-                    code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-                    continue
-                if format is None:
-                    format = 'raw'
-                elif format not in ('verbatim', 'verbatim_or_empty', 'raw'):
-                    code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-                    continue
+                code_chunk.source_warnings.append('Option "{0}" has invalid, non-identifier value "{1}"'.format(key, value))
+        else:
+            code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+    def option_session(code_chunk, options, key, value):
+        if isinstance(value, str):
+            if value.isidentifier():
+                options['name'] = value
+            else:
+                code_chunk.source_errors.append('Option "{0}" has invalid, non-identifier value "{1}"'.format(key, value))
+        else:
+            code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+
+    def option_show(code_chunk, options, key, value):
+        if not isinstance(value, str):
+            if value is None:
+                options[key] = collections.OrderedDict()
             else:
                 code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
-                continue
-            value_processed[output] = format
-        options[key] = value_processed
+        elif value == 'none':
+            options[key] = collections.OrderedDict()
+        else:
+            value_processed = collections.OrderedDict()
+            for output_and_format in value.replace(' ', '').split('+'):
+                if ':' not in output_and_format:
+                    output = output_and_format
+                    format = None
+                else:
+                    output, format = output_and_format.split(':', 1)
+                if output in value_processed:
+                    code_chunk.source_warnings.append('Option "{0}" value "{1}" contains duplicate "{2}" in code chunk'.format(key, value, output))
+                    continue
+                if output == 'code':
+                    if format is None:
+                        format = 'verbatim'
+                    elif format != 'verbatim':
+                        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                        continue
+                elif output in ('stdout', 'stderr'):
+                    if format is None:
+                        format = 'verbatim'
+                    elif format not in ('verbatim', 'verbatim_or_empty', 'raw'):
+                        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                        continue
+                elif output == 'expr':
+                    if not code_chunk.is_expr and code_chunk.command != 'paste':
+                        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                        continue
+                    if format is None:
+                        format = 'raw'
+                    elif format not in ('verbatim', 'verbatim_or_empty', 'raw'):
+                        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                        continue
+                else:
+                    code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                    continue
+                value_processed[output] = format
+            options[key] = value_processed
 
-
-_cb_option_processors = collections.defaultdict(lambda: _cb_option_unknown,  # Unknown option -> error
-                                                {'complete': _cb_option_bool_error,
-                                                 'copy': _cb_option_copy,
-                                                 'hide': _cb_option_hide,
-                                                 'example': _cb_option_bool_warning,
-                                                 'first_number': _cb_option_first_number,
-                                                 'name': _cb_option_name,
-                                                 'lang': _cb_option_str_error,
-                                                 'line_numbers': _cb_option_bool_warning,
-                                                 'outside_main': _cb_option_bool_error,
-                                                 'session': _cb_option_str_error,
-                                                 'show': _cb_option_show})
-
-_cb_default_execute = collections.defaultdict(lambda: False,  # Unknown command -> do not run
-                                              {k: True for k in ('expr', 'nb', 'run')})
-
-ODict = collections.OrderedDict
-_cb_default_show_options = collections.defaultdict(lambda: ODict(),  # Unknown -> show nothing
-                                                   {# key format (<command>, <inline>)
-                                                    ('code', True):  ODict([('code', 'verbatim')]),
-                                                    ('code', False): ODict([('code', 'verbatim')]),
-                                                    ('expr', True):  ODict([('expr', 'raw'),
-                                                                            ('stderr', 'verbatim')]),
-                                                    ('nb', True):    ODict([('expr', 'raw'),
-                                                                            ('stderr', 'verbatim')]),
-                                                    ('nb', False):   ODict([('code', 'verbatim'),
-                                                                            ('stdout', 'verbatim'),
-                                                                            ('stderr', 'verbatim')]),
-                                                    ('run', True):   ODict([('stdout', 'raw'),
-                                                                            ('stderr', 'verbatim')]),
-                                                    ('run', False):  ODict([('stdout', 'raw'),
-                                                                            ('stderr', 'verbatim')])})
-
-# Default value for 'show' is inserted before use
-_cb_default_block_options = {'complete': True,
-                             'example': False,
-                             'first_number': 'next',
-                             'lang': None,
-                             'line_numbers': True,
-                             'outside_main': False,
-                             'session': None}
-_cb_default_inline_options = {'complete': True,
-                              'example': False,
-                              'lang': None,
-                              'outside_main': False,
-                              'session': None}
-
-# This is used instead of `.splitlines()` because that also splits on other
-# code points like `\v` and `\f` that may occur within string literals.
-newlines_re=re.compile(r'\r?\n')
+    return collections.defaultdict(lambda: option_unknown,  # Unknown option -> error
+                                   {'complete': option_bool_error,
+                                    'copy': option_copy,
+                                    'hide': option_hide,
+                                    'example': option_bool_warning,
+                                    'first_number': option_first_number,
+                                    'name': option_name,
+                                    'lang': option_str_error,
+                                    'line_numbers': option_bool_warning,
+                                    'outside_main': option_bool_error,
+                                    'session': option_session,
+                                    'show': option_show})
 
 
 
@@ -226,7 +201,7 @@ class CodeChunk(object):
                  inline: Optional[bool]=None):
         self.__pre_init__()
 
-        if command not in ('code', 'expr', 'nb', 'run', 'paste'):
+        if command not in self.commands:
             if command is None:
                 self.source_errors.append('Missing valid Codebraid command')
             else:
@@ -239,7 +214,7 @@ class CodeChunk(object):
         if isinstance(code, list):
             code_lines = code
         else:
-            code_lines = newlines_re.split(code)
+            code_lines = self._newlines_re.split(code)
         if inline:
             code = code_lines[0]  # Check for len(code_lines) > 1 later
         else:
@@ -270,10 +245,14 @@ class CodeChunk(object):
 
         # No need to check for duplicate options, since `options` is a dict.
         # That must be handled in subclasses or source parsing code.
-        final_options = self._default_options[inline].copy()
-        final_options['show'] = self._default_show[(command, inline)].copy()
+        if inline:
+            final_options = self._default_inline_options.copy()
+            final_options['show'] = self._default_inline_show[command].copy()
+        else:
+            final_options = self._default_block_options.copy()
+            final_options['show'] = self._default_block_show[command].copy()
         for k, v in options.items():
-            self._option_processors[k](self, k, v, final_options)
+            self._option_processors[k](self, final_options, k, v)
         if command == 'paste':
             if 'copy' not in options:
                 self.source_errors.append('Command "paste" cannot be used without specifying a target via "copy"')
@@ -320,6 +299,48 @@ class CodeChunk(object):
         if not hasattr(self, 'source_errors'):
             self.source_errors = []
             self.source_warnings = []
+
+
+    commands = set(['code', 'expr', 'nb', 'run', 'paste'])
+
+    # This is used instead of `.splitlines()` because that also splits on
+    # code points like `\v` and `\f` that may occur within string literals.
+    _newlines_re = re.compile(r'\r?\n')
+
+    _default_execute = collections.defaultdict(lambda: False,  # Unknown command -> do not run
+                                               {k: True for k in ('expr', 'nb', 'run')})
+
+    # Default value for 'show' is inserted before use, based on command+inline
+    _default_block_options = {'complete': True,
+                              'example': False,
+                              'first_number': 'next',
+                              'lang': None,
+                              'line_numbers': True,
+                              'outside_main': False,
+                              'session': None}
+    _default_inline_options = {'complete': True,
+                               'example': False,
+                               'lang': None,
+                               'outside_main': False,
+                               'session': None}
+
+    _default_block_show = collections.defaultdict(lambda: ODict(),  # Unknown -> show nothing
+                                                  {'code': ODict([('code', 'verbatim')]),
+                                                   'nb':   ODict([('code', 'verbatim'),
+                                                                  ('stdout', 'verbatim'),
+                                                                  ('stderr', 'verbatim')]),
+                                                   'run':  ODict([('stdout', 'raw'),
+                                                                  ('stderr', 'verbatim')])})
+    _default_inline_show = collections.defaultdict(lambda: ODict(),  # Unknown -> show nothing
+                                                   {'code':  ODict([('code', 'verbatim')]),
+                                                    'expr':  ODict([('expr', 'raw'),
+                                                                    ('stderr', 'verbatim')]),
+                                                    'nb':    ODict([('expr', 'raw'),
+                                                                    ('stderr', 'verbatim')]),
+                                                    'run':   ODict([('stdout', 'raw'),
+                                                                    ('stderr', 'verbatim')])})
+
+    _option_processors = _get_option_processors()
 
 
     def copy_code(self):
@@ -390,13 +411,6 @@ class CodeChunk(object):
             self.stdout_lines = [line for x in copy_chunks if x.stdout_lines is not None for line in x.stdout_lines] or None
             self.stderr_lines = [line for x in copy_chunks if x.stderr_lines is not None for line in x.stderr_lines] or None
         self.has_output = True
-
-    _default_execute = _cb_default_execute
-    # <inline>: <options>
-    _default_options = {True: _cb_default_inline_options,
-                        False: _cb_default_block_options}
-    _default_show = _cb_default_show_options
-    _option_processors = _cb_option_processors
 
 
 
