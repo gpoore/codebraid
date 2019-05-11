@@ -31,132 +31,119 @@ class PandocError(err.CodebraidError):
 
 
 
-# Option processing functions
-#
-# Duplicate or invalid options related to presentation result in warnings,
-# while duplicate or invalid options related to code execution result in
-# errors.
-#
-# Code chunk classes
-def _pandoc_class_lang_or_unknown(code_chunk, class_index, class_name, options):
-    if 'lang' in options:
-        if class_name.startswith('cb.'):
-            code_chunk.source_errors.append('Unknown or unsupported Codebraid command "{0}"'.format(class_name))
+def _get_class_processors():
+    '''
+    Create dict mapping Pandoc classes to processing functions.
+
+    Duplicate or invalid options related to presentation result in warnings,
+    while duplicate or invalid options related to code execution result in
+    errors.
+    '''
+    def class_lang_or_unknown(code_chunk, options, class_index, class_name):
+        if 'lang' in options:
+            if class_name.startswith('cb.'):
+                code_chunk.source_errors.append('Unknown or unsupported Codebraid command "{0}"'.format(class_name))
+            else:
+                code_chunk.source_errors.append('Unknown non-Codebraid class')
+        elif class_index > 0:
+            if class_name.startswith('cb.'):
+                code_chunk.source_errors.append('Unknown or unsupported Codebraid command "{0}"'.format(class_name))
+            else:
+                code_chunk.source_errors.append('The language/format "{0}" must be the first class for code chunk'.format(class_name))
         else:
-            code_chunk.source_errors.append('Unknown non-Codebraid class')
-    elif class_index > 0:
-        if class_name.startswith('cb.'):
-            code_chunk.source_errors.append('Unknown or unsupported Codebraid command "{0}"'.format(class_name))
+            options['lang'] = class_name
+
+    def class_codebraid_command(code_chunk, options, class_index, class_name):
+        if 'codebraid_command' in options:
+            code_chunk.source_errors.append('Only one Codebraid command can be applied per code chunk')
         else:
-            code_chunk.source_errors.append('The language/format "{0}" must be the first class for code chunk'.format(class_name))
-    else:
-        options['lang'] = class_name
+            options['codebraid_command'] = class_name.split('.', 1)[1]
 
-def _pandoc_class_codebraid_command(code_chunk, class_index, class_name, options):
-    if 'codebraid_command' in options:
-        code_chunk.source_errors.append('Only one Codebraid command can be applied per code chunk')
-    else:
-        options['codebraid_command'] = class_name.split('.', 1)[1]
+    def class_line_anchors(code_chunk, options, class_index, class_name):
+        if 'lineAnchors' in options:
+            code_chunk.source_warnings.append('Duplicate line anchor class for code chunk')
+        else:
+            options['lineAnchors'] = True
 
-def _pandoc_class_line_anchors(code_chunk, class_index, class_name, options):
-    if 'lineAnchors' in options:
-        code_chunk.source_warnings.append('Duplicate line anchor class for code chunk')
-    else:
-        options['lineAnchors'] = True
+    def class_line_numbers(code_chunk, options, class_index, class_name):
+        if 'line_numbers' in options:
+            code_chunk.source_warnings.append('Duplicate line numbering class for code chunk')
+        else:
+            options['line_numbers'] = True
 
-def _pandoc_class_line_numbers(code_chunk, class_index, class_name, options):
-    if 'line_numbers' in options:
-        code_chunk.source_warnings.append('Duplicate line numbering class for code chunk')
-    else:
-        options['line_numbers'] = True
+    codebraid_commands = {'cb.{}'.format(k): class_codebraid_command for k in CodeChunk.commands}
+    line_anchors = {k: class_line_anchors for k in ('lineAnchors', 'line-anchors', 'line_anchors')}
+    line_numbers = {k: class_line_numbers for k in ('line_numbers', 'numberLines', 'number-lines', 'number_lines')}
+    return collections.defaultdict(lambda: class_lang_or_unknown,
+                                   {**codebraid_commands,
+                                    **line_anchors,
+                                    **line_numbers})
 
-_pandoc_class_processors = collections.defaultdict(lambda: _pandoc_class_lang_or_unknown,
-                                                   {'cb.code': _pandoc_class_codebraid_command,
-                                                    'cb.expr': _pandoc_class_codebraid_command,
-                                                    'cb.nb': _pandoc_class_codebraid_command,
-                                                    'cb.paste': _pandoc_class_codebraid_command,
-                                                    'cb.run': _pandoc_class_codebraid_command,
-                                                    'lineAnchors': _pandoc_class_line_anchors,
-                                                    'line-anchors': _pandoc_class_line_anchors,
-                                                    'line_anchors': _pandoc_class_line_anchors,
-                                                    'line_numbers': _pandoc_class_line_numbers,
-                                                    'numberLines': _pandoc_class_line_numbers,
-                                                    'number-lines': _pandoc_class_line_numbers,
-                                                    'number_lines': _pandoc_class_line_numbers})
 
-# Code chunk key-value attributes
-def _pandoc_kv_generic(code_chunk, key, value, options):
-    if key in options:
-        code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
-    else:
-        options[key] = value
+def _get_keyval_processors():
+    '''
+    Create dict mapping Pandoc key-value attributes to processing functions.
+    '''
+    def keyval_generic(code_chunk, options, key, value):
+        if key in options:
+            code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
+        else:
+            options[key] = value
 
-def _pandoc_kv_bool(code_chunk, key, value, options):
-    if key in options:
-        code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
-    elif value not in ('true', 'false'):
-        code_chunk.source_errors.append('Attribute "{0}" must be true or false for code chunk'.format(key))
-    else:
-        options[key] = value == 'true'
+    def keyval_bool(code_chunk, options, key, value):
+        if key in options:
+            code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
+        elif value not in ('true', 'false'):
+            code_chunk.source_errors.append('Attribute "{0}" must be true or false for code chunk'.format(key))
+        else:
+            options[key] = value == 'true'
 
-def _pandoc_kv_first_number(code_chunk, key, value, options):
-    if 'first_number' in options:
-        code_chunk.source_warnings.append('Duplicate first line number attribute for code chunk')
-    else:
-        try:
-            value = int(value)
-        except ValueError:
-            pass
-        options['first_number'] = value
+    def keyval_first_number(code_chunk, options, key, value):
+        if 'first_number' in options:
+            code_chunk.source_warnings.append('Duplicate first line number attribute for code chunk')
+        else:
+            try:
+                value = int(value)
+            except ValueError:
+                pass
+            options['first_number'] = value
 
-def _pandoc_kv_name(code_chunk, key, value, options,
-                     pandoc_id_re=re.compile(r'(?!\d|_)(?:\w+|[-:.]+)+')):
-    if key in options:
-        code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
-    elif not pandoc_id_re.match(value):
-        # Identifier regex approximation for Pandoc/Readers/Markdown.hs
-        code_chunk.source_errors.append('Code chunk "name" attribute must be valid Pandoc identifier: <letter>(<alphanum>|"-_:.")*')
-    else:
-        options['name'] = value
+    def keyval_line_anchors(code_chunk, options, key, value):
+        if 'line_anchors' in options:
+            code_chunk.source_warnings.append('Duplicate line anchor attribute for code chunk')
+        elif value not in ('true', 'false'):
+            code_chunk.source_warnings.append('Attribute "{0}" must be true or false for code chunk'.format(key))
+        else:
+            options['line_anchors'] = value
 
-def _pandoc_kv_line_anchors(code_chunk, key, value, options):
-    if 'lineAnchors' in options:
-        code_chunk.source_warnings.append('Duplicate line anchor attribute for code chunk')
-    elif value not in ('true', 'false'):
-        code_chunk.source_warnings.append('Attribute "{0}" must be true or false for code chunk'.format(key))
-    else:
-        options['lineAnchors'] = value
+    def keyval_line_numbers(code_chunk, options, key, value):
+        if 'line_numbers' in options:
+            code_chunk.source_warnings.append('Duplicate line numbering attribute for code chunk')
+        elif value not in ('true', 'false'):
+            code_chunk.source_warnings.append('Attribute "{0}" must be true or false for code chunk'.format(key))
+        else:
+            options['line_numbers'] = value
 
-def _pandoc_kv_line_numbers(code_chunk, key, value, options):
-    if 'line_numbers' in options:
-        code_chunk.source_warnings.append('Duplicate line numbering attribute for code chunk')
-    elif value not in ('true', 'false'):
-        code_chunk.source_warnings.append('Attribute "{0}" must be true or false for code chunk'.format(key))
-    else:
-        options['line_numbers'] = value
-
-_pandoc_kv_processors = collections.defaultdict(lambda: _pandoc_kv_generic,
-                                                {'complete': _pandoc_kv_bool,
-                                                 'copy': _pandoc_kv_generic,
-                                                 'example': _pandoc_kv_bool,
-                                                 'first_number': _pandoc_kv_first_number,
-                                                 'startFrom': _pandoc_kv_first_number,
-                                                 'start-from': _pandoc_kv_first_number,
-                                                 'start_from': _pandoc_kv_first_number,
-                                                 'name': _pandoc_kv_name,
-                                                 'lineAnchors': _pandoc_kv_line_anchors,
-                                                 'line-anchors': _pandoc_kv_line_anchors,
-                                                 'line_anchors': _pandoc_kv_line_anchors,
-                                                 'line_numbers': _pandoc_kv_line_numbers,
-                                                 'numberLines': _pandoc_kv_line_numbers,
-                                                 'number-lines': _pandoc_kv_line_numbers,
-                                                 'number_lines': _pandoc_kv_line_numbers,
-                                                 'outside_main': _pandoc_kv_bool})
+    first_number = {k: keyval_first_number for k in ('first_number', 'startFrom', 'start-from', 'start_from')}
+    line_anchors = {k: keyval_line_anchors for k in ('lineAnchors', 'line-anchors', 'line_anchors')}
+    line_numbers = {k: keyval_line_numbers for k in ('line_numbers', 'numberLines', 'number-lines', 'number_lines')}
+    return collections.defaultdict(lambda: keyval_generic,
+                                   {'complete': keyval_bool,
+                                    'copy': keyval_generic,
+                                    'example': keyval_bool,
+                                    **first_number,
+                                    'name': keyval_generic,
+                                    **line_anchors,
+                                    **line_numbers,
+                                    'outside_main': keyval_bool})
 
 
 
 
 class PandocCodeChunk(CodeChunk):
+    '''
+    Code chunk for Pandoc Markdown.
+    '''
     def __init__(self,
                  node: dict,
                  parent_node_list: list,
@@ -182,13 +169,18 @@ class PandocCodeChunk(CodeChunk):
             options['name'] = node_id
         inline = node['t'] == 'Code'
         for n, c in enumerate(node_classes):
-            self._class_processors[c](self, n, c, options)
+            self._class_processors[c](self, options, n, c)
         for k, v in node_kvpairs:
-            self._kv_processors[k](self, k, v, options)
+            self._kv_processors[k](self, options, k, v)
+        # All processed data from classes and key-value pairs is stored in
+        # `options`, but only some of these are valid Codebraid options.
+        # Remove those that are not and store in temp variables.
         codebraid_command = options.pop('codebraid_command', None)
+        line_anchors = options.pop('lineAnchors', None)
 
         # Process options
-        super().__init__(codebraid_command, code, options, source_name, source_start_line_number=source_start_line_number, inline=inline)
+        super().__init__(codebraid_command, code, options, source_name,
+                         source_start_line_number=source_start_line_number, inline=inline)
 
         # Work with processed options -- now use `self.options`
         if inline:
@@ -202,7 +194,7 @@ class PandocCodeChunk(CodeChunk):
         pandoc_kvpairs = []
         if 'lang' in options:
             pandoc_classes.insert(0, options['lang'])
-        if self.options.pop('lineAnchors', False):
+        if line_anchors:
             pandoc_classes.append('lineAnchors')
         if self.options.get('line_numbers', False):
             pandoc_classes.append('numberLines')
@@ -217,8 +209,8 @@ class PandocCodeChunk(CodeChunk):
         self._as_markdown = None
 
 
-    _class_processors = _pandoc_class_processors
-    _kv_processors = _pandoc_kv_processors
+    _class_processors = _get_class_processors()
+    _kv_processors = _get_keyval_processors()
 
     # This may need additional refinement in future depending on allowed values
     _unquoted_kv_value_re = re.compile(r'[A-Za-z$_+\-][A-Za-z0-9$_+\-:]*')
