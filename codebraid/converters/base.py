@@ -214,7 +214,7 @@ class CodeChunk(object):
         if isinstance(code, list):
             code_lines = code
         else:
-            code_lines = self._newlines_re.split(code)
+            code_lines = self._splitlines(code)
         if inline:
             code = code_lines[0]  # Check for len(code_lines) > 1 later
         else:
@@ -303,10 +303,6 @@ class CodeChunk(object):
 
     commands = set(['code', 'expr', 'nb', 'run', 'paste'])
 
-    # This is used instead of `.splitlines()` because that also splits on
-    # code points like `\v` and `\f` that may occur within string literals.
-    _newlines_re = re.compile(r'\r?\n')
-
     _default_execute = collections.defaultdict(lambda: False,  # Unknown command -> do not run
                                                {k: True for k in ('expr', 'nb', 'run')})
 
@@ -341,6 +337,23 @@ class CodeChunk(object):
                                                                     ('stderr', 'verbatim')])})
 
     _option_processors = _get_option_processors()
+
+
+    @staticmethod
+    def _splitlines(string, _newlines_re=re.compile(r'\r?\n')):
+        '''
+        Split a string into lines, so that `'\n'.join(lines)` recovers the
+        original string with a single trailing `\r?\n` stripped.
+
+        This is used instead of `.splitlines()` because that also splits on
+        code points like `\v` and `\f` that may occur within string literals.
+        Also, `.splitlines()` turns the empty string into `[]` and doesn't
+        roundtrip (for example, `'\n'.join('\n'.splitlines())`).
+        '''
+        lines = _newlines_re.split(string)
+        if string[-1:] == '\n':
+            lines.pop()
+        return lines
 
 
     def copy_code(self):
