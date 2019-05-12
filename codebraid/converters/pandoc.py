@@ -60,10 +60,10 @@ def _get_class_processors():
             options['codebraid_command'] = class_name.split('.', 1)[1]
 
     def class_line_anchors(code_chunk, options, class_index, class_name):
-        if 'lineAnchors' in options:
+        if 'line_anchors' in options:
             code_chunk.source_warnings.append('Duplicate line anchor class for code chunk')
         else:
-            options['lineAnchors'] = True
+            options['line_anchors'] = True
 
     def class_line_numbers(code_chunk, options, class_index, class_name):
         if 'line_numbers' in options:
@@ -184,16 +184,16 @@ class PandocCodeChunk(CodeChunk):
 
         # Work with processed options -- now use `self.options`
         if inline:
+            self.inline_parent_node = inline_parent_node
             if (self.options['example'] and (inline_parent_node is None or
                     'codebraid_pseudonode' in inline_parent_node or len(parent_node_list) > 1)):
                 self.source_errors.insert(0, 'Option "example" is only allowed for inline code that is in a paragraph by itself')
                 self.options['example'] = False
-            self.inline_parent_node = inline_parent_node
         pandoc_id = self.options.get('name', '')
         pandoc_classes = []
         pandoc_kvpairs = []
         if 'lang' in options:
-            pandoc_classes.insert(0, options['lang'])
+            pandoc_classes.append(options['lang'])
         if line_anchors:
             pandoc_classes.append('lineAnchors')
         if self.options.get('line_numbers', False):
@@ -228,9 +228,9 @@ class PandocCodeChunk(CodeChunk):
         if self.source_errors:
             message = 'SOURCE ERROR in "{0}" near line {1}:'.format(self.source_name, self.source_start_line_number)
             if self.inline:
-                nodes.append({'t': 'Code', 'c': [['', ['sourceError'], []], message + ' ' + ' '.join(self.source_errors)]})
+                nodes.append({'t': 'Code', 'c': [['', ['sourceError'], []], '{0} {1}'.format(message, ' '.join(self.source_errors))]})
             else:
-                nodes.append({'t': 'CodeBlock', 'c': [['', ['sourceError'], []], message + '\n' + '\n'.join(self.source_errors)]})
+                nodes.append({'t': 'CodeBlock', 'c': [['', ['sourceError'], []], '{0}\n{1}'.format(message, '\n'.join(self.source_errors))]})
             self._output_nodes = nodes
             return nodes
         if not self.inline and self.options['line_numbers']:
@@ -246,11 +246,7 @@ class PandocCodeChunk(CodeChunk):
         t_raw = 'RawInline' if self.inline else 'RawBlock'
         for output, format in self.options['show'].items():
             if output == 'code':
-                if self.inline:
-                    code = self.code_lines[0]
-                else:
-                    code = '\n'.join(self.code_lines)
-                nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], code]})
+                nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.code]})
             elif output == 'expr':
                 if format == 'verbatim':
                     if self.expr_lines is not None:
@@ -339,6 +335,7 @@ class PandocCodeChunk(CodeChunk):
             attr_list.append('.{0}'.format(c))
         for k, v in self.node_kvpairs:
             if k != 'example':
+                # Valid keys don't need quoting, some values may
                 if not self._unquoted_kv_value_re.match(v):
                     v = '"{0}"'.format(v.replace('\\', '\\\\').replace('"', '\\"'))
                 attr_list.append('{0}={1}'.format(k, v))
@@ -395,7 +392,6 @@ class PandocCodeChunk(CodeChunk):
         else:
             index = self.parent_node_list_index
             self.parent_node_list[index] = example_div_node
-
 
 
 
