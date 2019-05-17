@@ -16,8 +16,9 @@ import pathlib
 import re
 import typing; from typing import List, Optional, Sequence, Union
 import zipfile
-from .. import err
 from .. import codeprocessors
+from .. import err
+from .. import util
 
 
 
@@ -213,12 +214,17 @@ class CodeChunk(object):
 
         if isinstance(code, list):
             code_lines = code
+            if inline:
+                code = code_lines[0]  # Check for len(code_lines) > 1 later
+            else:
+                code = '\n'.join(code_lines)
         else:
-            code_lines = self._splitlines(code)
-        if inline:
-            code = code_lines[0]  # Check for len(code_lines) > 1 later
-        else:
-            code = '\n'.join(code_lines)
+            code_lines = util.splitlines_lf(code) or ['']
+            if inline:
+                code = code_lines[0]  # Check for len(code_lines) > 1 later
+            elif code[-1:] == '\n':
+                code = code[:-1]
+
         if 'copy' not in options and 'include' not in options:
             if inline and len(code_lines) > 1:
                 self.source_errors.append('Inline code cannot be longer that 1 line')
@@ -339,23 +345,6 @@ class CodeChunk(object):
     _option_processors = _get_option_processors()
 
 
-    @staticmethod
-    def _splitlines(string, _newlines_re=re.compile(r'\r?\n')):
-        '''
-        Split a string into lines, so that `'\n'.join(lines)` recovers the
-        original string with a single trailing `\r?\n` stripped.
-
-        This is used instead of `.splitlines()` because that also splits on
-        code points like `\v` and `\f` that may occur within string literals.
-        Also, `.splitlines()` turns the empty string into `[]` and doesn't
-        roundtrip (for example, `'\n'.join('\n'.splitlines())`).
-        '''
-        lines = _newlines_re.split(string)
-        if string[-1:] == '\n':
-            lines.pop()
-        return lines
-
-
     def copy_code(self):
         if 'copy' not in self.options:
             raise TypeError
@@ -440,15 +429,12 @@ class MetaConverter(type):
         else:
             # Subclass
             cls._registry[name.lower()] = cls
-            if not all(hasattr(cls, a) for a in ['from_formats',
-                                                 'to_formats',
-                                                 'multi_source_formats']):
+            if not all(attr is None or
+                       (isinstance(attr, set) and attr and all(isinstance(x, str) for x in attr))
+                       for attr in [cls.from_formats, cls.multi_source_formats, cls.to_formats]):
                 raise TypeError
-            if not all(isinstance(attr, set) and attr and
-                       all(isinstance(x, str) for x in attr)
-                       for attr in [cls.from_formats, cls.to_formats]):
-                raise TypeError
-            if cls.multi_source_formats - cls.from_formats:
+            if (cls.from_formats is not None and cls.multi_source_formats is not None and
+                    cls.multi_source_formats - cls.from_formats):
                 raise ValueError
         super().__init__(name, bases, dct)
 
@@ -510,16 +496,17 @@ class Converter(object):
                     source_string = '\n'
                 source_strings.append(source_string)
             self.source_strings = source_strings
-            if from_format is None:
-                try:
-                    from_formats = set([self._file_extension_to_format_dict[p.suffix] for p in paths])
-                except KeyError:
-                    raise TypeError('Cannot determine document format from file extensions, or unsupported format')
-                from_format = from_formats.pop()
-                if from_formats:
-                    raise TypeError('Cannot determine unambiguous document format from file extensions')
-            if from_format not in self.from_formats:
-                raise ValueError('Unsupported document format {0}'.format(from_format))
+            if self.from_formats is not None:
+                if from_format is None:
+                    try:
+                        source_formats = set([self._file_extension_to_format_dict[p.suffix] for p in paths])
+                    except KeyError:
+                        raise TypeError('Cannot determine document format from file extensions, or unsupported format')
+                    from_format = source_formats.pop()
+                    if source_formats:
+                        raise TypeError('Cannot determine unambiguous document format from file extensions')
+                if from_format not in self.from_formats:
+                    raise ValueError('Unsupported document format {0}'.format(from_format))
             self.from_format = from_format
         elif strings is not None and paths is None:
             if not all(x is False for x in (expanduser, expandvars)):
@@ -531,7 +518,8 @@ class Converter(object):
             elif not (isinstance(strings, collections.abc.Sequence) and
                       strings and all(isinstance(x, str) for x in strings)):
                 raise TypeError
-            self.source_strings = strings
+            # Normalize newlines, as if read from file with universal newlines
+            self.source_strings = [self._crlf_re.sub('\n', s) or '\n' for s in strings]
             if len(strings) == 1:
                 self.source_names = ['<string>']
             else:
@@ -540,7 +528,7 @@ class Converter(object):
             self.expanded_source_paths = None
             if from_format is None:
                 raise TypeError('Document format is required')
-            if from_format not in self.from_formats:
+            if self.from_formats is not None and from_format not in self.from_formats:
                 raise ValueError('Unsupported document format {0}'.format(from_format))
             self.from_format = from_format
         else:
@@ -580,13 +568,14 @@ class Converter(object):
         self.code_options = {}
 
 
-    from_formats = set()
-    to_formats = set()
-    multi_source_formats = set()
+    from_formats = None
+    to_formats = None
+    multi_source_formats = None
 
     _file_extension_to_format_dict = {'.md': 'markdown', '.markdown': 'markdown',
                                       '.tex': 'latex', '.ltx': 'latex'}
 
+    _crlf_re = re.compile('\r\n?')
 
     def code_braid(self):
         self._extract_code_chunks()
