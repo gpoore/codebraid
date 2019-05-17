@@ -9,6 +9,7 @@
 
 
 import collections
+import io
 import json
 import os
 import pathlib
@@ -17,10 +18,11 @@ import re
 import subprocess
 import sys
 import tempfile
-from typing import Dict, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Union
 import warnings
 from .base import Converter, CodeChunk
 from .. import err
+from .. import util
 
 
 
@@ -396,62 +398,68 @@ class PandocCodeChunk(CodeChunk):
 
 
 
-def walk_node_list(node_list, enumerate=enumerate, isinstance=isinstance):
-    '''
-    Walk all AST nodes in a list, recursively descending to walk all
-    child nodes as well.  The walk function is written so that it is
-    only ever called on lists, reducing recursion depth and reducing
-    the number of times the walk function is called.  Thus, it is
-    never called on `Str` nodes and other leaf nodes, which will
-    typically make up the vast majority of nodes.
+def _get_walk_closure(enumerate=enumerate, isinstance=isinstance):
+    def walk_node_list(node_list):
+        '''
+        Walk all AST nodes in a list, recursively descending to walk all child
+        nodes as well.  The walk function is written so that it is only ever
+        called on lists, reducing recursion depth and reducing the number of
+        times the walk function is called.  Thus, it is never called on `Str`
+        nodes and other leaf nodes, which will typically make up the vast
+        majority of nodes.
 
-    DefinitionLists are handled specially to wrap terms in fake Plain
-    nodes, which are marked so that they can be identified later if necessary.
-    This simplifies processing.
+        DefinitionLists are handled specially to wrap terms in fake Plain
+        nodes, which are marked so that they can be identified later if
+        necessary.  This simplifies processing.
 
-    Returns nodes plus their parent lists with indices.
-    '''
-    for index, obj in enumerate(node_list):
-        if isinstance(obj, list):
-            yield from walk_node_list(obj)
-        elif isinstance(obj, dict):
-            yield (obj, node_list, index)
-            obj_contents = obj.get('c', None)
-            if obj_contents is not None and isinstance(obj_contents, list):
-                if obj['t'] != 'DefinitionList':
-                    yield from walk_node_list(obj_contents)
-                else:
-                    for elem in obj_contents:
-                        term, definition = elem
-                        yield ({'t': 'Plain', 'c': term, 'codebraid_pseudonode': True}, elem, 0)
-                        yield from walk_node_list(term)
-                        yield from walk_node_list(definition)
+        Returns nodes plus their parent lists with indices.
+        '''
+        for index, obj in enumerate(node_list):
+            if isinstance(obj, list):
+                yield from walk_node_list(obj)
+            elif isinstance(obj, dict):
+                yield (obj, node_list, index)
+                obj_contents = obj.get('c', None)
+                if isinstance(obj_contents, list):
+                    if obj['t'] != 'DefinitionList':
+                        yield from walk_node_list(obj_contents)
+                    else:
+                        for elem in obj_contents:
+                            term, definition = elem
+                            yield ({'t': 'Plain', 'c': term, 'codebraid_pseudonode': True}, elem, 0)
+                            yield from walk_node_list(term)
+                            yield from walk_node_list(definition)
+    return walk_node_list
+walk_node_list = _get_walk_closure()
 
 
-def walk_node_list_less_note_contents(node_list, enumerate=enumerate, isinstance=isinstance):
-    '''
-    Like `walk_node_list()`, except that it will return a `Note` node
-    but not iterate through it.  It can be useful to process `Note`
-    contents separately since they are typically located in another
-    part of the document and may contain block nodes.
-    '''
-    for index, obj in enumerate(node_list):
-        if isinstance(obj, list):
-            yield from walk_node_list_less_note_contents(obj)
-        elif isinstance(obj, dict):
-            yield (obj, node_list, index)
-            if obj['t'] == 'Note':
-                continue
-            obj_contents = obj.get('c', None)
-            if obj_contents is not None and isinstance(obj_contents, list):
-                if obj['t'] != 'DefinitionList':
-                    yield from walk_node_list_less_note_contents(obj_contents)
-                else:
-                    for elem in obj_contents:
-                        term, definition = elem
-                        yield ({'t': 'Plain', 'c': term, 'codebraid_pseudonode': True}, elem, 0)
-                        yield from walk_node_list_less_note_contents(term)
-                        yield from walk_node_list_less_note_contents(definition)
+def _get_walk_less_note_contents_closure(enumerate=enumerate, isinstance=isinstance):
+    def walk_node_list_less_note_contents(node_list):
+        '''
+        Like `walk_node_list()`, except that it will return a `Note` node but
+        not iterate through it.  It can be useful to process `Note` contents
+        separately since they are typically located in another part of the
+        document and may contain block nodes.
+        '''
+        for index, obj in enumerate(node_list):
+            if isinstance(obj, list):
+                yield from walk_node_list_less_note_contents(obj)
+            elif isinstance(obj, dict):
+                yield (obj, node_list, index)
+                if obj['t'] == 'Note':
+                    continue
+                obj_contents = obj.get('c', None)
+                if isinstance(obj_contents, list):
+                    if obj['t'] != 'DefinitionList':
+                        yield from walk_node_list_less_note_contents(obj_contents)
+                    else:
+                        for elem in obj_contents:
+                            term, definition = elem
+                            yield ({'t': 'Plain', 'c': term, 'codebraid_pseudonode': True}, elem, 0)
+                            yield from walk_node_list_less_note_contents(term)
+                            yield from walk_node_list_less_note_contents(definition)
+    return walk_node_list_less_note_contents
+walk_node_list_less_note_contents = _get_walk_less_note_contents_closure()
 
 
 
@@ -475,6 +483,9 @@ class PandocConverter(Converter):
         if from_format is not None and not isinstance(from_format, str):
             raise TypeError
         from_format, from_format_pandoc_extensions = self._split_format_extensions(from_format)
+
+        super().__init__(from_format=from_format, **kwargs)
+
         if pandoc_path is None:
             pandoc_path = pathlib.Path('pandoc')
         else:
@@ -493,16 +504,15 @@ class PandocConverter(Converter):
         elif float(pandoc_version_match.group()) < 2.4:
             raise RuntimeError('Pandoc at "{0}" is version {1}, but >= 2.4 is required'.format(pandoc_path, float(pandoc_version_match.group())))
         self.pandoc_path = pandoc_path
-        proc = subprocess.run([str(pandoc_path), '--list-output-formats'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        self.to_formats = set([x for x in (line.strip() for line in proc.stdout.decode('utf8').splitlines()) if x])
-        super().__init__(from_format=from_format, **kwargs)
-
 
         if not isinstance(pandoc_file_scope, bool):
             raise TypeError
         if pandoc_file_scope and kwargs.get('cross_source_sessions') is None:
+            # `pandoc_file_scope` automatically disables `cross_source_sessions`
+            # unless `cross_source_sessions` is explicitly specified.
             self.cross_source_sessions = False
         self.pandoc_file_scope = pandoc_file_scope
+
         if self.from_format == 'markdown' and not pandoc_file_scope and len(self.source_strings) > 1:
             # If multiple files are being passed to Pandoc for concatenated
             # processing, ensure sufficient whitespace to prevent elements in
@@ -510,31 +520,30 @@ class PandocConverter(Converter):
             # indented elements from merging.  This means that the original
             # sources cannot be passed to Pandoc directly.
             for n, source_string in enumerate(self.source_strings):
-                if source_string[-1] == '\n':
+                if source_string[-1:] == '\n':
                     source_string += '\n<!--codebraid.eof-->\n\n'
                 else:
                     source_string += '\n\n<!--codebraid.eof-->\n\n'
                 self.source_strings[n] = source_string
             self.concat_source_string = ''.join(self.source_strings)
 
-        self.from_format_pandoc_extensions = from_format_pandoc_extensions or ''
+        self.from_format_pandoc_extensions = from_format_pandoc_extensions
 
         if not isinstance(scroll_sync, bool):
             raise TypeError
         self.scroll_sync = scroll_sync
         if scroll_sync:
-            raise NotImplementedError
             self._io_map = True
+            raise NotImplementedError
 
         self._asts = {}
         self._para_plain_source_name_node_line_number = []
         self._final_ast = None
-        self._final_ast_bytes = None
 
 
     from_formats = set(['markdown'])
-    to_formats = None
     multi_source_formats = set(['markdown'])
+    to_formats = None
 
 
     def _split_format_extensions(self, format_extensions):
@@ -561,41 +570,34 @@ class PandocConverter(Converter):
 
     def _run_pandoc(self, *,
                     from_format: str,
-                    to_format: str,
+                    to_format: Optional[str],
                     from_format_pandoc_extensions: Optional[str]=None,
                     to_format_pandoc_extensions: Optional[str]=None,
                     file_scope=False,
-                    input: Optional[str]=None,
+                    input: Optional[Union[str, bytes]]=None,
                     input_paths: Optional[Union[pathlib.Path, Sequence[pathlib.Path]]]=None,
                     input_name: Optional[str]=None,
                     output_path: Optional[pathlib.Path]=None,
-                    overwrite: bool=False,
                     standalone: bool=False,
                     trace: bool=False,
-                    decode_output: bool=True,
-                    other_pandoc_args: Optional[Dict[str, str]]=None):
+                    newline_lf: bool=False,
+                    other_pandoc_args: Optional[List[str]]=None):
         '''
         Convert between formats using Pandoc.
 
         Communication with Pandoc is accomplished via pipes.
         '''
-        if from_format not in self.from_formats and from_format != 'json':
-            raise ValueError
-        if not (to_format in self.to_formats or to_format == 'json' or
-                (to_format is None and to_format_pandoc_extensions is None and output_path is not None)):
-            raise ValueError
         if from_format_pandoc_extensions is None:
             from_format_pandoc_extensions = ''
         if to_format_pandoc_extensions is None:
             to_format_pandoc_extensions = ''
         if input and input_paths:
             raise TypeError
-        if output_path is not None and not overwrite and output_path.exists():
-            raise RuntimeError('Output path {0} exists, but overwrite=False'.format(output_path))
 
         cmd_list = [str(self.pandoc_path),
-                    '--from', from_format + from_format_pandoc_extensions,
-                    '--eol', 'lf']
+                    '--from', from_format + from_format_pandoc_extensions]
+        if newline_lf:
+            cmd_list.extend(['--eol', 'lf'])
         if to_format is not None:
             cmd_list.extend(['--to', to_format + to_format_pandoc_extensions])
         if standalone:
@@ -607,7 +609,18 @@ class PandocConverter(Converter):
         if output_path:
             cmd_list.extend(['--output', output_path.as_posix()])
         if other_pandoc_args:
-            cmd_list.extend(other_pandoc_args)
+            if not newline_lf:
+                cmd_list.extend(other_pandoc_args)
+            else:
+                eol = False
+                for arg in other_pandoc_args:
+                    if arg == '--eol':
+                        eol = True
+                        continue
+                    if eol:
+                        eol = False
+                        continue
+                    cmd_list.append(arg)
         if input_paths is not None:
             if isinstance(input_paths, pathlib.Path):
                 cmd_list.append(input_paths.as_posix())
@@ -621,23 +634,27 @@ class PandocConverter(Converter):
         else:
             startupinfo = None
 
+        if isinstance(input, str):
+            input = input.encode('utf8')
+
         try:
             proc = subprocess.run(cmd_list,
-                                  input=input.encode('utf8') if input is not None else input,
+                                  input=input,
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
                                   startupinfo=startupinfo, check=True)
         except subprocess.CalledProcessError as e:
-            if isinstance(input_paths, pathlib.Path) and input_name is None:
-                input_name = input_paths.as_posix()
+            if input_paths is not None and input_name is None:
+                if isinstance(input_paths, pathlib.Path):
+                    input_name = "{0}".format(input_paths.as_posix())
+                else:
+                    input_name = ', '.join("{0}".format(p.as_posix()) for p in input_paths)
             if input_name is None:
-                msg = 'Failed to run Pandoc:\n{0}'.format(e.stderr.decode('utf8'))
+                message = 'Failed to run Pandoc:\n{0}'.format(e.stderr.decode('utf8'))
             else:
-                msg = 'Failed to run Pandoc on source {0}:\n{1}'.format(input_name, e.stderr.decode('utf8'))
-            raise PandocError(msg)
-        if not decode_output:
-            return (proc.stdout, proc.stderr)
-        return (proc.stdout.decode('utf8'), proc.stderr.decode('utf8'))
+                message = 'Failed to run Pandoc on source(s) {0}:\n{1}'.format(input_name, e.stderr.decode('utf8'))
+            raise PandocError(message)
+        return (proc.stdout, proc.stderr)
 
 
     _walk_node_list = staticmethod(walk_node_list)
@@ -688,9 +705,9 @@ class PandocConverter(Converter):
     def _freeze_raw_node(node, source_name, line_number,
                          type_translation_dict={'RawBlock': 'CodeBlock', 'RawInline': 'Code'}):
         '''
-        Convert a raw node into a special code node.  This prevents the
-        raw node from being prematurely interpreted/discarded during
-        intermediate AST transformations.
+        Convert a raw node into a special code node.  This prevents the raw
+        node from being prematurely interpreted/discarded during intermediate
+        AST transformations.
         '''
         node['t'] = type_translation_dict[node['t']]
         raw_format, raw_content = node['c']
@@ -739,8 +756,10 @@ class PandocConverter(Converter):
         for k, v in node['c'][0][2]:
             if k == 'format':
                 raw_format = v
-            else:
+            elif k == 'trace':
                 trace = v
+            else:
+                raise ValueError
         node['c'] = [raw_format, '\x02CodebraidTrace({0})\x03'.format(trace) + node['c'][1]]
 
 
@@ -799,33 +818,32 @@ class PandocConverter(Converter):
         # deal with.
 
         # Convert source string to trace plus AST with Pandoc
-        from_format_pandoc_extensions = self.from_format_pandoc_extensions
+        from_format_pandoc_extensions = self.from_format_pandoc_extensions or ''
         if self.from_format == 'markdown':
             from_format_pandoc_extensions += '-latex_macros-smart'
-        pandoc_stdout_bytes, pandoc_stderr_bytes = self._run_pandoc(input=source_string,
-                                                                    input_name=single_source_name,
-                                                                    from_format=self.from_format,
-                                                                    from_format_pandoc_extensions=from_format_pandoc_extensions,
-                                                                    to_format='json',
-                                                                    file_scope=self.pandoc_file_scope,
-                                                                    trace=True,
-                                                                    decode_output=False)
+        stdout_bytes, stderr_bytes = self._run_pandoc(input=source_string,
+                                                      input_name=single_source_name,
+                                                      from_format=self.from_format,
+                                                      from_format_pandoc_extensions=from_format_pandoc_extensions,
+                                                      to_format='json',
+                                                      trace=True,
+                                                      newline_lf=True)
         try:
             if sys.version_info < (3, 6):
-                ast = json.loads(pandoc_stdout_bytes.decode('utf8'))
+                ast = json.loads(stdout_bytes.decode('utf8'))
             else:
-                ast = json.loads(pandoc_stdout_bytes)
+                ast = json.loads(stdout_bytes)
         except Exception as e:
             raise PandocError('Failed to load AST (incompatible Pandoc version?):\n{0}'.format(e))
-        pandoc_stderr = pandoc_stderr_bytes.decode('utf8')
         if not (isinstance(ast, dict) and
-                'pandoc-api-version' in ast and 'blocks' in ast):
+                'pandoc-api-version' in ast and isinstance(ast['pandoc-api-version'], list) and
+                all(isinstance(x, int) for x in ast['pandoc-api-version']) and 'blocks' in ast):
             raise PandocError('Incompatible Pandoc API version')
         if ast['pandoc-api-version'][0:2] != [1, 17]:
             warnings.warn('Pandoc API is {0}.{1}, but Codebraid is designed for 1.17; this might cause issues'.format(*ast['pandoc-api-version'][0:2]))
         self._asts[single_source_name] = ast
 
-        source_string_lines = source_string.splitlines()
+        source_string_lines = util.splitlines_lf(source_string) or ['']
 
         # Process trace to determine location of footnotes and link
         # definitions, and mark those line numbers as invalid
@@ -836,7 +854,7 @@ class PandocConverter(Converter):
         in_footnote = False
         trace = ('', 1, False)  # (<node type>, <line number>, <in chunk>)
         try:
-            for trace_line in pandoc_stderr.splitlines():
+            for trace_line in util.splitlines_lf(io.TextIOWrapper(stderr_bytes, encoding='utf8').read()):
                 if trace_line.startswith('[WARNING]'):
                     print(trace_line, file=sys.stderr)
                     continue
@@ -889,16 +907,21 @@ class PandocConverter(Converter):
 
         # Iterator for source lines and line numbers that skips invalid lines
         if self.pandoc_file_scope or len(self.source_strings) == 1:
-            source_name_line_and_number_iter = ((single_source_name, line, n+1) for (n, line) in enumerate(source_string_lines) if n+1 not in invalid_line_numbers)
+            source_name_line_and_number_iter = ((single_source_name, line, n+1)
+                                                for (n, line) in enumerate(source_string_lines)
+                                                if n+1 not in invalid_line_numbers)
         else:
             def make_source_name_line_and_number_iter():
                 line_and_concat_line_number_iter = ((line, n+1) for (n, line) in enumerate(source_string_lines))
-                for source_name, source_string in zip(self.source_names, self.source_strings):
-                    for line_number in range(1, source_string.count('\n')+1):
+                for src_name, src_string in zip(self.source_names, self.source_strings):
+                    len_src_string_lines = src_string.count('\n')
+                    if src_string[-1:] != '\n':
+                        len_src_string_lines += 1
+                    for line_number in range(1, len_src_string_lines+1):
                         line, concat_line_number = next(line_and_concat_line_number_iter)
                         if concat_line_number in invalid_line_numbers:
                             continue
-                        yield (source_name, line, line_number)
+                        yield (src_name, line, line_number)
             source_name_line_and_number_iter = make_source_name_line_and_number_iter()
 
 
@@ -911,10 +934,15 @@ class PandocConverter(Converter):
             freeze_raw_node = self._freeze_raw_node_io_map
         else:
             freeze_raw_node = self._freeze_raw_node
+        ignorable_inline_node_types = set(['Emph', 'Strong', 'Strikeout', 'Superscript', 'Subscript', 'SmallCaps',
+                                           'Quoted', 'Cite', 'Space', 'LineBreak', 'Math', 'Link', 'Image',
+                                           'SoftBreak', 'Span'])
         for node_tuple in self._walk_ast_less_note_contents(ast):
             node, parent_node_list, parent_node_list_index = node_tuple
             node_type = node['t']
-            if node_type == 'Str':
+            if node_type in ignorable_inline_node_types:
+                pass
+            elif node_type == 'Str':
                 node_contents = node['c']
                 line_index = line.find(node_contents, line_index)
                 if line_index >= 0:
@@ -930,6 +958,8 @@ class PandocConverter(Converter):
                 if para_plain_node is not None:
                     para_plain_source_name_node_line_number.append((source_name, para_plain_node, line_number))
                     para_plain_node = None
+            elif node_type in ('Para', 'Plain'):
+                para_plain_node = node
             elif node_type in ('Code', 'RawInline'):
                 if node_type == 'Code' or node['c'][0].lower() != 'html':
                     # Long HTML comments can produce situations in which
@@ -965,7 +995,7 @@ class PandocConverter(Converter):
                     para_plain_source_name_node_line_number.append((source_name, para_plain_node, line_number))
                     para_plain_node = None
             elif node_type == 'CodeBlock':
-                node_contents_lines = node['c'][1].splitlines()
+                node_contents_lines = util.splitlines_lf(node['c'][1])
                 for node_contents_line in node_contents_lines:
                     if node_contents_line not in line:
                         # Move forward a line at a time until match
@@ -1004,7 +1034,7 @@ class PandocConverter(Converter):
                     # `<hr/></hr/>`; the first tag becomes `<hr />` with
                     # an inserted space.
                     # https://github.com/jgm/pandoc/issues/5305
-                    node_contents_lines = node_contents.splitlines()
+                    node_contents_lines = util.splitlines_lf(node_contents)
                     for node_contents_line in node_contents_lines:
                         line_index = line.find(node_contents_line)
                         if line_index >= 0:
@@ -1041,8 +1071,6 @@ class PandocConverter(Converter):
                         note_para_plain_node = None
                     else:
                         note_para_plain_node = None
-            elif node_type in ('Para', 'Plain'):
-                para_plain_node = node
             elif node_type in block_node_types:
                 para_plain_node = None
 
@@ -1071,45 +1099,48 @@ class PandocConverter(Converter):
 
         # Convert modified AST to markdown, then back, so that raw output
         # can be reinterpreted as markdown
-        processed_markup = {}
+        processed_to_format_extensions = self.from_format_pandoc_extensions or '' + '-latex_macros-smart'
+        processed_markup = collections.OrderedDict()
         for source_name, ast in self._asts.items():
-            processed_markup[source_name], _ = self._run_pandoc(input=json.dumps(ast),
-                                                                from_format='json',
-                                                                to_format='markdown',
-                                                                to_format_pandoc_extensions=self.from_format_pandoc_extensions+'-latex_macros-smart',
-                                                                standalone=True)
+            markup_bytes, stderr_bytes = self._run_pandoc(input=json.dumps(ast),
+                                                          from_format='json',
+                                                          to_format='markdown',
+                                                          to_format_pandoc_extensions=processed_to_format_extensions,
+                                                          standalone=True,
+                                                          newline_lf=True)
+            if stderr_bytes:
+                sys.stderr.buffer.write(stderr_bytes)
+            processed_markup[source_name] = markup_bytes
 
         if not self.pandoc_file_scope or len(self.source_strings) == 1:
-            for markup in processed_markup.values():
-                final_ast_bytes, pandoc_stderr_bytes = self._run_pandoc(input=markup,
-                                                                        from_format='markdown',
-                                                                        from_format_pandoc_extensions=self.from_format_pandoc_extensions,
-                                                                        to_format='json',
-                                                                        decode_output=False)
-                if pandoc_stderr_bytes:
-                    for line in pandoc_stderr_bytes.decode('utf8').splitlines():
-                        print(line, file=sys.stderr)
+            for markup_bytes in processed_markup.values():
+                final_ast_bytes, stderr_bytes = self._run_pandoc(input=markup_bytes,
+                                                                 from_format='markdown',
+                                                                 from_format_pandoc_extensions=self.from_format_pandoc_extensions,
+                                                                 to_format='json',
+                                                                 newline_lf=True)
+                if stderr_bytes:
+                    sys.stderr.buffer.write(stderr_bytes)
         else:
             with tempfile.TemporaryDirectory() as tempdir:
                 tempdir_path = pathlib.Path(tempdir)
                 tempfile_paths = []
-                for n, markup in enumerate(processed_markup.values()):
-                    tempfile_path = tempdir_path / 'codebraid_intermediate_{0}.txt'.format(n)
-                    tempfile_path.write_text(markup, encoding='utf8')
+                random_suffix = util.random_ascii_lower_alpha(16)
+                for n, markup_bytes in enumerate(processed_markup.values()):
+                    tempfile_path = tempdir_path / 'codebraid_intermediate_{0}_{1}.txt'.format(n, random_suffix)
+                    tempfile_path.write_bytes(markup_bytes)
                     tempfile_paths.append(tempfile_path)
-                final_ast_bytes, pandoc_stderr_bytes = self._run_pandoc(input_paths=tempfile_paths,
-                                                                        from_format='markdown',
-                                                                        from_format_pandoc_extensions=self.from_format_pandoc_extensions,
-                                                                        to_format='json',
-                                                                        decode_output=False)
-                if pandoc_stderr_bytes:
-                    for line in pandoc_stderr_bytes.decode('utf8').splitlines():
-                        print(line, file=sys.stderr)
+                final_ast_bytes, stderr_bytes = self._run_pandoc(input_paths=tempfile_paths,
+                                                                 from_format='markdown',
+                                                                 from_format_pandoc_extensions=self.from_format_pandoc_extensions,
+                                                                 to_format='json',
+                                                                 newline_lf=True)
+                if stderr_bytes:
+                    sys.stderr.buffer.write(stderr_bytes)
         if sys.version_info < (3, 6):
             final_ast = json.loads(final_ast_bytes.decode('utf8'))
         else:
             final_ast = json.loads(final_ast_bytes)
-        self._final_ast_bytes = final_ast_bytes
         self._final_ast = final_ast
 
         if not self._io_map:
@@ -1144,8 +1175,6 @@ class PandocConverter(Converter):
             if not isinstance(to_format, str):
                 raise TypeError
             to_format, to_format_pandoc_extensions = self._split_format_extensions(to_format)
-            if to_format not in self.to_formats:
-                raise ValueError
         if not isinstance(standalone, bool):
             raise TypeError
         if output_path is not None:
@@ -1157,30 +1186,34 @@ class PandocConverter(Converter):
 
         if not isinstance(overwrite, bool):
             raise TypeError
-        if output_path is not None and output_path.is_file() and not overwrite:
-            raise RuntimeError('Output path {0} exists, but overwrite=False'.format(output_path))
+        if output_path is not None and not overwrite and output_path.is_file():
+            raise RuntimeError('Output path "{0}" exists, but overwrite=False'.format(output_path))
 
         if not self._io_map:
-            converted, _ = self._run_pandoc(input=json.dumps(self._final_ast),
-                                            from_format='json',
-                                            to_format=to_format,
-                                            to_format_pandoc_extensions=to_format_pandoc_extensions,
-                                            standalone=standalone,
-                                            output_path=output_path,
-                                            overwrite=overwrite,
-                                            other_pandoc_args=other_pandoc_args)
+            converted_bytes, stderr_bytes = self._run_pandoc(input=json.dumps(self._final_ast),
+                                                             from_format='json',
+                                                             to_format=to_format,
+                                                             to_format_pandoc_extensions=to_format_pandoc_extensions,
+                                                             standalone=standalone,
+                                                             output_path=output_path,
+                                                             other_pandoc_args=other_pandoc_args)
+            if stderr_bytes:
+                sys.stderr.buffer.write(stderr_bytes)
             if output_path is None:
-                print(converted, end='')
+                sys.stdout.buffer.write(converted_bytes)
         else:
             for node in self._io_tracker_nodes:
                 node['c'][0] = to_format
-            converted, _ = self._run_pandoc(input=json.dumps(self._final_ast),
-                                            from_format='json',
-                                            to_format=to_format,
-                                            to_format_pandoc_extensions=to_format_pandoc_extensions,
-                                            standalone=standalone,
-                                            other_pandoc_args=other_pandoc_args)
-            converted_lines = converted.splitlines()
+            converted_bytes, stderr_bytes = self._run_pandoc(input=json.dumps(self._final_ast),
+                                                             from_format='json',
+                                                             to_format=to_format,
+                                                             to_format_pandoc_extensions=to_format_pandoc_extensions,
+                                                             standalone=standalone,
+                                                             newline_lf=True,
+                                                             other_pandoc_args=other_pandoc_args)
+            if stderr_bytes:
+                sys.stderr.buffer.write(stderr_bytes)
+            converted_lines = util.splitlines_lf(converted_bytes.decode(encoding='utf8')) or ['']
             converted_to_source_dict = {}
             trace_re = re.compile(r'\x02CodebraidTrace\(.+?:\d+\)\x03')
             for index, line in enumerate(converted_lines):
@@ -1203,4 +1236,4 @@ class PandocConverter(Converter):
             if output_path is not None:
                 output_path.write_text(converted, encoding='utf8')
             else:
-                print(converted, end='')
+                sys.stdout.buffer.write(converted.encode('utf8'))
