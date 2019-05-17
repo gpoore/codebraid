@@ -37,13 +37,13 @@ def random_ascii_lower_alpha(n):
 
 
 def splitlines_lf(string):
-        '''
-        Like `str.splitlines()`, but only splits on `\n`.  This should be used
-        on strings that have had `\r\n?` normalized to `\n`.  It avoids the
-        `str.splitlines()` behavior of splitting on additional code points
-        like `\v` and `\f`.
-        '''
-        lines = string.split('\n')
-        if string == '' or string[-1] == '\n':
-            lines.pop()
-        return lines
+    r'''
+    Like `str.splitlines()`, but only splits on `\n`.  This should be used
+    on strings that have had `\r\n?` normalized to `\n`.  It avoids the
+    `str.splitlines()` behavior of splitting on additional code points
+    like `\v` and `\f`.
+    '''
+    lines = string.split('\n')
+    if string == '' or string[-1] == '\n':
+        lines.pop()
+    return lines
