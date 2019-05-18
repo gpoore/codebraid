@@ -13,10 +13,8 @@ import collections
 import hashlib
 import json
 import locale
-import os
 import pathlib
 import pkgutil
-import platform
 import re
 import subprocess
 import shlex
@@ -50,8 +48,11 @@ class Language(object):
     '''
     Process language definition and insert default values.
     '''
-    def __init__(self, name, definition):
+    def __init__(self, name, definition, definition_bytes):
         self.name = name
+        # The language definition config file will be hashed as part of
+        # creating the cache.  Make sure that this won't depend on platform.
+        self.definition_bytes = definition_bytes.replace(b'\r\n', b'\n')
         try:
             self.language = definition.pop('language', name)
             executable = definition.pop('executable', None)
@@ -100,7 +101,7 @@ class Language(object):
         except KeyError as e:
             raise err.CodebraidError('Missing key(s) in language definition for "{0}":\n  {1}'.format(name, e.args[0]))
         if definition:
-            raise err.CodebraidError('Unknown key(s) in language definition for "{0}":\n  {1}'.format(name, ', '.join(k for k in definition)))
+            raise err.CodebraidError('Unknown key(s) in language definition for "{0}":\n  {1}'.format(name, ', '.join("{0}".format(k) for k in definition)))
 
         re_patterns = []
         for lnp in line_number_patterns:
@@ -114,24 +115,24 @@ class Language(object):
 
 
 
-
-
-
 class Session(object):
     '''
     Code chunks comprising a session.
     '''
     def __init__(self, session_key):
-        self.lang = session_key[0]
-        self.name = session_key[1]
+        self.code_processor = session_key[0]
+        self.lang = session_key[1]
+        self.name = session_key[2]
         if self.name is None:
             self._name_escaped = 'none'
         else:
             self._name_escaped = '"{0}"'.format(self.name.replace('\\', '\\\\').replace('"', '\\"'))
-        if len(session_key) == 2:
+        if len(session_key) == 3:
             self.source_name = None
         else:
-            self.source_name = session_key[2]
+            self.source_name = session_key[3]
+        self.lang_def = self.code_processor.language_definitions[self.lang]
+        self._hash_function = self.code_processor.cache_config.get('hash_function', None)
 
         self.code_options = None
         self.code_chunks = []
@@ -142,14 +143,15 @@ class Session(object):
         self.source_warning_chunks = []
         self.pre_run_errors = False
         self.pre_run_error_lines = None
+        # Compile and run errors are treated as a single category separate
+        # from pre/post errors.  This is because they can potentially be
+        # synchronized with the source.
         self.compile_errors = False
         self.run_errors = False
         self.run_error_chunks = []
-        self.run_error_template_lines = None
         self.decode_error = False
         self.run_warnings = False
         self.run_warning_chunks = []
-        self.run_warning_template_lines = None
         self.post_run_errors = False
         self.post_run_error_lines = None
 
@@ -163,7 +165,7 @@ class Session(object):
         self.code_chunks.append(code_chunk)
 
 
-    def finalize(self, *, lang_def, lang_def_bytes, hash_alg=None):
+    def finalize(self):
         '''
         Perform tasks that must wait until all code chunks are present,
         such as hashing.
@@ -176,8 +178,8 @@ class Session(object):
         incomplete = []
         last_cc = None
         for cc in self.code_chunks:
-            if cc.is_expr and lang_def.inline_expression_formatter is None:
-                cc.source_errors.append('Inline expressions are not supported for {0}'.format(lang_def.name))
+            if cc.is_expr and self.lang_def.inline_expression_formatter is None:
+                cc.source_errors.append('Inline expressions are not supported for {0}'.format(self.lang_def.name))
             if last_cc is not None and last_cc.options['outside_main'] != cc.options['outside_main']:
                 if last_cc.options['outside_main']:
                     from_outside_main_switches += 1
@@ -224,22 +226,22 @@ class Session(object):
             # undefined.
             return
 
-        if hash_alg is None:
-            h = hashlib.blake2b()
-        elif hash_alg == 'sha512':
-            h = hashlib.sha512()
+        if self._hash_function is None:
+            hasher = hashlib.blake2b()
+        elif self._hash_function == 'sha512':
+            hasher = hashlib.sha512()
         else:
             raise ValueError
         code_len = 0
         # Hash needs to depend on the language definition
-        h.update(lang_def_bytes)
-        h.update(h.digest())
+        hasher.update(self.lang_def.definition_bytes)
+        hasher.update(hasher.digest())
         # Hash needs to depend on session name to avoid the possibility of
         # collisions.  Some options can cause sessions with identical code to
         # produce output that is processed differently.  `complete` is an
         # example (though it is explicitly incorporated into the hash).
-        h.update('{{session={0}}}'.format(self._name_escaped).encode('utf8'))
-        h.update(h.digest())
+        hasher.update('{{session={0}}}'.format(self._name_escaped).encode('utf8'))
+        hasher.update(hasher.digest())
         for cc in self.code_chunks:
             if not cc.inline:
                 cc.code_start_line_number = self._code_start_line_number
@@ -248,21 +250,20 @@ class Session(object):
             # determines some wrapper code, while `inline` affects line count
             # and error sync currently, and might also affect code in the
             # future.
-            h.update('{{command="{0}", inline={1}, complete={2}}}'.format(cc.command,
-                                                                          str(cc.inline).lower(),
-                                                                          str(cc.options['complete']).lower()).encode('utf8'))
-            h.update(h.digest())
+            cc_options = '{{command="{0}", inline={1}, complete={2}}}'.format(cc.command,
+                                                                              str(cc.inline).lower(),
+                                                                              str(cc.options['complete']).lower())
+            hasher.update(cc_options.encode('utf8'))
+            hasher.update(hasher.digest())
             code_bytes = cc.code.encode('utf8')
-            h.update(code_bytes)
+            hasher.update(code_bytes)
             code_len += len(code_bytes)
             # Hash needs to depend on code plus how it's divided into chunks.
             # Updating hash based on its current value at the end of each
             # chunk accomplishes this.
-            h.update(h.digest())
-        self.hash = '{0}_{1}'.format(h.hexdigest(), code_len)
-        self.hash_root = self.tempsuffix = h.hexdigest()[:16]
-        self.lang_def = lang_def
-        self.lang_def_bytes = lang_def_bytes
+            hasher.update(hasher.digest())
+        self.hash = '{0}_{1}'.format(hasher.hexdigest(), code_len)
+        self.hash_root = self.tempsuffix = hasher.hexdigest()[:16]
 
 
 
@@ -278,9 +279,20 @@ class CodeProcessor(object):
         self.cross_source_sessions = cross_source_sessions
         self.cache_path = cache_path
 
+        self._load_cache_config_prep_cache()
+        self._load_language_definitions()
+        self._index_named_code_chunks()
+        self._resolve_code_copying()
+        self._create_sessions()
+
+
+    def _load_cache_config_prep_cache(self):
+        '''
+        Load existing cache configuration, or generate default config.
+        '''
         cache_config = {}
-        if cache_path is not None:
-            cache_config_path = cache_path / 'config.zip'
+        if self.cache_path is not None:
+            cache_config_path = self.cache_path / 'config.zip'
             if cache_config_path.is_file():
                 with zipfile.ZipFile(str(cache_config_path)) as zf:
                     with zf.open('config.json') as f:
@@ -289,64 +301,8 @@ class CodeProcessor(object):
                         else:
                             cache_config = json.load(f)
         if not cache_config and sys.version_info < (3, 6):
-            cache_config['hash_algorithm'] = 'sha512'
+            cache_config['hash_function'] = 'sha512'
         self.cache_config = cache_config
-
-        raw_language_index = pkgutil.get_data('codebraid', 'languages/index.bespon')
-        if raw_language_index is None:
-            raise err.CodebraidError('Failed to find "codebraid/languages/index.bespon"')
-        language_index = bespon.loads(raw_language_index)
-        language_definitions = collections.defaultdict(lambda: None)
-        language_definitions_bytes = collections.defaultdict(lambda: b'')
-        required_langs = set(cc.options['lang'] for cc in self.code_chunks if cc.command in ('run', 'expr', 'nb'))
-        for lang in required_langs:
-            try:
-                lang_def_fname = language_index[lang]
-            except KeyError:
-                for cc in self.code_chunks:
-                    if cc.options['lang'] == lang:
-                        cc.source_errors.append('Language definition for "{0}" does not exist, or is not indexed'.format(lang))
-                continue
-            raw_lang_def = pkgutil.get_data('codebraid', 'languages/{0}'.format(lang_def_fname))
-            if raw_lang_def is None:
-                for cc in self.code_chunks:
-                    if cc.options['lang'] == lang:
-                        cc.source_errors.append('Language definition for "{0}" does not exist'.format(lang))
-            lang_def = bespon.loads(raw_lang_def)
-            language_definitions[lang] = Language(lang, lang_def[lang])
-            # The raw language definition will be hashed as part of creating
-            # the cache.  Make sure that this won't depend on platform.
-            language_definitions_bytes[lang] = raw_lang_def.replace(b'\r\n', b'\n')
-
-        named_code_chunks = {}
-        for cc in self.code_chunks:
-            cc_name = cc.options.get('name', None)
-            if cc_name is not None:
-                if cc_name not in named_code_chunks:
-                    named_code_chunks[cc_name] = cc
-                else:
-                    message = 'Code chunk names must be unique; duplicate for code chunk in "{0}" near line "{1}"'
-                    message = message.format(named_code_chunks[cc_name].source_name,
-                                             named_code_chunks[cc_name].source_start_line_number)
-                    cc.source_errors.append(message)
-        self.named_code_chunks = named_code_chunks
-
-        self._resolve_code_copying()
-
-        sessions_run = util.KeyDefaultDict(Session)
-        for cc in self.code_chunks:
-            if cc.execute:
-                if self.cross_source_sessions:
-                    key = (cc.options['lang'], cc.options['session'])
-                else:
-                    key = (cc.options['lang'], cc.options['session'], cc.source_name)
-                sessions_run[key].append(cc)
-
-        for session in sessions_run.values():
-            session.finalize(lang_def=language_definitions[session.lang],
-                             lang_def_bytes=language_definitions_bytes[session.lang],
-                             hash_alg=cache_config.get('hash_algorithm', None))
-        self._sessions_run = sessions_run
 
         # Cached stdout and stderr, plus any other relevant data.  Each
         # session has a key based on a BLAKE2b hash of its code plus the
@@ -367,6 +323,53 @@ class CodeProcessor(object):
         self._updated_cache_hash_roots = []
 
 
+    def _load_language_definitions(self):
+        '''
+        Load language definitions, and mark any code chunks that lack
+        necessary definitions.
+        '''
+        raw_language_index = pkgutil.get_data('codebraid', 'languages/index.bespon')
+        if raw_language_index is None:
+            raise err.CodebraidError('Failed to find "codebraid/languages/index.bespon"')
+        language_index = bespon.loads(raw_language_index)
+        language_definitions = collections.defaultdict(lambda: None)
+        required_langs = set(cc.options['lang'] for cc in self.code_chunks if cc.execute)
+        for lang in required_langs:
+            try:
+                lang_def_fname = language_index[lang]
+            except KeyError:
+                for cc in self.code_chunks:
+                    if cc.options['lang'] == lang and cc.execute:
+                        cc.source_errors.append('Language definition for "{0}" does not exist, or is not indexed'.format(lang))
+                continue
+            lang_def_bytes = pkgutil.get_data('codebraid', 'languages/{0}'.format(lang_def_fname))
+            if lang_def_bytes is None:
+                for cc in self.code_chunks:
+                    if cc.options['lang'] == lang and cc.execute:
+                        cc.source_errors.append('Language definition for "{0}" does not exist'.format(lang))
+            lang_def = bespon.loads(lang_def_bytes)
+            language_definitions[lang] = Language(lang, lang_def[lang], lang_def_bytes)
+        self.language_definitions = language_definitions
+
+
+    def _index_named_code_chunks(self):
+        '''
+        Index named code chunks, and mark code chunks with duplicate names.
+        '''
+        named_code_chunks = {}
+        for cc in self.code_chunks:
+            cc_name = cc.options.get('name', None)
+            if cc_name is not None:
+                if cc_name not in named_code_chunks:
+                    named_code_chunks[cc_name] = cc
+                else:
+                    message = 'Code chunk names must be unique; duplicate for code chunk in "{0}" near line "{1}"'
+                    message = message.format(named_code_chunks[cc_name].source_name,
+                                             named_code_chunks[cc_name].source_start_line_number)
+                    cc.source_errors.append(message)
+        self.named_code_chunks = named_code_chunks
+
+
     def _resolve_code_copying(self):
         '''
         For code chunks with copying, handle the code copying.  The output
@@ -378,9 +381,9 @@ class CodeProcessor(object):
         still_unresolved_chunks = []
         for cc in unresolved_chunks:
             if 'copy' in cc.options:
-                copy_ccs = [named_chunks.get(name, None) for name in cc.options['copy']]
-                if any(x is None for x in copy_ccs):
-                    unknown_names = ', '.join('"{0}"'.format(name) for name, x in zip(cc.options['copy'], copy_ccs) if x is None)
+                cc.copy_chunks = [named_chunks.get(name, None) for name in cc.options['copy']]
+                if any(x is None for x in cc.copy_chunks):
+                    unknown_names = ', '.join('"{0}"'.format(name) for name, x in zip(cc.options['copy'], cc.copy_chunks) if x is None)
                     message = 'Unknown name(s) for copying: {0}'.format(unknown_names)
                     cc.source_errors.append(message)
                 if not cc.source_errors:
@@ -389,21 +392,19 @@ class CodeProcessor(object):
         still_unresolved_chunks = []
         while True:
             for cc in unresolved_chunks:
-                copy_ccs = [named_chunks.get(name, None) for name in cc.options['copy']]
-                if any(x.source_errors for x in copy_ccs):
-                    error_names = ', '.join('"{0}"'.format(name) for name, x in zip(cc.options['copy'], copy_ccs) if x.source_errors)
+                if any(x.source_errors for x in cc.copy_chunks):
+                    error_names = ', '.join('"{0}"'.format(name) for name, x in zip(cc.options['copy'], cc.copy_chunks) if x.source_errors)
                     message = 'Cannot copy code chunks with source errors: {0}'.format(error_names)
                     cc.source_errors.append(message)
-                elif any(x.code is None for x in copy_ccs):
+                elif any(x.code is None for x in cc.copy_chunks):
                     still_unresolved_chunks.append(cc)
                 else:
-                    cc.copy_code(copy_ccs)
+                    cc.copy_code()
             if not still_unresolved_chunks:
                 break
             if len(still_unresolved_chunks) == len(unresolved_chunks):
                 for cc in still_unresolved_chunks:
-                    copy_ccs = [named_chunks.get(name, None) for name in cc.options['copy']]
-                    unresolved_names = ', '.join('"{0}"'.format(name) for name, x in zip(cc.options['copy'], copy_ccs) if x.code is None)
+                    unresolved_names = ', '.join('"{0}"'.format(name) for name, x in zip(cc.options['copy'], cc.copy_chunks) if x.code is None)
                     if cc.options['name'] in cc.options['copy']:
                         message = 'Code chunk cannot copy itself: {0}'.format(unresolved_names)
                     else:
@@ -437,18 +438,37 @@ class CodeProcessor(object):
                 elif any(not x.has_output for x in copy_ccs):
                     still_unresolved_chunks.append(cc)
                 else:
-                    cc.copy_output(copy_ccs)
+                    cc.copy_output()
             if not still_unresolved_chunks:
                 break
             unresolved_chunks = still_unresolved_chunks
             still_unresolved_chunks = []
 
 
+    def _create_sessions(self):
+        sessions = util.KeyDefaultDict(Session)
+        for cc in self.code_chunks:
+            if cc.execute:
+                if self.cross_source_sessions:
+                    key = (self, cc.options['lang'], cc.options['session'])
+                else:
+                    key = (self, cc.options['lang'], cc.options['session'], cc.source_name)
+                sessions[key].append(cc)
+            elif not cc.inline:
+                # Code blocks not in sessions need starting line numbers
+                cc.code_start_line_number = 1
+
+        for session in sessions.values():
+            session.finalize()
+
+        self._sessions = sessions
+
+
     def process(self):
         '''
         Execute code and update cache.
         '''
-        for session in self._sessions_run.values():
+        for session in self._sessions.values():
             if not session.errors:
                 session_cache = self._load_cache(session)
                 if session_cache is None:
