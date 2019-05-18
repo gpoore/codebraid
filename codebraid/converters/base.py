@@ -8,12 +8,12 @@
 #
 
 
-import os
 import collections
 from collections import OrderedDict as ODict
+import io
 import json
+import os
 import pathlib
-import re
 import typing; from typing import List, Optional, Sequence, Union
 import zipfile
 from .. import codeprocessors
@@ -112,7 +112,7 @@ def _get_option_processors():
     def option_name(code_chunk, options, key, value):
         if isinstance(value, str):
             if value.isidentifier():
-                options['name'] = value
+                options[key] = value
             else:
                 code_chunk.source_warnings.append('Option "{0}" has invalid, non-identifier value "{1}"'.format(key, value))
         else:
@@ -121,7 +121,7 @@ def _get_option_processors():
     def option_session(code_chunk, options, key, value):
         if isinstance(value, str):
             if value.isidentifier():
-                options['name'] = value
+                options[key] = value
             else:
                 code_chunk.source_errors.append('Option "{0}" has invalid, non-identifier value "{1}"'.format(key, value))
         else:
@@ -519,7 +519,7 @@ class Converter(object):
                       strings and all(isinstance(x, str) for x in strings)):
                 raise TypeError
             # Normalize newlines, as if read from file with universal newlines
-            self.source_strings = [self._crlf_re.sub('\n', s) or '\n' for s in strings]
+            self.source_strings = [io.StringIO(s, newline=None).read() or '\n' for s in strings]
             if len(strings) == 1:
                 self.source_names = ['<string>']
             else:
@@ -574,8 +574,6 @@ class Converter(object):
 
     _file_extension_to_format_dict = {'.md': 'markdown', '.markdown': 'markdown',
                                       '.tex': 'latex', '.ltx': 'latex'}
-
-    _crlf_re = re.compile('\r\n?')
 
     def code_braid(self):
         self._extract_code_chunks()

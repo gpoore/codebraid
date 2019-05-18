@@ -853,8 +853,10 @@ class PandocConverter(Converter):
         footnote_re = self._footnote_re
         in_footnote = False
         trace = ('', 1, False)  # (<node type>, <line number>, <in chunk>)
+        # Decode stderr using universal newlines
+        stderr_str = io.TextIOWrapper(io.BytesIO(stderr_bytes), encoding='utf8').read()
         try:
-            for trace_line in util.splitlines_lf(io.TextIOWrapper(stderr_bytes, encoding='utf8').read()):
+            for trace_line in util.splitlines_lf(stderr_str):
                 if trace_line.startswith('[WARNING]'):
                     print(trace_line, file=sys.stderr)
                     continue
