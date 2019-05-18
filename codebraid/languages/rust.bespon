@@ -29,12 +29,12 @@ chunk_wrapper =
 inline_expression_formatter =
     |```
     {{
-        let codebraid_temp_{tempsuffix} = {{
+        let codebraid_temp_{temp_suffix} = {{
             {code}
         }};
         println!("\n{stdout_delim}");
         writeln!(std::io::stderr(), "\n{stderr_delim}").expect("Could not write to stderr");
-        println!("{{}}", codebraid_temp_{tempsuffix});
+        println!("{{}}", codebraid_temp_{temp_suffix});
     }}
     |```/
 

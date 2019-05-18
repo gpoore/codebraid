@@ -58,7 +58,7 @@
 #         1.  convert {code} to a string
 #         2.  store the string in a tempory variable (to avoid collisions and
 #             prevent user code from accessing the variable, its name can end
-#             in {tempsuffix}, which will be replaced by a lowercase ASCII
+#             in {temp_suffix}, which will be replaced by a lowercase ASCII
 #             alphanumeric sequence derived from a hash of the current session)
 #         3.  write delims to output streams with a single leading and
 #             trailing \n (this allows any output that occurs during string

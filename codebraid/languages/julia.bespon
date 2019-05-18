@@ -13,10 +13,10 @@ chunk_wrapper =
 
 inline_expression_formatter =
     |```
-    _codebraid_temp_{tempsuffix} = string({code})
+    _codebraid_temp_{temp_suffix} = string({code})
     println("\n{stdout_delim}")
     write(stderr, "\n{stderr_delim}\n")
-    println(_codebraid_temp_{tempsuffix})
+    println(_codebraid_temp_{temp_suffix})
     |```/
 
 error_patterns = 'ERROR:'

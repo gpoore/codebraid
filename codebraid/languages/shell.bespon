@@ -10,8 +10,8 @@ chunk_wrapper =
 
 inline_expression_formatter =
     |```
-    _codebraid_temp_{tempsuffix}=$({code})
+    _codebraid_temp_{temp_suffix}=$({code})
     printf "\n{stdout_delim}\n"
     printf "\n{stderr_delim}\n" >&2
-    printf "$_codebraid_temp_{tempsuffix}\n"
+    printf "$_codebraid_temp_{temp_suffix}\n"
     |```/

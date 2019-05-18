@@ -24,10 +24,10 @@ chunk_wrapper =
 
 inline_expression_formatter =
     |```
-    _codebraid_temp_{tempsuffix} = str({code})
+    _codebraid_temp_{temp_suffix} = str({code})
     print('\n{stdout_delim}')
     sys.stderr.write('\n{stderr_delim}\n')
-    print(_codebraid_temp_{tempsuffix})
+    print(_codebraid_temp_{temp_suffix})
     |```/
 
 error_patterns = 'Error:'
