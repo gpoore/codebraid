@@ -240,7 +240,12 @@ Pandoc compatibility.
   units of code (function definitions, loops, expressions, and so forth). With
   `complete=false`, this is not required.  Any stdout from code chunks with
   `complete=false` is accumulated until the next code chunk with
-  `complete=true` (the default value).
+  `complete=true` (the default value), or until the end of the session,
+  whichever comes first.
+
+  Setting `complete` is incompatible with `outside_main=true`, since the
+  `complete` status of code chunks with `outside_main=true` is inferred
+  automatically.
 
 * `outside_main`={`true`, `false`} — This allows code chunks to overwrite the
   Codebraid template code.  It is primarily useful for languages like Rust, in
@@ -253,12 +258,16 @@ Pandoc compatibility.
   (that is, default `outside_main=false`), then these will have their stdout
   collected on a per-chunk basis like normal.  Having code chunks that lack
   `outside_main` is not required; if there are none, the total accumulated
-  stdout for a session belongs to the last code chunk in the session
+  stdout for a session belongs to the last code chunk in the session.
 
-* `session`={string} — By default, all code for a given language is executed
-  in a single, shared session so that data and variables persist between code
-  chunks.  This allows code to be separated into multiple independent
-  sessions.
+  `outside_main=true` is incompatible with explicitly setting `complete`.  The
+  `complete` status of code chunks with `outside_main=true` is inferred
+  automatically.
+
+* `session`={identifier-style string} — By default, all code for a given
+  language is executed in a single, shared session so that data and variables
+  persist between code chunks.  This allows code to be separated into multiple
+  independent sessions.  Session names must be Python-style identifiers.
 
 #### Display
 
@@ -308,4 +317,4 @@ Pandoc compatibility.
   be used as a placeholder.
 
 * `name`={identifier-style string} — Name a code chunk so that it can later be
-  copied by name.
+  copied by name.  Names must be Python-style identifiers.
