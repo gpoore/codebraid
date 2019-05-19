@@ -279,8 +279,11 @@ class CodeChunk(object):
             if not final_options['complete'] and self.is_expr:
                 self.source_errors.append('Option "complete" value "false" is incompatible with inline expressions')
             if final_options['outside_main']:
-                if options.get('complete', False):
-                    self.source_errors.append('Option "complete" value "true" is incompatible with "outside_main" value "true"')
+                if self.is_expr:
+                    self.source_errors.append('"outside_main" value "true" is incompatible with expr command')
+                if 'complete' in options:
+                    self.source_errors.append('Option "complete" cannot be specified with "outside_main" value "true"; it is inferred automatically')
+                final_options['complete'] = False
             self.has_output = True
         self.options = final_options
         if 'copy' in self.options:
