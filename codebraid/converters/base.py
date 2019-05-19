@@ -91,7 +91,7 @@ def _get_option_processors():
             options['show'] = collections.OrderedDict()
         else:
             hide_values = value.replace(' ', '').split('+')
-            if not all(v in ('code', 'stdout', 'stderr', 'expr') for v in hide_values):
+            if not all(v in ('markup', 'code', 'stdout', 'stderr', 'expr') for v in hide_values):
                 code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
                 return
             if 'expr' in hide_values and not code_chunk.is_expr and code_chunk.command != 'paste':
@@ -146,7 +146,7 @@ def _get_option_processors():
                 if output in value_processed:
                     code_chunk.source_warnings.append('Option "{0}" value "{1}" contains duplicate "{2}" in code chunk'.format(key, value, output))
                     continue
-                if output == 'code':
+                if output in ('markup', 'code'):
                     if format is None:
                         format = 'verbatim'
                     elif format != 'verbatim':

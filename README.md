@@ -275,17 +275,18 @@ Pandoc compatibility.
   Specify the first line number for code when line numbers are displayed.
   `next` means continue from the last code in the current session.
 
-* `hide`={`expr`, `code`, `stdout`, `stderr`, `all`} — Hide some or all of the
-  elements that are displayed by default.  Elements can be combined.  For
-  example, `hide=stdout+stderr`.  Note that `expr` only applies to `.cb.expr`
-  or `.cb.nb` with inline code, since only these evaluate an expression.
+* `hide`={`markup`, `code`, `stdout`, `stderr`, `expr`, `all`} — Hide some or
+  all of the elements that are displayed by default.  Elements can be
+  combined.  For example, `hide=stdout+stderr`.  Note that `expr` only applies
+  to `.cb.expr` or `.cb.nb` with inline code, since only these evaluate an
+  expression.
 
 * `line_numbers`/`numberLines`/`number-lines`/`number_lines`={`true`, `false`}
   — Number code lines in code blocks.
 
-* `show`={`expr`, `code`, `stdout`, `stderr`, `none`} — Override the elements
-  that are displayed by default.  `expr` only applies to `.cb.expr` or
-  `.cb.nb` with inline code, since only these evaluate an expression.
+* `show`={`markup`, `code`, `stdout`, `stderr`, `expr`, `none`} — Override the
+  elements that are displayed by default.  `expr` only applies to `.cb.expr`
+  and to `.cb.nb` with inline code, since only these evaluate an expression.
   Elements can be combined.  For example, `show=code+stdout`.  Each element
   displayed can optionally specify a format from `raw`, `verbatim`, or
   `verbatim_or_empty`.  For example, `show=code:verbatim+stdout:raw`.
@@ -298,6 +299,13 @@ Pandoc compatibility.
       non-breaking space or a code block containing a single empty line in the
       event that there is no content.  It is useful when a placeholder is
       desired, or a visual confirmation that there is indeed no output.
+
+  `markup` displays the Markdown source for the inline code or code block.
+  Because the Markdown source is not available in the Pandoc AST but rather
+  must be recreated from it, the Markdown source displayed with `markup` may
+  use a different number of backticks, quote attribute values slightly
+  differently, or contain other insignificant differences from the original
+  document.
 
   `expr` defaults to `raw` if a format is not specified.  All others default
   to `verbatim`.

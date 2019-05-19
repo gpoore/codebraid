@@ -209,6 +209,7 @@ class PandocCodeChunk(CodeChunk):
         self.pandoc_kvpairs = pandoc_kvpairs
         self._output_nodes = None
         self._as_markdown = None
+        self._as_example_markdown = None
 
 
     _class_processors = _get_class_processors()
@@ -250,7 +251,9 @@ class PandocCodeChunk(CodeChunk):
         t_code = 'Code' if self.inline else 'CodeBlock'
         t_raw = 'RawInline' if self.inline else 'RawBlock'
         for output, format in self.options['show'].items():
-            if output == 'code':
+            if output == 'markup':
+                nodes.append({'t': t_code, 'c': [['', ['markdown'], []], self.as_markdown]})
+            elif output == 'code':
                 nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.code]})
             elif output == 'expr':
                 if format == 'verbatim':
@@ -326,20 +329,31 @@ class PandocCodeChunk(CodeChunk):
 
     @property
     def as_markdown(self):
-        '''
-        Generate an approximation of the Markdown source that created the
-        node.  This is used in creating examples that show Markdown source
-        plus output.
-        '''
         if self._as_markdown is not None:
             return self._as_markdown
+        self._as_markdown = self._generate_markdown()
+        return self._as_markdown
+
+    @property
+    def as_example_markdown(self):
+        if self._as_example_markdown is not None:
+            return self._as_example_markdown
+        self._as_example_markdown = self._generate_markdown(example=True)
+        return self._as_example_markdown
+
+    def _generate_markdown(self, example=False):
+        '''
+        Generate an approximation of the Markdown source that created the
+        node.  This is used with `show=markup` and in creating examples that
+        show Markdown source plus output.
+        '''
         attr_list = []
         if self.node_id:
             attr_list.append('#{0}'.format(self.node_id))
         for c in self.node_classes:
             attr_list.append('.{0}'.format(c))
         for k, v in self.node_kvpairs:
-            if k != 'example':
+            if not example or k != 'example':
                 # Valid keys don't need quoting, some values may
                 if not self._unquoted_kv_value_re.match(v):
                     v = '"{0}"'.format(v.replace('\\', '\\\\').replace('"', '\\"'))
@@ -365,7 +379,6 @@ class PandocCodeChunk(CodeChunk):
             md = '{delim}{{{attr}}}\n{code}\n{delim}'.format(delim=delim, attr=' '.join(attr_list), code=code)
         else:
             md = '```{{{attr}}}\n```'.format(attr=' '.join(attr_list))
-        self._as_markdown = md
         return md
 
 
@@ -377,7 +390,7 @@ class PandocCodeChunk(CodeChunk):
             index = self.parent_node_list_index
             self.parent_node_list[index:index+1] = self.output_nodes
             return
-        markup_node = {'t': 'CodeBlock', 'c': [['', [], []], self.as_markdown]}
+        markup_node = {'t': 'CodeBlock', 'c': [['', [], []], self.as_example_markdown]}
         example_div_contents = [{'t': 'Div', 'c': [['', ['exampleMarkup'], []], [markup_node]]}]
         output_nodes = self.output_nodes
         if output_nodes:
