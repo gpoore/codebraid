@@ -776,7 +776,9 @@ class CodeProcessor(object):
             for index, line in enumerate(stderr_lines):
                 if line.startswith(stdstream_delim_start) and line.startswith(stdstream_delim_start_hash):
                     next_session_output_index = int(line.split('chunk=', 1)[1].split(')', 1)[0])
-                    if next_session_output_index == session_output_index and next_session_output_index >= 0:
+                    if (not session.compile_errors and
+                            next_session_output_index == session_output_index and
+                            next_session_output_index >= 0):
                         # A code chunk that is not actually complete was run
                         # with the default `complete=true`, and this resulted
                         # in a delimiter being printed multiple times.  Since
@@ -795,7 +797,8 @@ class CodeProcessor(object):
                         chunk_expr_dict = {}
                         chunk_source_error_dict = {error_cc.session_output_index: message_lines}
                         break
-                    if next_session_output_index != next(expected_stdstream_delims_iter, None):
+                    if (not session.compile_errors and
+                            next_session_output_index != next(expected_stdstream_delims_iter, None)):
                         # A code chunk that is not actually complete was run
                         # with the default `complete=true`, or a code chunk
                         # with `outside_main` ended in an incomplete state.
@@ -949,7 +952,7 @@ class CodeProcessor(object):
         for index, lines in cache['expr_lines'].items():
             session.code_chunks[int(index)].expr_lines = lines
         for index, lines in cache['source_error_lines'].items():
-            session.code_chunk[int(index)].source_errors.extend(lines)
+            session.code_chunks[int(index)].source_errors.extend(lines)
 
 
     def _update_cache(self):
