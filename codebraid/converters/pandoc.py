@@ -286,7 +286,7 @@ class PandocCodeChunk(CodeChunk):
                         if self.inline:
                             nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.stdout_lines)]})
                         else:
-                            nodes.append({'t': t_raw, 'c': ['markdown', '\n'.join(self.stdout_lines)]})
+                            nodes.append({'t': t_raw, 'c': ['markdown', '\n'.join(self.stdout_lines)+'\n']})
                 else:
                     raise ValueError
             elif output == 'stderr':
@@ -312,7 +312,7 @@ class PandocCodeChunk(CodeChunk):
                         if self.inline:
                             nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.stderr_lines)]})
                         else:
-                            nodes.append({'t': t_raw, 'c': ['markdown', '\n'.join(self.stderr_lines)]})
+                            nodes.append({'t': t_raw, 'c': ['markdown', '\n'.join(self.stderr_lines)+'\n']})
                 else:
                     raise ValueError
             else:
