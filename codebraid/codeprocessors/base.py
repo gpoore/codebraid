@@ -11,6 +11,7 @@
 import bespon
 import collections
 import hashlib
+import io
 import json
 import locale
 import pathlib
@@ -175,7 +176,7 @@ class Session(object):
         else:
             from_outside_main_switches = 1
         to_outside_main_switches = 0
-        incomplete = []
+        incomplete_ccs = []
         last_cc = None
         for cc in self.code_chunks:
             if cc.is_expr and self.lang_def.inline_expression_formatter is None:
@@ -185,15 +186,15 @@ class Session(object):
                     from_outside_main_switches += 1
                     if from_outside_main_switches > 1:
                         cc.source_errors.append('Invalid "outside_main" value; cannot switch back yet again')
-                    for icc in incomplete:
+                    for icc in incomplete_ccs:
                         # When switching from `outside_main`, all accumulated
                         # output belongs to the last code chunk `outside_main`
                         icc.session_output_index = last_cc.session_index
-                    incomplete = []
+                    incomplete_ccs = []
                 else:
                     if not last_cc.options['complete']:
                         last_cc.source_errors.append('The last code chunk before switching to "outside_main" must have "complete" value "true"')
-                        if self.source_error_chunks and self.source_error_chunks[-1] is not last_cc:
+                        if not self.source_error_chunks or self.source_error_chunks[-1] is not last_cc:
                             self.source_error_chunks.append(last_cc)
                             self.errors = True
                     to_outside_main_switches += 1
@@ -201,12 +202,12 @@ class Session(object):
                         cc.source_errors.append('Invalid "outside_main" value; cannot switch back yet again')
             if cc.options['complete']:
                 cc.session_output_index = cc.session_index
-                if incomplete:
-                    for icc in incomplete:
+                if incomplete_ccs:
+                    for icc in incomplete_ccs:
                         icc.session_output_index = cc.session_index
-                    incomplete = []
+                    incomplete_ccs = []
             else:
-                incomplete.append(cc)
+                incomplete_ccs.append(cc)
             if cc.source_errors:
                 self.source_error_chunks.append(cc)
                 self.errors = True
@@ -214,10 +215,10 @@ class Session(object):
                 self.source_warning_chunks.append(cc)
                 self.warnings = True
             last_cc = cc
-        if incomplete:
+        if incomplete_ccs:
             # Last code chunk gets all accumulated output.  Last code chunk
-            # could be `outside_main`, or `complete=false`.
-            for icc in incomplete:
+            # could have `complete=false` or be `outside_main`.
+            for icc in incomplete_ccs:
                 icc.session_output_index = last_cc.session_index
         if self.errors:
             # Hashing and line numbers are only needed if code will indeed be
@@ -263,7 +264,7 @@ class Session(object):
             # chunk accomplishes this.
             hasher.update(hasher.digest())
         self.hash = '{0}_{1}'.format(hasher.hexdigest(), code_len)
-        self.hash_root = self.tempsuffix = hasher.hexdigest()[:16]
+        self.hash_root = self.temp_suffix = hasher.hexdigest()[:16]
 
 
 
@@ -470,10 +471,10 @@ class CodeProcessor(object):
         '''
         for session in self._sessions.values():
             if not session.errors:
-                session_cache = self._load_cache(session)
-                if session_cache is None:
-                    session_cache = self._run(session)
-                self._process_session(session, session_cache)
+                self._load_cache(session)
+                if session.hash not in self._cache:
+                    self._run(session)
+                self._process_session(session)
         self._resolve_output_copying()
         self._update_cache()
 
@@ -482,24 +483,20 @@ class CodeProcessor(object):
         '''
         Load cached output, if it exists.
         '''
-        if self.cache_path is None:
-            cache = None
-        else:
-            cache = self._cache.get(session.hash, None)
-            if cache is None:
-                session_cache_path = self.cache_path / '{0}.zip'.format(session.hash_root)
-                if session_cache_path.is_file():
-                    with zipfile.ZipFile(str(session_cache_path)) as zf:
-                        with zf.open('cache.json') as f:
-                            if sys.version_info < (3, 6):
-                                saved_cache = json.loads(f.read().decode('utf8'))
-                            else:
-                                saved_cache = json.load(f)
-                    if saved_cache['codebraid_version'] == codebraid_version:
-                        self._cache.update(saved_cache)
-                    cache = self._cache.get(session.hash, None)
-                    self._used_cache_files.add(session_cache_path.name)
-        return cache
+        if self.cache_path is not None and session.hash not in self._cache:
+            session_cache_path = self.cache_path / '{0}.zip'.format(session.hash_root)
+            if session_cache_path.is_file():
+                # It may be worth modifying this in future to handle
+                # some failure modes or do more validation on loaded data.
+                with zipfile.ZipFile(str(session_cache_path)) as zf:
+                    with zf.open('cache.json') as f:
+                        if sys.version_info < (3, 6):
+                            saved_cache = json.loads(f.read().decode('utf8'))
+                        else:
+                            saved_cache = json.load(f)
+                if saved_cache['codebraid_version'] == codebraid_version:
+                    self._cache.update(saved_cache)
+                self._used_cache_files.add(session_cache_path.name)
 
 
     def _subproc(self, cmd, tmpdir_path, hash,
@@ -526,8 +523,9 @@ class CodeProcessor(object):
                     proc = FailedProcess(args, stdout=b'', stderr=failed_proc_stderr)
         else:
             # When stdout and stderr are stored in files rather than accessed
-            # through pipes, the files are named using a session-derived hash as
-            # a precaution against code accessing them and against collisions.
+            # through pipes, the files are named using a session-derived hash
+            # as a precaution against code accessing them and against
+            # collisions.
             stdout_path = tmpdir_path / '{0}.stdout'.format(hash)
             stderr_path = tmpdir_path / '{0}.stderr'.format(hash)
             if stderr_is_stdout:
@@ -553,7 +551,7 @@ class CodeProcessor(object):
 
     def _run(self, session):
         stdstream_delim_start = 'CodebraidStd'
-        stdstream_delim = r'{0}(hash="{1}", chunk={{}})'.format(stdstream_delim_start, session.hash[:64])
+        stdstream_delim = r'{0}(hash="{1}", chunk={{0}})'.format(stdstream_delim_start, session.hash[:64])
         stdstream_delim_escaped = stdstream_delim.replace('"', '\\"')
         stdstream_delim_start_hash = stdstream_delim.split(',', 1)[0]
         expression_delim_start = 'CodebraidExpr'
@@ -562,8 +560,8 @@ class CodeProcessor(object):
         run_code_list = []
         run_code_line_number = 1
         user_code_line_number = 1
-        # Map line number of code that is run to code chunk and user code line
-        # number.  Including the code chunk helps with things like syntax
+        # Map line numbers of code that is run to code chunks and to user code
+        # line numbers.  Including code chunks helps with things like syntax
         # errors that prevent code from starting to run. In that case, the
         # code chunks before the one that produced an error won't have
         # anything in stderr that belongs to them.
@@ -580,20 +578,24 @@ class CodeProcessor(object):
             run_code_list.append(source_template_before)
             run_code_line_number += source_template_before.count('\n')
         last_cc = None
+        expected_stdstream_delims = []  # Track expected chunk numbers
         for cc in session.code_chunks:
             delim = stdstream_delim_escaped.format(cc.session_output_index)
             if last_cc is None:
                 if not cc.options['outside_main']:
                     run_code_list.append(chunk_wrapper_before.format(stdout_delim=delim, stderr_delim=delim))
                     run_code_line_number += chunk_wrapper_before_n_lines
+                    expected_stdstream_delims.append(cc.session_output_index)
             elif last_cc.options['complete']:
                 run_code_list.append(chunk_wrapper_after)
                 run_code_line_number += chunk_wrapper_after_n_lines
                 run_code_list.append(chunk_wrapper_before.format(stdout_delim=delim, stderr_delim=delim))
                 run_code_line_number += chunk_wrapper_before_n_lines
+                expected_stdstream_delims.append(cc.session_output_index)
             elif last_cc.options['outside_main'] and not cc.options['outside_main']:
                 run_code_list.append(chunk_wrapper_before.format(stdout_delim=delim, stderr_delim=delim))
                 run_code_line_number += chunk_wrapper_before_n_lines
+                expected_stdstream_delims.append(cc.session_output_index)
             if cc.inline:
                 # Only block code contributes toward line numbers.  No need to
                 # check expr compatibility with `complete`, etc.; that's
@@ -601,7 +603,7 @@ class CodeProcessor(object):
                 if cc.is_expr:
                     expr_code = session.lang_def.inline_expression_formatter.format(stdout_delim=expression_delim_escaped,
                                                                                     stderr_delim=expression_delim_escaped,
-                                                                                    tempsuffix=session.tempsuffix,
+                                                                                    temp_suffix=session.temp_suffix,
                                                                                     code=cc.code)
                     run_code_list.append(expr_code)
                     run_code_to_user_code_dict[run_code_line_number+inline_expression_formatter_n_leading_lines] = (cc, 1)
@@ -626,6 +628,7 @@ class CodeProcessor(object):
 
         error = False
         with tempfile.TemporaryDirectory() as tempdir:
+            # tempdir is absolute pathname as str, which simplifies things
             source_dir_path = pathlib.Path(tempdir)
             source_name = 'source_{0}'.format(session.hash_root)
             source_path = source_dir_path / '{0}.{1}'.format(source_name, session.lang_def.extension)
@@ -646,7 +649,8 @@ class CodeProcessor(object):
                     error = True
                     session.pre_run_errors = True
                     encoding = session.lang_def.pre_run_encoding or locale.getpreferredencoding(False)
-                    session.pre_run_error_lines = pre_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
+                    stdout_str = io.TextIOWrapper(io.BytesIO(pre_proc.stdout), encoding=encoding, errors='backslashreplace').read()
+                    session.pre_run_error_lines = util.splitlines_lf(stdout_str)
 
             for cmd_template in session.lang_def.compile_commands:
                 if error:
@@ -657,7 +661,8 @@ class CodeProcessor(object):
                     session.compile_errors = True
                     encoding = session.lang_def.compile_encoding or locale.getpreferredencoding(False)
                     stdout_lines = []
-                    stderr_lines = comp_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
+                    stdout_str = io.TextIOWrapper(io.BytesIO(comp_proc.stdout), encoding=encoding, errors='backslashreplace').read()
+                    stderr_lines = util.splitlines_lf(stdout_str)
 
             if not error:
                 cmd_template = session.lang_def.run_command
@@ -667,12 +672,14 @@ class CodeProcessor(object):
                     session.run_errors = True
                 encoding = session.lang_def.run_encoding or locale.getpreferredencoding(False)
                 try:
-                    stdout_lines = run_proc.stdout.decode(encoding).splitlines()
-                    stderr_lines = run_proc.stderr.decode(encoding).splitlines()
+                    stdout_str = io.TextIOWrapper(io.BytesIO(run_proc.stdout), encoding=encoding).read()
+                    stderr_str = io.TextIOWrapper(io.BytesIO(run_proc.stderr), encoding=encoding).read()
                 except UnicodeDecodeError:
                     session.decode_error = True
-                    stdout_lines = run_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
-                    stderr_lines = run_proc.stderr.decode(encoding, errors='backslashreplace').splitlines()
+                    stdout_str = io.TextIOWrapper(io.BytesIO(run_proc.stdout), encoding=encoding, errors='backslashreplace').read()
+                    stderr_str = io.TextIOWrapper(io.BytesIO(run_proc.stderr), encoding=encoding, errors='backslashreplace').read()
+                stdout_lines = util.splitlines_lf(stdout_str)
+                stderr_lines = util.splitlines_lf(stderr_str)
 
             for cmd_template in session.lang_def.post_run_commands:
                 if error:
@@ -682,7 +689,9 @@ class CodeProcessor(object):
                     error = True
                     session.post_run_errors = True
                     encoding = session.lang_def.post_run_encoding or locale.getpreferredencoding(False)
-                    session.post_run_error_lines = post_proc.stdout.decode(encoding, errors='backslashreplace').splitlines()
+                    stdout_str = io.TextIOWrapper(io.BytesIO(post_proc.stdout), encoding=encoding, errors='backslashreplace').read()
+                    session.post_run_error_lines = util.splitlines_lf(stdout_str)
+
         session.error = error
 
         if session.pre_run_errors:
@@ -704,10 +713,14 @@ class CodeProcessor(object):
             stdout_lines.append(sentinel_delim)
             stderr_lines.append('')
             stderr_lines.append(sentinel_delim)
+            expected_stdstream_delims.append(-1)
             chunk_stdout_dict = {}
             chunk_stderr_dict = {}
             chunk_expr_dict = {}
             chunk_source_error_dict = {}
+            # More source patterns may be needed in future to cover the
+            # possibility of languages that make paths lowercase on
+            # case-insensitive filesystems
             source_pattern_posix = source_path.as_posix()
             source_pattern_win = str(pathlib.PureWindowsPath(source_path))
             source_pattern_final = 'source.{0}'.format(session.lang_def.extension)
@@ -744,7 +757,11 @@ class CodeProcessor(object):
                     chunk_start_index = index + 1
                     session_output_index = next_session_output_index
             if -1 in chunk_stdout_dict:
-                # Stdout with index -1 results from template or `outside_main`
+                # `session_output_index` covers the possibility that this is
+                # output from the template or `outside_main` at the beginning,
+                # and also the possibility that there were no delimiters.  If
+                # the -1 is due to a delimiter-related error, that will be
+                # detected and handled in stderr processing.
                 cc_unclaimed_stdout_index = session.code_chunks[0].session_output_index
                 if cc_unclaimed_stdout_index in chunk_stdout_dict:
                     chunk_stdout_dict[cc_unclaimed_stdout_index] = chunk_stdout_dict[-1] + chunk_stdout_dict[cc_unclaimed_stdout_index]
@@ -755,26 +772,54 @@ class CodeProcessor(object):
             session_output_index = -1
             chunk_start_index = 0
             chunk_end_index = 0
+            expected_stdstream_delims_iter = iter(expected_stdstream_delims)
             for index, line in enumerate(stderr_lines):
                 if line.startswith(stdstream_delim_start) and line.startswith(stdstream_delim_start_hash):
                     next_session_output_index = int(line.split('chunk=', 1)[1].split(')', 1)[0])
-                    if next_session_output_index == session_output_index and session_output_index >= 0:
-                        # A code chunk that is not complete used the default
-                        # `complete=true`, and this resulted in a delimiter
-                        # being printed multiple times.  Since this error can
-                        # only be detected at runtime, it is stored in stderr
-                        # rather than being reported as a normal source error.
-                        # This guarantees that the code won't run again until
-                        # this is fixed.
-                        duplicate_cc = session.code_chunks[session_output_index]
-                        message_lines = ['RUNTIME SOURCE ERROR in "{0}" near line {1}:'.format(duplicate_cc.source_name, duplicate_cc.source_start_line_number),
+                    if next_session_output_index == session_output_index and next_session_output_index >= 0:
+                        # A code chunk that is not actually complete was run
+                        # with the default `complete=true`, and this resulted
+                        # in a delimiter being printed multiple times.  Since
+                        # this error can only be detected at runtime, it is
+                        # stored specially rather than being reported as a
+                        # normal source error.  This guarantees that the code
+                        # won't run again until this is fixed.
+                        error_cc = session.code_chunks[session_output_index]
+                        message_lines = ['RUNTIME SOURCE ERROR in "{0}" near line {1}:'.format(error_cc.source_name,
+                                                                                               error_cc.source_start_line_number),
                                          'This ran with "complete" value "true" but is not a complete unit of code.']
                         session.errors = True
                         session.run_errors = True
                         chunk_stdout_dict = {}
                         chunk_stderr_dict = {}
                         chunk_expr_dict = {}
-                        chunk_source_error_dict = {session_output_index: message_lines}
+                        chunk_source_error_dict = {error_cc.session_output_index: message_lines}
+                        break
+                    if next_session_output_index != next(expected_stdstream_delims_iter, None):
+                        # A code chunk that is not actually complete was run
+                        # with the default `complete=true`, or a code chunk
+                        # with `outside_main` ended in an incomplete state.
+                        # This prevented a delimiter from being printed.
+                        if next_session_output_index > 0:
+                            error_cc = session.code_chunks[session_output_index]
+                        else:
+                            error_cc = session.code_chunks[session.code_chunks[0].session_output_index]
+                        message_lines = ['RUNTIME SOURCE ERROR in "{0}" near line {1}:'.format(error_cc.source_name,
+                                                                                        error_cc.source_start_line_number)]
+                        if error_cc.options['complete']:
+                            message_lines.append('This ran with "complete" value "true" but is not a complete unit of code.')
+                        elif error_cc.options['outside_main']:
+                            message_lines.append('This marked the end of "outside_main" but is not a complete unit of code.')
+                        else:
+                            # Fallback; previous cases should cover everything
+                            message_lines.append('This is not a complete unit of code.')
+                        message_lines.append('It interfered with the following code chunk.')
+                        session.errors = True
+                        session.run_errors = True
+                        chunk_stdout_dict = {}
+                        chunk_stderr_dict = {}
+                        chunk_expr_dict = {}
+                        chunk_source_error_dict = {error_cc.session_output_index: message_lines}
                         break
                     if index > 0:
                         chunk_end_index = index - 1
@@ -867,7 +912,7 @@ class CodeProcessor(object):
                                     else:
                                         _, user_number = run_code_to_user_code_dict[lower_run_number]
                                 return match.group(0).replace(str(run_number), template.format(user_number))
-                            cc_stderr_lines = line_number_regex_re.sub(replace_match, '\n'.join(cc_stderr_lines)).splitlines()
+                            cc_stderr_lines = util.splitlines_lf(line_number_regex_re.sub(replace_match, '\n'.join(cc_stderr_lines)))
                         # Update session error and warning status
                         if not session.compile_errors:
                             for cc_line in cc_stderr_lines:
@@ -886,13 +931,16 @@ class CodeProcessor(object):
                     chunk_start_index = index + 1
                     session_output_index = next_session_output_index
 
-        cache = {'stdout_lines': chunk_stdout_dict, 'stderr_lines': chunk_stderr_dict,
-                 'expr_lines': chunk_expr_dict, 'source_error_lines': chunk_source_error_dict}
+        cache = {'stdout_lines': chunk_stdout_dict,
+                 'stderr_lines': chunk_stderr_dict,
+                 'expr_lines': chunk_expr_dict,
+                 'source_error_lines': chunk_source_error_dict}
         self._cache[session.hash] = cache
         self._updated_cache_hash_roots.append(session.hash_root)
-        return cache
 
-    def _process_session(self, session, cache):
+
+    def _process_session(self, session):
+        cache = self._cache[session.hash]
         # `int()` handles keys from json cache
         for index, lines in cache['stdout_lines'].items():
             session.code_chunks[int(index)].stdout_lines = lines
