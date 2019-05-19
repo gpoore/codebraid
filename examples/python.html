@@ -233,7 +233,7 @@ print(markdown)
 <p>Code blocks show stderr automatically by default.</p>
 <div class="example">
 <div class="exampleMarkup">
-<pre><code>```{.python .cb.nb .line_numbers session=block_error}
+<pre><code>```{.python .cb.nb session=block_error}
 var = 123
 print(var, flush=True)
 var += &quot;a&quot;
@@ -273,7 +273,7 @@ print(&quot;Hello from Python!&quot;)
 ```</code></pre>
 </div>
 <div class="exampleOutput">
-<div class="sourceCode" id="cb22" data-startFrom="None"><pre class="sourceCode numberSource python numberLines"><code class="sourceCode python"><a class="sourceLine" id="cb22-1" title="1"><span class="bu">print</span>(<span class="st">&quot;Hello from Python!&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb22" data-startFrom="1"><pre class="sourceCode numberSource python numberLines"><code class="sourceCode python"><a class="sourceLine" id="cb22-1" title="1"><span class="bu">print</span>(<span class="st">&quot;Hello from Python!&quot;</span>)</a></code></pre></div>
 </div>
 </div>
 <p>The output is essentially identical to that of a normal code block; the only differences are some default display options, like line numbering. Thus <code>.cb.code</code> is primarily useful when it is combined with other Codebraid features. For example, it is possible to give code with <code>.cb.code</code> a <code>name</code>, and then copy it by <code>name</code> into a separate location where it is executed. See <a href="#copying">Copying code and output</a>.</p>
@@ -362,7 +362,7 @@ print(&quot;Hello from Python!&quot;)
 ```</code></pre>
 </div>
 <div class="exampleOutput">
-<div class="sourceCode" id="hello" data-startFrom="None"><pre class="sourceCode numberSource python numberLines"><code class="sourceCode python"><a class="sourceLine" id="hello-1" title="1"><span class="bu">print</span>(<span class="st">&quot;Hello from Python!&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="hello" data-startFrom="1"><pre class="sourceCode numberSource python numberLines"><code class="sourceCode python"><a class="sourceLine" id="hello-1" title="1"><span class="bu">print</span>(<span class="st">&quot;Hello from Python!&quot;</span>)</a></code></pre></div>
 </div>
 </div>
 <div class="example">

@@ -116,7 +116,7 @@ print(markdown)
 
 Code blocks show stderr automatically by default.
 
-```{.python .cb.nb .line_numbers session=block_error example=true}
+```{.python .cb.nb session=block_error example=true}
 var = 123
 print(var, flush=True)
 var += "a"
