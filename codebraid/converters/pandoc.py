@@ -228,7 +228,10 @@ class PandocCodeChunk(CodeChunk):
             return self._output_nodes
         nodes = []
         if self.source_errors:
-            message = 'SOURCE ERROR in "{0}" near line {1}:'.format(self.source_name, self.source_start_line_number)
+            if self.runtime_source_error:
+                message = 'RUNTIME SOURCE ERROR in "{0}" near line {1}:'.format(self.source_name, self.source_start_line_number)
+            else:
+                message = 'SOURCE ERROR in "{0}" near line {1}:'.format(self.source_name, self.source_start_line_number)
             if self.inline:
                 nodes.append({'t': 'Code', 'c': [['', ['sourceError'], []], '{0} {1}'.format(message, ' '.join(self.source_errors))]})
             else:

@@ -698,12 +698,12 @@ class CodeProcessor(object):
             chunk_stdout_dict = {}
             chunk_stderr_dict = {0: ['PRE-RUN ERROR:', *session.pre_run_error_lines]}
             chunk_expr_dict = {}
-            chunk_source_error_dict = {}
+            chunk_runtime_source_error_dict = {}
         elif session.post_run_errors:
             chunk_stdout_dict = {}
             chunk_stderr_dict = {0: ['POST-RUN ERROR:', *session.post_run_error_lines]}
             chunk_expr_dict = {}
-            chunk_source_error_dict = {}
+            chunk_runtime_source_error_dict = {}
         else:
             # Ensure that there's at least one delimiter to serve as a
             # sentinel, even if the code never ran due to something like a
@@ -717,7 +717,7 @@ class CodeProcessor(object):
             chunk_stdout_dict = {}
             chunk_stderr_dict = {}
             chunk_expr_dict = {}
-            chunk_source_error_dict = {}
+            chunk_runtime_source_error_dict = {}
             # More source patterns may be needed in future to cover the
             # possibility of languages that make paths lowercase on
             # case-insensitive filesystems
@@ -776,9 +776,7 @@ class CodeProcessor(object):
             for index, line in enumerate(stderr_lines):
                 if line.startswith(stdstream_delim_start) and line.startswith(stdstream_delim_start_hash):
                     next_session_output_index = int(line.split('chunk=', 1)[1].split(')', 1)[0])
-                    if (not session.compile_errors and
-                            next_session_output_index == session_output_index and
-                            next_session_output_index >= 0):
+                    if next_session_output_index == session_output_index and next_session_output_index >= 0:
                         # A code chunk that is not actually complete was run
                         # with the default `complete=true`, and this resulted
                         # in a delimiter being printed multiple times.  Since
@@ -787,18 +785,15 @@ class CodeProcessor(object):
                         # normal source error.  This guarantees that the code
                         # won't run again until this is fixed.
                         error_cc = session.code_chunks[session_output_index]
-                        message_lines = ['RUNTIME SOURCE ERROR in "{0}" near line {1}:'.format(error_cc.source_name,
-                                                                                               error_cc.source_start_line_number),
-                                         'This ran with "complete" value "true" but is not a complete unit of code.']
+                        message_lines = ['This ran with "complete" value "true" but is not a complete unit of code.']
                         session.errors = True
                         session.run_errors = True
                         chunk_stdout_dict = {}
                         chunk_stderr_dict = {}
                         chunk_expr_dict = {}
-                        chunk_source_error_dict = {error_cc.session_output_index: message_lines}
+                        chunk_runtime_source_error_dict = {error_cc.session_output_index: message_lines}
                         break
-                    if (not session.compile_errors and
-                            next_session_output_index != next(expected_stdstream_delims_iter, None)):
+                    if not session.error and next_session_output_index != next(expected_stdstream_delims_iter, None):
                         # A code chunk that is not actually complete was run
                         # with the default `complete=true`, or a code chunk
                         # with `outside_main` ended in an incomplete state.
@@ -807,22 +802,20 @@ class CodeProcessor(object):
                             error_cc = session.code_chunks[session_output_index]
                         else:
                             error_cc = session.code_chunks[session.code_chunks[0].session_output_index]
-                        message_lines = ['RUNTIME SOURCE ERROR in "{0}" near line {1}:'.format(error_cc.source_name,
-                                                                                        error_cc.source_start_line_number)]
                         if error_cc.options['complete']:
-                            message_lines.append('This ran with "complete" value "true" but is not a complete unit of code.')
+                            message_lines = ['This ran with "complete" value "true" but is not a complete unit of code.']
                         elif error_cc.options['outside_main']:
-                            message_lines.append('This marked the end of "outside_main" but is not a complete unit of code.')
+                            message_lines = ['This marked the end of "outside_main" but is not a complete unit of code.']
                         else:
                             # Fallback; previous cases should cover everything
-                            message_lines.append('This is not a complete unit of code.')
+                            message_lines = ['This is not a complete unit of code.']
                         message_lines.append('It interfered with the following code chunk.')
                         session.errors = True
                         session.run_errors = True
                         chunk_stdout_dict = {}
                         chunk_stderr_dict = {}
                         chunk_expr_dict = {}
-                        chunk_source_error_dict = {error_cc.session_output_index: message_lines}
+                        chunk_runtime_source_error_dict = {error_cc.session_output_index: message_lines}
                         break
                     if index > 0:
                         chunk_end_index = index - 1
@@ -937,7 +930,7 @@ class CodeProcessor(object):
         cache = {'stdout_lines': chunk_stdout_dict,
                  'stderr_lines': chunk_stderr_dict,
                  'expr_lines': chunk_expr_dict,
-                 'source_error_lines': chunk_source_error_dict}
+                 'runtime_source_error_lines': chunk_runtime_source_error_dict}
         self._cache[session.hash] = cache
         self._updated_cache_hash_roots.append(session.hash_root)
 
@@ -951,8 +944,10 @@ class CodeProcessor(object):
             session.code_chunks[int(index)].stderr_lines = lines
         for index, lines in cache['expr_lines'].items():
             session.code_chunks[int(index)].expr_lines = lines
-        for index, lines in cache['source_error_lines'].items():
-            session.code_chunks[int(index)].source_errors.extend(lines)
+        for index, lines in cache['runtime_source_error_lines'].items():
+            cc = session.code_chunks[int(index)]
+            cc.source_errors.extend(lines)
+            cc.runtime_source_error = True
 
 
     def _update_cache(self):

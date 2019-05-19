@@ -307,6 +307,7 @@ class CodeChunk(object):
         '''
         if not hasattr(self, 'source_errors'):
             self.source_errors = []
+            self.runtime_source_error = False
             self.source_warnings = []
 
 
