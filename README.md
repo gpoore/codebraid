@@ -83,7 +83,6 @@ by default so that code is only re-executed when modified.
 | support for literate programming               | &check;   |                  | &check;  |          |
 | compatible with any text editor                | &check;   |                  | &check;  | &check;  |
 
-<small>
 &ast; One primary language per notebook, plus additional languages via
 %%script magic.  There is no continuity between %%script cells, because
 each cell is executed in a separate process.
@@ -93,7 +92,6 @@ Python and Julia.  Code chunks in other languages are executed individually
 in separate processes.
 <br>
 ‡ Out-of-order execution is possible with R Markdown notebooks.
-</small>
 
 <hr>
 
@@ -192,7 +190,7 @@ that caching will work correctly in these situations.
 
 ## Code options
 
-### Classes
+### Commands (Classes)
 
 Code is made executable by adding a Codebraid class to its
 [Pandoc attributes](http://pandoc.org/MANUAL.html#fenced-code-blocks).
@@ -275,21 +273,30 @@ Pandoc compatibility.
   Specify the first line number for code when line numbers are displayed.
   `next` means continue from the last code in the current session.
 
-* `hide`={`markup`, `code`, `stdout`, `stderr`, `expr`, `all`} — Hide some or
-  all of the elements that are displayed by default.  Elements can be
-  combined.  For example, `hide=stdout+stderr`.  Note that `expr` only applies
-  to `.cb.expr` or `.cb.nb` with inline code, since only these evaluate an
-  expression.
+* `hide`={`markup`, `copied_markup`, `code`, `stdout`, `stderr`, `expr`,
+  `all`} — Hide some or all of the elements that are displayed by default.
+  Elements can be combined.  For example, `hide=stdout+stderr`.  Note that
+  `expr` only applies to `.cb.expr` or `.cb.nb` with inline code, since only
+  these evaluate an expression.
+
+* `hide_markup_keys`={key(s)} — Hide the specified code chunk attribute key(s)
+  in the Markdown source displayed via `markup` or `copied_markup`.  Multiple
+  keys can be specified via `hide_markup_keys=key1+key2`.
+
+  `hide_markup_keys` only applies to the code chunk in which it is used, to
+  determined the `markup` for that code chunk.  Thus, it only affects
+  `copied_markup` indirectly.
 
 * `line_numbers`/`numberLines`/`number-lines`/`number_lines`={`true`, `false`}
   — Number code lines in code blocks.
 
-* `show`={`markup`, `code`, `stdout`, `stderr`, `expr`, `none`} — Override the
-  elements that are displayed by default.  `expr` only applies to `.cb.expr`
-  and to `.cb.nb` with inline code, since only these evaluate an expression.
-  Elements can be combined.  For example, `show=code+stdout`.  Each element
-  displayed can optionally specify a format from `raw`, `verbatim`, or
-  `verbatim_or_empty`.  For example, `show=code:verbatim+stdout:raw`.
+* `show`={`markup`, `copied_markup`, `code`, `stdout`, `stderr`, `expr`,
+  `none`} — Override the elements that are displayed by default.  `expr` only
+  applies to `.cb.expr` and to `.cb.nb` with inline code, since only these
+  evaluate an expression.  Elements can be combined.  For example,
+  `show=code+stdout`.  Each element displayed can optionally specify a format
+  from `raw`, `verbatim`, or `verbatim_or_empty`.  For example,
+  `show=code:verbatim+stdout:raw`.
 
     - `raw` means interpreted as Markdown.
     - `verbatim` produces inline code or a code block, depending on context.
@@ -306,6 +313,9 @@ Pandoc compatibility.
   use a different number of backticks, quote attribute values slightly
   differently, or contain other insignificant differences from the original
   document.
+
+  `copied_markup` displays the Markdown source for code chunks copied via
+  `copy`.
 
   `expr` defaults to `raw` if a format is not specified.  All others default
   to `verbatim`.

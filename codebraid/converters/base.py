@@ -91,7 +91,7 @@ def _get_option_processors():
             options['show'] = collections.OrderedDict()
         else:
             hide_values = value.replace(' ', '').split('+')
-            if not all(v in ('markup', 'code', 'stdout', 'stderr', 'expr') for v in hide_values):
+            if not all(v in ('markup', 'copied_markup', 'code', 'stdout', 'stderr', 'expr') for v in hide_values):
                 code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
                 return
             if 'expr' in hide_values and not code_chunk.is_expr and code_chunk.command != 'paste':
@@ -99,6 +99,15 @@ def _get_option_processors():
                 return
             for v in hide_values:
                 options['show'].pop(v, None)
+
+    def option_hide_markup_keys(code_chunk, options, key, value):
+        if isinstance(value, str):
+            # No need to check keys for validity; this is a display option.
+            hide_keys = set(value.replace(' ', '').split('+'))
+            hide_keys.add('hide_markup_keys')
+            options[key] = hide_keys
+        else:
+            code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
 
     def option_include(code_chunk, options, key, value):
         if 'copy' in options:
@@ -146,11 +155,14 @@ def _get_option_processors():
                 if output in value_processed:
                     code_chunk.source_warnings.append('Option "{0}" value "{1}" contains duplicate "{2}" in code chunk'.format(key, value, output))
                     continue
-                if output in ('markup', 'code'):
+                if output in ('markup', 'copied_markup', 'code'):
                     if format is None:
                         format = 'verbatim'
                     elif format != 'verbatim':
                         code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
+                        continue
+                    if output == 'copied_markup' and 'copy' not in options:
+                        code_chunk.source_warnings.append('Invalid "{0}" value "{1}" in code chunk; can only be used with "copy"'.format(key, value))
                         continue
                 elif output in ('stdout', 'stderr'):
                     if format is None:
@@ -177,6 +189,7 @@ def _get_option_processors():
                                    {'complete': option_bool_error,
                                     'copy': option_copy,
                                     'hide': option_hide,
+                                    'hide_markup_keys': option_hide_markup_keys,
                                     'example': option_bool_warning,
                                     'first_number': option_first_number,
                                     'name': option_name,
@@ -237,6 +250,10 @@ class CodeChunk(object):
                     self.source_errors.append('Invalid placeholder code for copy or include (need space or underscore)')
             elif code.rstrip(' ') not in ('', '_'):
                 self.source_errors.append('Invalid placeholder code for copy or include (need empty, space, or underscore)')
+            # There could be a check here for copying code from multiple code
+            # chunks and then displaying it in an inline context.  However, it
+            # is difficult to get that right, because whether the result is
+            # valied code is language-dependent.
             self.placeholder_code = code
             self.code = None
             self.code_lines = None
@@ -297,7 +314,6 @@ class CodeChunk(object):
         if self.is_expr:
             self.expr_lines = None
         self.code_start_line_number = None
-
 
     def __pre_init__(self):
         '''

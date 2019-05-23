@@ -116,7 +116,7 @@ def _get_keyval_processors():
         elif value not in ('true', 'false'):
             code_chunk.source_warnings.append('Attribute "{0}" must be true or false for code chunk'.format(key))
         else:
-            options['line_anchors'] = value
+            options['line_anchors'] = value == 'true'
 
     def keyval_line_numbers(code_chunk, options, key, value):
         if 'line_numbers' in options:
@@ -124,7 +124,7 @@ def _get_keyval_processors():
         elif value not in ('true', 'false'):
             code_chunk.source_warnings.append('Attribute "{0}" must be true or false for code chunk'.format(key))
         else:
-            options['line_numbers'] = value
+            options['line_numbers'] = value == 'true'
 
     first_number = {k: keyval_first_number for k in ('first_number', 'startFrom', 'start-from', 'start_from')}
     line_anchors = {k: keyval_line_anchors for k in ('lineAnchors', 'line-anchors', 'line_anchors')}
@@ -253,6 +253,11 @@ class PandocCodeChunk(CodeChunk):
         for output, format in self.options['show'].items():
             if output == 'markup':
                 nodes.append({'t': t_code, 'c': [['', ['markdown'], []], self.as_markdown]})
+            elif output == 'copied_markup':
+                if self.inline:
+                    nodes.append({'t': t_code, 'c': [['', ['markdown'], []], ' '.join(x.as_markdown for x in self.copy_chunks)]})
+                else:
+                    nodes.append({'t': t_code, 'c': [['', ['markdown'], []], '\n\n'.join(x.as_markdown for x in self.copy_chunks)]})
             elif output == 'code':
                 nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.code]})
             elif output == 'expr':
@@ -352,8 +357,11 @@ class PandocCodeChunk(CodeChunk):
             attr_list.append('#{0}'.format(self.node_id))
         for c in self.node_classes:
             attr_list.append('.{0}'.format(c))
+        hide_keys = set(self.options.get('hide_markup_keys', []))
+        if example:
+            hide_keys.add('example')
         for k, v in self.node_kvpairs:
-            if not example or k != 'example':
+            if k not in hide_keys:
                 # Valid keys don't need quoting, some values may
                 if not self._unquoted_kv_value_re.match(v):
                     v = '"{0}"'.format(v.replace('\\', '\\\\').replace('"', '\\"'))
