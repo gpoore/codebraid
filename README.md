@@ -7,8 +7,8 @@ simple as adding a class to your code blocks' attributes, and then running
 another format.  `codebraid` supports almost all of `pandoc`'s options and
 passes them to `pandoc` internally.
 
-Codebraid currently can run **Python 3.5+**, **Julia**, **Rust**, **R**, and
-**Bash** code.  Support for additional languages is coming soon.
+Codebraid currently can run **Python 3.5+**, **Julia**, **Rust**, **R**,
+**Bash**, and **JavaScript** code.  Support for additional languages is coming soon.
 
 **Development:**  https://github.com/gpoore/codebraid
 
@@ -30,6 +30,9 @@ and Rust examples demonstrate more advanced features at the end):
   * [Bash example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/bash.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/bash.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/bash.html)]
+  * [JavaScript example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/javascript.html)
+    [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/javascript.cbmd)]
+    [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/javascript.html)]
 
 
 ## Simple example
