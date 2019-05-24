@@ -1,0 +1,80 @@
+---
+title: "Codebraid with JavaScript"
+---
+
+
+## Inline code
+
+
+### Run
+
+Inline code with `.cb.run` gives raw stdout.  While the language can be
+specified with `.javascript`, `.js` works as well.
+
+`console.log(1 + 2);`{.js .cb.run example=true}
+
+
+### Expression and inline notebook
+
+Inline code with `.cb.expr` and `.cb.nb` (`nb` is short for `notebook`)
+evaluate an expression and then insert the raw output into the document, where
+it is interpreted as Markdown.
+
+`4*16`{.js .cb.expr example=true}
+
+`` `\$2^8 = ${2**8}\$` ``{.js .cb.nb example=true}
+
+
+### Stderr
+
+In the event of an error, inline code automatically shows stderr by default.
+This code is executed in its own session, `inline_error`, so that it does
+not impact other examples.
+
+`console.logs(1 + 2);`{.js .cb.run session=inline_error example=true}
+
+
+## Block code
+
+
+### Run
+
+Code blocks with `.cb.run` give raw stdout.  There is continuity between code
+blocks so long as they are in the same session; variables persist.
+
+```{.js .cb.run example=true}
+message = "Hello from *JavaScript!*";
+```
+
+```{.js .cb.run example=true}
+console.log(message);
+```
+
+
+### Notebook
+
+Code blocks with `.cb.nb` show the code and also the verbatim stdout.
+
+
+```{.js .cb.nb session=notebook example=true}
+function pows_of_two(start, end) {
+    n = 2;
+    x = start;
+    while (x < end) {
+        process.stdout.write(String(2**x) + ", ");
+        x += 1;
+    }
+    console.log(2**end);
+}
+pows_of_two(1, 9);
+pows_of_two(1, 15);
+```
+
+
+### Stderr
+
+Code blocks show stderr automatically by default.
+
+```{.js .cb.nb session=block_error example=true}
+x = 1 + ;
+```

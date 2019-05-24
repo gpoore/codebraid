@@ -1,0 +1,27 @@
+|=== javascript
+executable = node
+
+extension = 'js'
+
+run_encoding = 'utf8'
+
+chunk_wrapper =
+    |```
+    console.log("{stdout_delim}");
+    console.error("{stderr_delim}");
+    {code}
+    |```/
+
+inline_expression_formatter =
+    |```
+    _codebraid_temp_{temp_suffix} = String({code});
+    console.log("{stdout_delim}");
+    console.error("{stderr_delim}");
+    console.log(_codebraid_temp_{temp_suffix});
+    |```/
+
+line_number_patterns = ':{number}'
+line_number_regex = `<string>:(\d+)`
+
+|=== js
+$~.javascript
