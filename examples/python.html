@@ -375,5 +375,19 @@ print(&quot;Hello from Python!&quot;)
 <pre class="stdout"><code>Hello from Python!</code></pre>
 </div>
 </div>
+<h3 id="including-external-files">Including external files</h3>
+<p>External files can be included for display or execution using <code>include_file</code>. The default encoding is UTF-8; other encodings can be selected with <code>include_encoding</code>. Instead of including the entire file, it is possible to include only a selected range of lines with <code>include_lines</code>. It is also possible to include part of a file that matches a regular expression with <code>include_regex</code>, as shown in the example. Other options for controlling what is included based on starting or ending literal strings or regular expressions can be found in the documentation.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.html .cb.code include_file=python.html include_regex=&quot;&lt;header.*?/header&gt;&quot;}
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb40" data-startFrom="1"><pre class="sourceCode numberSource html numberLines"><code class="sourceCode html"><a class="sourceLine" id="cb40-1" title="1"><span class="kw">&lt;header</span><span class="ot"> id=</span><span class="st">&quot;title-block-header&quot;</span><span class="kw">&gt;</span></a>
+<a class="sourceLine" id="cb40-2" title="2"><span class="kw">&lt;h1</span><span class="ot"> class=</span><span class="st">&quot;title&quot;</span><span class="kw">&gt;</span>Codebraid with Python<span class="kw">&lt;/h1&gt;</span></a>
+<a class="sourceLine" id="cb40-3" title="3"><span class="kw">&lt;/header&gt;</span></a></code></pre></div>
+</div>
+</div>
+<p>When <code>include_file</code> is used with <code>cb.code</code>, the included code is simply displayed. When <code>include_file</code> is used with <code>cb.run</code> or another command that executes code, the included code is executed just as if it had been entered directly.</p>
 </body>
 </html>

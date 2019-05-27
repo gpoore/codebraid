@@ -223,3 +223,22 @@ print("Hello from Python!")
 
 ```{.python .cb.nb copy=hello example=true}
 ```
+
+### Including external files
+
+External files can be included for display or execution using `include_file`.
+The default encoding is UTF-8; other encodings can be selected with
+`include_encoding`.  Instead of including the entire file, it is possible to
+include only a selected range of lines with `include_lines`.  It is also
+possible to include part of a file that matches a regular expression with
+`include_regex`, as shown in the example.  Other options for controlling what
+is included based on starting or ending literal strings or regular expressions
+can be found in the documentation.
+
+```{.html .cb.code include_file=python.html include_regex="<header.*?/header>" example=true}
+```
+
+When `include_file` is used with `cb.code`, the included code is simply
+displayed.  When `include_file` is used with `cb.run` or another command that
+executes code, the included code is executed just as if it had been entered
+directly.
