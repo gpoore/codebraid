@@ -20,7 +20,7 @@ import sys
 import tempfile
 from typing import Dict, List, Optional, Sequence, Union
 import warnings
-from .base import Converter, CodeChunk
+from .base import CodeChunk, Converter, Include
 from .. import err
 from .. import util
 
@@ -86,9 +86,20 @@ def _get_keyval_processors():
     '''
     Create dict mapping Pandoc key-value attributes to processing functions.
     '''
+    # Options like `include` have sub-options, which need to be translated
+    # into a dict.  In a markup language with more expressive option syntax,
+    # this would be supported as `include={key=value, ...}`.  For Pandoc
+    # Markdown, the alternatives are keys like `include.file` or
+    # `include_file`.  In either case, the base option name `include`
+    # functions as a namespace and needs to be protected from being
+    # overwritten by an invalid option.  Track those namespaces with a set.
+    namespace_keywords = set()
+
     def keyval_generic(code_chunk, options, key, value):
         if key in options:
             code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
+        elif key in namespace_keywords:
+            code_chunk.source_errors.append('Invalid key "{0}" for code chunk'.format(key))
         else:
             options[key] = value
 
@@ -126,17 +137,35 @@ def _get_keyval_processors():
         else:
             options['line_numbers'] = value == 'true'
 
+    def keyval_namespace(code_chunk, options, key, value):
+        if '.' in key:
+            namespace, sub_key = key.split('.', 1)
+        else:
+            namespace, sub_key = key.split('_', 1)
+        if namespace in options:
+            sub_options = options[namespace]
+        else:
+            sub_options = {}
+            options[namespace] = sub_options
+        if sub_key in sub_options:
+            code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
+        else:
+            sub_options[sub_key] = value
+
     first_number = {k: keyval_first_number for k in ('first_number', 'startFrom', 'start-from', 'start_from')}
     line_anchors = {k: keyval_line_anchors for k in ('lineAnchors', 'line-anchors', 'line_anchors')}
     line_numbers = {k: keyval_line_numbers for k in ('line_numbers', 'numberLines', 'number-lines', 'number_lines')}
+    include = {'include_{0}'.format(k): keyval_namespace for k in Include.keywords}
+    namespace_keywords.add('include')
     return collections.defaultdict(lambda: keyval_generic,
                                    {'complete': keyval_bool,
                                     'copy': keyval_generic,
                                     'example': keyval_bool,
                                     **first_number,
-                                    'name': keyval_generic,
+                                    **include,
                                     **line_anchors,
                                     **line_numbers,
+                                    'name': keyval_generic,
                                     'outside_main': keyval_bool})
 
 

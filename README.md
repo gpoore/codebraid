@@ -339,3 +339,100 @@ Pandoc compatibility.
 
 * `name`={identifier-style string} — Name a code chunk so that it can later be
   copied by name.  Names must be Python-style identifiers.
+
+#### Including external files
+
+* `include_file`={path} — Include the specified file.  A leading `~/` or
+  `~<user>/` is expanded to the user's home directory under all operating
+  systems, including under Windows with both slashes and backslashes.
+
+  When `include_file` is used with a command like `.cb.run` that executes
+  code, the file is included and executed as part of the current session just
+  as if the file contents had been entered directly.  When `include_file` is
+  used with `.cb.code`, the file is included and displayed just as if it had
+  been entered directly.  Because `include_file` brings in code from another
+  file, the actual content of a code block or inline code using `include_file`
+  is discarded.  As a result, this must be empty, or a space or underscore can
+  be used as a placeholder.
+
+* `include_encoding`={encoding} — Encoding for included file.
+
+* `include_lines`={lines/line ranges} — Include the specified lines or line
+  ranges.  For example, `1-3,5,7-9,11-`.  Line numbers are one-indexed.  Line
+  ranges are inclusive, so `1-3` is `1` up to and including `3`.  If a range
+  ends with a hyphen, like `11-`, then everything is included from the line
+  through the end of the file.
+
+  Cannot be combined with other `include` options that specify what is to
+  be included.
+
+* `include_regex`={regex} — Include the first segment of the file that matches
+  the provided regular expression.
+
+  Keep in mind that Pandoc's key-value attributes evaluate backslash escapes
+  in values whether or not the values are quoted with double quotation marks,
+  so two levels of backslash-escaping are always necessary (one for Pandoc's
+  strings, one for the regex itself; there are no raw strings).  Regular
+  expressions use *multiline mode*, so `^`/`$` match the start/end of a line,
+  and `\A`/`\Z` can be used to match the start/end of the file.  Regular
+  expressions use *dotall mode*, so `.` matches anything including the newline
+  `\n`; use `[^\n]` when this is not desired.
+
+  Cannot be combined with other `include` options that specify what is to
+  be included.
+
+* `include_start_string`={string} — Include everything from the first
+  occurrence of this string onward.
+
+  Can only be combined with other `include` options that specify the end of
+  what is to be included.
+
+* `include_start_regex`={regex} — Include everything from the first
+  match of this regex onward.
+
+  Can only be combined with other `include` options that specify the end of
+  what is to be included.  See `include_regex` for notes on regex usage.
+
+* `include_after_string`={string} — Include everything after the first
+  occurrence of this string onward.
+
+  Can only be combined with other `include` options that specify the end of
+  what is to be included.
+
+* `include_after_regex`={regex} — Include everything after the first
+  match of this regex onward.
+
+  Can only be combined with other `include` options that specify the end of
+  what is to be included.  See `include_regex` for notes on regex usage.
+
+* `include_before_string`={string} — Include everything before the first
+  occurrence of this string.
+
+  Can only be combined with other `include` options that specify the start of
+  what is to be included.  If the start is specified, then the first
+  occurrence after this point is used, rather than the first occurrence in the
+  overall file.
+
+* `include_before_regex`={regex} — Include everything before the first
+  match of this regex.
+
+  Can only be combined with other `include` options that specify the start of
+  what is to be included.  If the start is specified, then the first match
+  after this point is used, rather than the first match in the overall file.
+  See `include_regex` for notes on regex usage.
+
+* `include_end_string`={string} — Include everything through the first
+  occurrence of this string.
+
+  Can only be combined with other `include` options that specify the start of
+  what is to be included.  If the start is specified, then the first
+  occurrence after this point is used, rather than the first occurrence in the
+  overall file.
+
+* `include_end_regex`={regex} — Include everything through the first
+  match of this regex.
+
+  Can only be combined with other `include` options that specify the start of
+  what is to be included.  If the start is specified, then the first match
+  after this point is used, rather than the first match in the overall file.
+  See `include_regex` for notes on regex usage.

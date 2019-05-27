@@ -14,11 +14,197 @@ import io
 import json
 import os
 import pathlib
+import re
 import typing; from typing import List, Optional, Sequence, Union
 import zipfile
 from .. import codeprocessors
 from .. import err
 from .. import util
+
+
+
+
+class Include(dict):
+    def __init__(self, code_chunk, options):
+        # No need to check that options is dict; that's done before Include()
+        self.code_chunk = code_chunk
+        self.update(options)
+        self.source_errors = []
+
+        if not all(k in self.keywords for k in options):
+            unknown_keys = ', '.join("{0}".format(k) for k in options if k not in self.keywords)
+            self.source_errors.append('Unknown "include" keywords: {0}'.format(unknown_keys))
+        if not all(isinstance(v, str) and v for v in options.values()):
+            invalid_value_keys = ', '.join("{0}".format(k) for k, v in options.items() if not isinstance(v, str) or not v)
+            self.source_errors.append('Invalid values for "include" keywords: {0}'.format(invalid_value_keys))
+
+        start_keywords = tuple(k for k in options if k in self._start_keywords)
+        end_keywords = tuple(k for k in options if k in self._end_keywords)
+        range_keywords = tuple(k for k in options if k in self._range_keywords)
+        if ((range_keywords and (start_keywords or end_keywords)) or
+                len(range_keywords) > 1 or len(start_keywords) > 1 or len(end_keywords) > 1):
+            conflicting_keys = ', '.join("{0}".format(k) for k in options if k in self._selection_keywords)
+            self.source_errors.append('Too many keywords for selecting part of a file: {0}'.format(conflicting_keys))
+
+        file = options.get('file', None)
+        encoding = options.get('encoding', 'utf8')
+        if file is None:
+            self.source_errors.append('Missing "include" keyword "file"')
+            self.code_chunk.source_errors.extend(self.source_errors)
+            return
+        file_path = pathlib.Path(file).expanduser()
+        try:
+            text = file_path.read_text(encoding=encoding)
+        except FileNotFoundError:
+            self.source_errors.append('Cannot include nonexistent file "{0}"'.format(file))
+        except LookupError:
+            self.source_errors.append('Unknown encoding "{0}"'.format(encoding))
+        except PermissionError:
+            self.source_errors.append('Insufficient permissions to access file "{0}"'.format(file))
+        except UnicodeDecodeError:
+            self.source_errors.append('Cannot decode file "{0}" with encoding "{1}"'.format(file, encoding))
+        if self.source_errors:
+            self.code_chunk.source_errors.extend(self.source_errors)
+            return
+
+        selection_keywords = start_keywords + end_keywords + range_keywords
+        if selection_keywords:
+            for kw in selection_keywords:
+                text = getattr(self, '_option_{0}'.format(kw))(options[kw], text)
+                if self.source_errors:
+                    self.code_chunk.source_errors.extend(self.source_errors)
+                    return
+        code_lines = util.splitlines_lf(text)
+        code_chunk.code_lines = code_lines
+        code_chunk.code = '\n'.join(code_lines)
+
+
+    keywords = set(['file', 'encoding', 'lines', 'regex',
+                    'start_string', 'start_regex', 'after_string', 'after_regex',
+                    'before_string', 'before_regex', 'end_string', 'end_regex'])
+    _start_keywords = set(['start_string', 'start_regex', 'after_string', 'after_regex'])
+    _end_keywords = set(['before_string', 'before_regex', 'end_string', 'end_regex'])
+    _range_keywords = set(['lines', 'regex'])
+    _selection_keywords = _start_keywords | _end_keywords | _range_keywords
+
+
+    def _option_lines(self, value, text,
+                      pattern_re=re.compile(r'{n}(?:-(?:{n})?)?(?:,{n}(?:-(?:{n})?)?)*\Z'.format(n='[1-9][0-9]*'))):
+        value = value.replace(' ', '')
+        if not pattern_re.match(value):
+            self.source_errors.append('Invalid value for "include" option "lines"')
+            return
+        max_line_number = text.count('\n')
+        if text[-1:] != '\n':
+            max_line_number += 1
+        include_line_indices = set()
+        for line_range in value.split(','):
+            if '-' not in line_range:
+                include_line_indices.add(int(line_range)-1)
+            else:
+                start, end = line_range.split('-')
+                start = int(start) - 1
+                end = int(end) if end else max_line_number
+                include_line_indices.update(range(start, end))
+        text_lines = util.splitlines_lf(text)
+        return '\n'.join(text_lines[n] for n in sorted(include_line_indices))
+
+
+    def _option_regex(self, value, text):
+        try:
+            pattern_re = re.compile(value, re.MULTILINE | re.DOTALL)
+        except re.error:
+            self.source_errors.append('Invalid regex pattern for "include" option "regex"')
+            return
+        match = pattern_re.search(text)
+        if match is None:
+            self.source_errors.append('The pattern given by "include" option "regex" was not found')
+            return
+        return match.group()
+
+
+    def _option_start_string(self, value, text):
+        index = text.find(value)
+        if index < 0:
+            self.source_errors.append('The pattern given by "include" option "start_string" was not found')
+            return
+        return text[index:]
+
+
+    def _option_start_regex(self, value, text):
+        try:
+            pattern_re = re.compile(value, re.MULTILINE | re.DOTALL)
+        except re.error:
+            self.source_errors.append('Invalid regex pattern for "include" option "start_regex"')
+            return
+        match = pattern_re.search(text)
+        if match is None:
+            self.source_errors.append('The pattern given by "include" option "start_regex" was not found')
+            return
+        return text[match.start():]
+
+
+    def _option_after_string(self, value, text):
+        index = text.find(value)
+        if index < 0:
+            self.source_errors.append('The pattern given by "include" option "after_string" was not found')
+            return
+        return text[index+len(value):]
+
+
+    def _option_after_regex(self, value, text):
+        try:
+            pattern_re = re.compile(value, re.MULTILINE | re.DOTALL)
+        except re.error:
+            self.source_errors.append('Invalid regex pattern for "include" option "after_regex"')
+            return
+        match = pattern_re.search(text)
+        if match is None:
+            self.source_errors.append('The pattern given by "include" option "after_regex" was not found')
+            return
+        return text[match.end():]
+
+
+    def _option_before_string(self, value, text):
+        index = text.find(value)
+        if index < 0:
+            self.source_errors.append('The pattern given by "include" option "before_string" was not found')
+            return
+        return text[:index]
+
+
+    def _option_before_regex(self, value, text):
+        try:
+            pattern_re = re.compile(value, re.MULTILINE | re.DOTALL)
+        except re.error:
+            self.source_errors.append('Invalid regex pattern for "include" option "before_regex"')
+            return
+        match = pattern_re.search(text)
+        if match is None:
+            self.source_errors.append('The pattern given by "include" option "before_regex" was not found')
+            return
+        return text[:match.start()]
+
+
+    def _option_end_string(self, value, text):
+        index = text.find(value)
+        if index < 0:
+            self.source_errors.append('The pattern given by "include" option "end_string" was not found')
+            return
+        return text[:index+len(value)]
+
+
+    def _option_end_regex(self, value, text):
+        try:
+            pattern_re = re.compile(value, re.MULTILINE | re.DOTALL)
+        except re.error:
+            self.source_errors.append('Invalid regex pattern for "include" option "end_regex"')
+            return
+        match = pattern_re.search(text)
+        if match is None:
+            self.source_errors.append('The pattern given by "include" option "end_regex" was not found')
+            return
+        return text[:match.end()]
 
 
 
@@ -68,7 +254,7 @@ def _get_option_processors():
 
     def option_copy(code_chunk, options, key, value):
         if 'include' in options:
-            code_chunk.source_errors.append('Options "copy" and "include" in code chunk are mutually exclusive')
+            code_chunk.source_errors.append('Option "copy" is incompatible with "include" in code chunk')
         elif isinstance(value, str):
             # No need to check whether names are valid identifier-style strings,
             # since that's done when they are defined
@@ -111,9 +297,9 @@ def _get_option_processors():
 
     def option_include(code_chunk, options, key, value):
         if 'copy' in options:
-            code_chunk.source_errors.append('Options "copy" and "include" in code chunk are mutually exclusive')
-        elif isinstance(value, str):
-            options[key] = value
+            code_chunk.source_errors.append('Option "include" is incompatible "copy" in code chunk')
+        elif isinstance(value, dict):
+            options[key] = Include(code_chunk, value)
         else:
             # This is an error, because no functionality is possible
             code_chunk.source_errors.append('Invalid "{0}" value "{1}" in code chunk'.format(key, value))
@@ -188,13 +374,14 @@ def _get_option_processors():
     return collections.defaultdict(lambda: option_unknown,  # Unknown option -> error
                                    {'complete': option_bool_error,
                                     'copy': option_copy,
-                                    'hide': option_hide,
-                                    'hide_markup_keys': option_hide_markup_keys,
                                     'example': option_bool_warning,
                                     'first_number': option_first_number,
-                                    'name': option_name,
+                                    'hide': option_hide,
+                                    'hide_markup_keys': option_hide_markup_keys,
+                                    'include': option_include,
                                     'lang': option_str_error,
                                     'line_numbers': option_bool_warning,
+                                    'name': option_name,
                                     'outside_main': option_bool_error,
                                     'session': option_session,
                                     'show': option_show})
@@ -253,7 +440,7 @@ class CodeChunk(object):
             # There could be a check here for copying code from multiple code
             # chunks and then displaying it in an inline context.  However, it
             # is difficult to get that right, because whether the result is
-            # valied code is language-dependent.
+            # valid code is language-dependent.
             self.placeholder_code = code
             self.code = None
             self.code_lines = None
