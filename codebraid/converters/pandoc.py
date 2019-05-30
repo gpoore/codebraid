@@ -227,7 +227,7 @@ class PandocCodeChunk(CodeChunk):
             pandoc_classes.append(options['lang'])
         if line_anchors:
             pandoc_classes.append('lineAnchors')
-        if self.options.get('line_numbers', False):
+        if self.options.get('code_line_numbers', False):
             pandoc_classes.append('numberLines')
         # Can't handle `startFrom` yet here, because if it is `next`, then
         # the value depends on which other code chunks end up in the session.
@@ -268,10 +268,10 @@ class PandocCodeChunk(CodeChunk):
                 nodes.append({'t': 'CodeBlock', 'c': [['', ['sourceError'], []], '{0}\n{1}'.format(message, '\n'.join(self.source_errors))]})
             self._output_nodes = nodes
             return nodes
-        if not self.inline and self.options['line_numbers']:
+        if not self.inline and self.options['code_line_numbers']:
             # Line numbers can't be precalculated since they are determined by
             # how a session is assembled across potentially multiple sources
-            first_number = self.options['first_number']
+            first_number = self.options['code_first_number']
             if first_number == 'next':
                 first_number = str(self.code_start_line_number)
             else:
