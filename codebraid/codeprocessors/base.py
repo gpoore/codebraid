@@ -427,7 +427,8 @@ class CodeProcessor(object):
         # `_resolve_code_copying()`.  There can still be runtime source
         # errors, though, due to code that isn't properly divided into chunks.
         named_chunks = self.named_code_chunks
-        unresolved_chunks = [cc for cc in self.code_chunks if cc.command == 'paste' and not cc.source_errors]
+        unresolved_chunks = [cc for cc in self.code_chunks
+                             if cc.command == 'paste' and not cc.source_errors and not cc.has_output]
         still_unresolved_chunks = []
         while True:
             for cc in unresolved_chunks:
