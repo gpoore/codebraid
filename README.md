@@ -214,10 +214,19 @@ For example, `` `code`{.python}` `` becomes
 
 * `.cb.paste` — Insert code and/or output copied from one or more named code
   chunks.  The `copy` keyword is used to specify chunks to be copied.  This
-  does not execute any code.  If content is copied from multiple code chunks,
-  all code chunks must be in the same session and must be in sequential order.
-  Unless `show` is specified, display options are inherited from the first
-  copied code chunk.
+  does not execute any code.  Unless `show` is specified, display options are
+  inherited from the first copied code chunk.
+
+  If content is copied from multiple code chunks that are executed, all code
+  chunks must be in the same session and must be in sequential order without
+  any omitted chunks.  This ensures that what is displayed is always
+  consistent with what was executed.
+
+  If content is copied from another `cb.paste` code chunk, only a single code
+  chunk can be copied.  This reduces the indirection that is possible when
+  displaying the output of code that has been executed.  This restriction may
+  be removed in the future.
+
 
 * `.cb.run` — Run code and interpret any printed content (stdout) as Markdown.
   Also insert stderr verbatim if it exists.
@@ -355,7 +364,8 @@ Pandoc compatibility.
   is discarded.  As a result, this must be empty, or a space or underscore can
   be used as a placeholder.
 
-* `include_encoding`={encoding} — Encoding for included file.
+* `include_encoding`={encoding} — Encoding for included file.  The default
+  encoding is UTF-8.
 
 * `include_lines`={lines/line ranges} — Include the specified lines or line
   ranges.  For example, `1-3,5,7-9,11-`.  Line numbers are one-indexed.  Line
