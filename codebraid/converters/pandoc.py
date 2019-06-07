@@ -111,13 +111,24 @@ def _get_keyval_processors():
         else:
             options[key] = value == 'true'
 
+    def keyval_int(code_chunk, options, key, value):
+        if key in options:
+            code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
+        else:
+            try:
+                value = int(value)
+            except (ValueError, TypeError):
+                code_chunk.source_errors.append('Attribute "{0}" must be integer for code chunk'.format(key))
+            else:
+                options[key] = value
+
     def keyval_first_number(code_chunk, options, key, value):
         if 'first_number' in options:
             code_chunk.source_warnings.append('Duplicate first line number attribute for code chunk')
         else:
             try:
                 value = int(value)
-            except ValueError:
+            except (ValueError, TypeError):
                 pass
             options['first_number'] = value
 
@@ -152,21 +163,33 @@ def _get_keyval_processors():
         else:
             sub_options[sub_key] = value
 
+    expand_tabs = {k: keyval_bool for k in ['{0}_expand_tabs'.format(dsp) if dsp else 'expand_tabs'
+                                            for dsp in ('', 'markup', 'copied_markup', 'code', 'stdout', 'stderr')]}
     first_number = {k: keyval_first_number for k in ('first_number', 'startFrom', 'start-from', 'start_from')}
+    include = {'include_{0}'.format(k): keyval_namespace for k in Include.keywords}
     line_anchors = {k: keyval_line_anchors for k in ('lineAnchors', 'line-anchors', 'line_anchors')}
     line_numbers = {k: keyval_line_numbers for k in ('line_numbers', 'numberLines', 'number-lines', 'number_lines')}
-    include = {'include_{0}'.format(k): keyval_namespace for k in Include.keywords}
+    rewrap_lines = {k: keyval_bool for k in ['{0}_rewrap_lines'.format(dsp) if dsp else 'rewrap_lines'
+                                             for dsp in ('', 'markup', 'copied_markup', 'code', 'stdout', 'stderr')]}
+    rewrap_width = {k: keyval_int for k in ['{0}_rewrap_width'.format(dsp) if dsp else 'rewrap_width'
+                                            for dsp in ('', 'markup', 'copied_markup', 'code', 'stdout', 'stderr')]}
+    tab_size = {k: keyval_int for k in ['{0}_tab_size'.format(dsp) if dsp else 'tab_size'
+                                         for dsp in ('', 'markup', 'copied_markup', 'code', 'stdout', 'stderr')]}
     namespace_keywords.add('include')
     return collections.defaultdict(lambda: keyval_generic,
                                    {'complete': keyval_bool,
                                     'copy': keyval_generic,
                                     'example': keyval_bool,
+                                    **expand_tabs,
                                     **first_number,
                                     **include,
                                     **line_anchors,
                                     **line_numbers,
                                     'name': keyval_generic,
-                                    'outside_main': keyval_bool})
+                                    'outside_main': keyval_bool,
+                                    **rewrap_lines,
+                                    **rewrap_width,
+                                    **tab_size})
 
 
 
@@ -237,8 +260,8 @@ class PandocCodeChunk(CodeChunk):
         self.pandoc_classes = pandoc_classes
         self.pandoc_kvpairs = pandoc_kvpairs
         self._output_nodes = None
-        self._as_markdown = None
-        self._as_example_markdown = None
+        self._as_markup_lines = None
+        self._as_example_markup_lines = None
 
 
     _class_processors = _get_class_processors()
@@ -281,78 +304,20 @@ class PandocCodeChunk(CodeChunk):
         t_raw = 'RawInline' if self.inline else 'RawBlock'
         for output, format in self.options['show'].items():
             if output == 'markup':
-                nodes.append({'t': t_code, 'c': [['', ['markdown'], []], self.as_markdown]})
+                nodes.append({'t': t_code, 'c': [['', ['markdown'], []], self.layout_output(output, format)]})
             elif output == 'copied_markup':
-                if self.inline:
-                    nodes.append({'t': t_code, 'c': [['', ['markdown'], []], ' '.join(x.as_markdown for x in self.copy_chunks)]})
-                else:
-                    nodes.append({'t': t_code, 'c': [['', ['markdown'], []], '\n\n'.join(x.as_markdown for x in self.copy_chunks)]})
+                nodes.append({'t': t_code, 'c': [['', ['markdown'], []], self.layout_output(output, format)]})
             elif output == 'code':
-                nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.code]})
-            elif output == 'expr':
+                nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]})
+            elif output in ('expr', 'stdout', 'stderr'):
                 if format == 'verbatim':
-                    if self.expr_lines is not None:
-                        nodes.append({'t': t_code, 'c': [['', ['expr'], []], ' '.join(self.expr_lines)]})
+                    if getattr(self, output+'_lines') is not None:
+                        nodes.append({'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]})
                 elif format == 'verbatim_or_empty':
-                    if self.expr_lines is not None:
-                        nodes.append({'t': t_code, 'c': [['', ['expr'], []], ' '.join(self.expr_lines)]})
-                    else:
-                        nodes.append({'t': t_code, 'c': [['', ['expr'], []], '\xa0']})
+                    nodes.append({'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]})
                 elif format == 'raw':
-                    if self.expr_lines is not None:
-                        nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.expr_lines)]})
-                else:
-                    raise ValueError
-            elif output == 'stdout':
-                if format == 'verbatim':
-                    if self.stdout_lines is not None:
-                        if self.inline:
-                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], ' '.join(self.stdout_lines)]})
-                        else:
-                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], '\n'.join(self.stdout_lines)]})
-                elif format == 'verbatim_or_empty':
-                    if self.stderr_lines is not None:
-                        if self.inline:
-                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], ' '.join(self.stdout_lines)]})
-                        else:
-                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], '\n'.join(self.stdout_lines)]})
-                    else:
-                        if self.inline:
-                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], '\xa0']})
-                        else:
-                            nodes.append({'t': t_code, 'c': [['', ['stdout'], []], '\xa0\n']})
-                elif format == 'raw':
-                    if self.stdout_lines is not None:
-                        if self.inline:
-                            nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.stdout_lines)]})
-                        else:
-                            nodes.append({'t': t_raw, 'c': ['markdown', '\n'.join(self.stdout_lines)+'\n']})
-                else:
-                    raise ValueError
-            elif output == 'stderr':
-                if format == 'verbatim':
-                    if self.stderr_lines is not None:
-                        if self.inline:
-                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], ' '.join(self.stderr_lines)]})
-                        else:
-                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], '\n'.join(self.stderr_lines)]})
-                elif format == 'verbatim_or_empty':
-                    if self.stderr_lines is not None:
-                        if self.inline:
-                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], ' '.join(self.stderr_lines)]})
-                        else:
-                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], '\n'.join(self.stderr_lines)]})
-                    else:
-                        if self.inline:
-                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], '\xa0']})
-                        else:
-                            nodes.append({'t': t_code, 'c': [['', ['stderr'], []], '\xa0\n']})
-                elif format == 'raw':
-                    if self.stderr_lines is not None:
-                        if self.inline:
-                            nodes.append({'t': t_raw, 'c': ['markdown', ' '.join(self.stderr_lines)]})
-                        else:
-                            nodes.append({'t': t_raw, 'c': ['markdown', '\n'.join(self.stderr_lines)+'\n']})
+                    if getattr(self, output+'_lines') is not None:
+                        nodes.append({'t': t_raw, 'c': ['markdown', self.layout_output(output, format)]})
                 else:
                     raise ValueError
             else:
@@ -362,20 +327,20 @@ class PandocCodeChunk(CodeChunk):
 
 
     @property
-    def as_markdown(self):
-        if self._as_markdown is not None:
-            return self._as_markdown
-        self._as_markdown = self._generate_markdown()
-        return self._as_markdown
+    def as_markup_lines(self):
+        if self._as_markup_lines is not None:
+            return self._as_markup_lines
+        self._as_markup_lines = self._generate_markdown_lines()
+        return self._as_markup_lines
 
     @property
-    def as_example_markdown(self):
-        if self._as_example_markdown is not None:
-            return self._as_example_markdown
-        self._as_example_markdown = self._generate_markdown(example=True)
-        return self._as_example_markdown
+    def as_example_markup_lines(self):
+        if self._as_example_markup_lines is not None:
+            return self._as_example_markup_lines
+        self._as_example_markup_lines = self._generate_markdown_lines(example=True)
+        return self._as_example_markup_lines
 
-    def _generate_markdown(self, example=False):
+    def _generate_markdown_lines(self, example=False):
         '''
         Generate an approximation of the Markdown source that created the
         node.  This is used with `show=markup` and in creating examples that
@@ -395,9 +360,11 @@ class PandocCodeChunk(CodeChunk):
                 if not self._unquoted_kv_value_re.match(v):
                     v = '"{0}"'.format(v.replace('\\', '\\\\').replace('"', '\\"'))
                 attr_list.append('{0}={1}'.format(k, v))
-        if self.placeholder_code is not None:
-            code = self.placeholder_code
+        if self.placeholder_code_lines is not None:
+            code_lines = self.placeholder_code_lines
+            code = code_lines[0]
         else:
+            code_lines = self.code_lines
             code = self.code
         if self.inline:
             code_strip = code.strip(' ')
@@ -408,15 +375,15 @@ class PandocCodeChunk(CodeChunk):
             delim = '`'
             while delim in code:
                 delim += '`'
-            md = '{delim}{code}{delim}{{{attr}}}'.format(delim=delim, code=code, attr=' '.join(attr_list))
-        elif self.placeholder_code is None or self.placeholder_code:
+            md_lines = ['{delim}{code}{delim}{{{attr}}}'.format(delim=delim, code=code, attr=' '.join(attr_list))]
+        elif self.placeholder_code_lines is None or code:
             delim = '```'
             while delim in code:
                 delim += '```'
-            md = '{delim}{{{attr}}}\n{code}\n{delim}'.format(delim=delim, attr=' '.join(attr_list), code=code)
+            md_lines = ['{delim}{{{attr}}}'.format(delim=delim, attr=' '.join(attr_list)), *code_lines, delim]
         else:
-            md = '```{{{attr}}}\n```'.format(attr=' '.join(attr_list))
-        return md
+            md_lines = ['```{{{attr}}}'.format(attr=' '.join(attr_list)), '```']
+        return md_lines
 
 
     def update_parent_node(self):
@@ -427,7 +394,7 @@ class PandocCodeChunk(CodeChunk):
             index = self.parent_node_list_index
             self.parent_node_list[index:index+1] = self.output_nodes
             return
-        markup_node = {'t': 'CodeBlock', 'c': [['', [], []], self.as_example_markdown]}
+        markup_node = {'t': 'CodeBlock', 'c': [['', [], []], self.layout_output('example_markup', 'verbatim')]}
         example_div_contents = [{'t': 'Div', 'c': [['', ['exampleMarkup'], []], [markup_node]]}]
         output_nodes = self.output_nodes
         if output_nodes:

@@ -15,6 +15,7 @@ import json
 import os
 import pathlib
 import re
+import textwrap
 import typing; from typing import List, Optional, Sequence, Union
 import zipfile
 from .. import codeprocessors
@@ -33,7 +34,6 @@ class Include(dict):
     def __init__(self, code_chunk, include_options):
         # Start by creating fallback values for attributes
         self.code_lines = None
-        self.code = None
 
         self.code_chunk = code_chunk
         if not isinstance(include_options, dict):
@@ -85,7 +85,6 @@ class Include(dict):
                     return
         code_lines = util.splitlines_lf(text)
         self.code_lines = code_lines
-        self.code = '\n'.join(code_lines)
         self.update(include_options)
 
 
@@ -312,11 +311,11 @@ class Options(dict):
 
     _base_keywords = set(['complete', 'copy', 'example', 'hide', 'hide_markup_keys', 'include',
                           'lang', 'name', 'outside_main', 'session', 'source', 'show'])
-    _numbering_keywords = set(['{0}_{1}'.format(fmt, kw) if fmt else kw
-                              for fmt in ('', 'markup', 'copied_markup', 'code', 'stdout', 'stderr')
-                              for kw in ('first_number', 'line_numbers')])
+    _layout_keywords = set(['{0}_{1}'.format(dsp, kw) if dsp else kw
+                            for dsp in ('', 'markup', 'copied_markup', 'code', 'stdout', 'stderr')
+                            for kw in ('first_number', 'line_numbers', 'rewrap_lines', 'rewrap_width', 'expand_tabs', 'tab_size')])
 
-    keywords = _base_keywords | _numbering_keywords
+    keywords = _base_keywords | _layout_keywords
 
     _after_copy_keywords = set(['hide', 'show'])
 
@@ -375,6 +374,18 @@ class Options(dict):
         else:
             self[key] = value
 
+    def _option_positive_int_warning(self, key, value):
+        if not isinstance(value, int) or value <= 0:
+            self.code_chunk.source_warnings.append('Invalid "{0}" value "{1}"'.format(key, value))
+        else:
+            self[key] = value
+
+    def _option_positive_int_error(self, key, value):
+        if not isinstance(value, int) or value <= 0:
+            self.code_chunk.source_errors.append('Invalid "{0}" value "{1}"'.format(key, value))
+        else:
+            self[key] = value
+
     _option_example = _option_bool_warning
     _option_lang = _option_str_error
 
@@ -405,6 +416,18 @@ class Options(dict):
             self[key] = [x.strip() for x in value.split('+')]
 
 
+    def _option_expand_tabs(self, key, value):
+        if key == 'expand_tabs':
+            key = 'code_expand_tabs'
+        self._option_bool_warning(key, value)
+
+    _option_markup_expand_tabs = _option_expand_tabs
+    _option_copied_markup_expand_tabs = _option_expand_tabs
+    _option_code_expand_tabs = _option_expand_tabs
+    _option_stdout_expand_tabs = _option_expand_tabs
+    _option_stderr_expand_tabs = _option_expand_tabs
+
+
     def _option_first_number(self, key, value):
         if not ((isinstance(value, int) and value > 0) or (isinstance(value, str) and value == 'next')):
             self.code_chunk.source_warnings.append('Invalid "{0}" value "{1}"'.format(key, value))
@@ -418,6 +441,30 @@ class Options(dict):
     _option_code_first_number = _option_first_number
     _option_stdout_first_number = _option_first_number
     _option_stderr_first_number = _option_first_number
+
+
+    def _option_rewrap_lines(self, key, value):
+        if key == 'rewrap_lines':
+            key = 'code_rewrap_lines'
+        self._option_bool_warning(key, value)
+
+    _option_markup_rewrap_lines = _option_rewrap_lines
+    _option_copied_markup_rewrap_lines = _option_rewrap_lines
+    _option_code_rewrap_lines = _option_rewrap_lines
+    _option_stdout_rewrap_lines = _option_rewrap_lines
+    _option_stderr_rewrap_lines = _option_rewrap_lines
+
+
+    def _option_rewrap_width(self, key, value):
+        if key == 'rewrap_width':
+            key = 'code_rewrap_width'
+        self._option_positive_int_warning(key, value)
+
+    _option_markup_rewrap_width = _option_rewrap_width
+    _option_copied_markup_rewrap_width = _option_rewrap_width
+    _option_code_rewrap_width = _option_rewrap_width
+    _option_stdout_rewrap_width = _option_rewrap_width
+    _option_stderr_rewrap_width = _option_rewrap_width
 
 
     def _option_hide(self, key, value,
@@ -459,7 +506,7 @@ class Options(dict):
             self.code_chunk.source_errors.append('Option "include" is incompatible with "copy"')
         else:
             include = Include(self.code_chunk, value)
-            if include.code is not None:
+            if include.code_lines is not None:
                 self[key] = include
 
 
@@ -577,6 +624,18 @@ class Options(dict):
             self[key] = value_processed
 
 
+    def _option_tab_size(self, key, value):
+        if key == 'tab_size':
+            key = 'code_tab_size'
+        self._option_positive_int_warning(key, value)
+
+    _option_markup_tab_size = _option_tab_size
+    _option_copied_markup_tab_size = _option_tab_size
+    _option_code_tab_size = _option_tab_size
+    _option_stdout_tab_size = _option_tab_size
+    _option_stderr_tab_size = _option_tab_size
+
+
 
 
 class CodeChunk(object):
@@ -613,36 +672,28 @@ class CodeChunk(object):
         self.source_start_line_number = source_start_line_number
         self.inline = inline
 
+        # Check for len(code_lines) > 1 for inline later
+        self._code = None
         if isinstance(code, list):
             code_lines = code
-            if inline:
-                code = code_lines[0]  # Check for len(code_lines) > 1 later
-            else:
-                code = '\n'.join(code_lines)
         else:
             code_lines = util.splitlines_lf(code) or ['']
-            if inline:
-                code = code_lines[0]  # Check for len(code_lines) > 1 later
-            elif code[-1:] == '\n':
-                code = code[:-1]
         if 'copy' not in custom_options and 'include' not in custom_options:
             if inline and len(code_lines) > 1:
                 self.source_errors.append('Inline code cannot be longer that 1 line')
-            self.code = code
             self.code_lines = code_lines
-            self.placeholder_code = None
+            self.placeholder_code_lines = None
         else:
             if inline:
-                if code not in (' ', '_'):
+                if len(code_lines) > 1 or code_lines[0] not in (' ', '_'):
                     self.source_errors.append('Invalid placeholder code for copy or include (need space or underscore)')
-            elif code.rstrip(' ') not in ('', '_'):
+            elif len(code_lines) > 1 or code_lines[0].rstrip(' ') not in ('', '_'):
                 self.source_errors.append('Invalid placeholder code for copy or include (need empty, space, or underscore)')
             # Copying or including code could result in more than one line of
             # code in an inline context.  That is only an issue if the code is
             # actually displayed.  This is checked later when code is
             # included/copied.
-            self.placeholder_code = code
-            self.code = None
+            self.placeholder_code_lines = code_lines
             self.code_lines = None
 
         self.options = Options(self, custom_options)
@@ -654,7 +705,6 @@ class CodeChunk(object):
             if inline and 'code' in self.options['show'] and len(include.code_lines) > 1:
                 self.source_errors.append('Cannot include and then display multiple lines of code in an inline context')
             else:
-                self.code = include.code
                 self.code_lines = include.code_lines
 
         if command == 'paste':
@@ -701,6 +751,16 @@ class CodeChunk(object):
                                                {k: True for k in ('expr', 'nb', 'run')})
 
 
+    @property
+    def code(self):
+        code = self._code
+        if code is not None:
+            return code
+        code = '\n'.join(self.code_lines)
+        self._code = code
+        return code
+
+
     def copy_code(self):
         '''
         Copy code for 'copy' option.  Code is copied before execution, which
@@ -737,10 +797,8 @@ class CodeChunk(object):
             return
         if len(copy_chunks) == 1:
             self.code_lines = copy_chunks[0].code_lines
-            self.code = copy_chunks[0].code
         else:
             self.code_lines = [line for x in copy_chunks for line in x.code_lines]
-            self.code = '\n'.join(x.code for x in copy_chunks)
         if self.command == 'paste':
             if all(cc.command == 'code' for cc in copy_chunks):
                 # When possible, simplify the copying resolution process
@@ -785,7 +843,6 @@ class CodeChunk(object):
         if self.source_errors:
             # If errors, discard what has already been copied
             self.code_lines = None
-            self.code = None
             return
         if len(copy_chunks) == 1:
             self.stdout_lines = copy_chunks[0].stdout_lines
@@ -799,6 +856,57 @@ class CodeChunk(object):
         self.stdout_start_line_number = copy_chunks[0].stdout_start_line_number
         self.stderr_start_line_number = copy_chunks[0].stderr_start_line_number
         self.has_output = True
+
+
+    def layout_output(self, output_type, output_format):
+        if output_type == 'code':
+            lines = self.code_lines
+        elif output_type in ('expr', 'stdout', 'stderr'):
+            lines = getattr(self, output_type+'_lines')
+            if lines is None and output_format == 'verbatim_or_empty':
+                lines = ['\xa0']
+        elif output_type == 'markup':
+            lines = self.as_markup_lines
+        elif output_type == 'example_markup':
+            lines = self.as_example_markup_lines
+        elif output_type == 'copied_markup':
+            if len(self.copy_chunks) == 1:
+                lines = self.copy_chunks[0].as_markup_lines
+            elif self.inline:
+                lines = []
+                for cc in self.copy_chunks:
+                    lines.extend(cc.as_markup_lines)
+            else:
+                lines = []
+                last_cc = self.copy_chunks[-1]
+                for cc in self.copy_chunks:
+                    lines.extend(cc.as_markup_lines)
+                    if cc is not last_cc:
+                        lines.append('')
+        else:
+            raise ValueError
+
+        rewrap_lines = self.options.get(output_type+'_rewrap_lines', False)
+        rewrap_width = self.options.get(output_type+'_rewrap_width', 78)
+        expand_tabs = self.options.get(output_type+'_expand_tabs', False)
+        tab_size = self.options.get(output_type+'_tab_size', 8)
+        # This should be rewritten once rewrapping design is finalized, since
+        # textwrap doesn't necessarily do everything as might be desired, and
+        # the use of textwrap could be optimized if it continues to be used.
+        # Nothing is done yet with tabs.
+        if rewrap_lines:
+            new_lines = []
+            for line in lines:
+                if not line:
+                    new_lines.append(line)
+                    continue
+                line_stripped = line.lstrip(' \t')
+                indent = line[:len(line)-len(line_stripped)]
+                new_lines.extend(textwrap.wrap(line_stripped, width=rewrap_width-len(indent), initial_indent=indent, subsequent_indent=indent))
+            lines = new_lines
+        if self.inline:
+            return ' '.join(lines)
+        return '\n'.join(lines)
 
 
 

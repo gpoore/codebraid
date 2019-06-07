@@ -397,7 +397,7 @@ class CodeProcessor(object):
                     error_names = ', '.join('"{0}"'.format(name) for name, x in zip(cc.options['copy'], cc.copy_chunks) if x.source_errors)
                     message = 'Cannot copy code chunks with source errors: {0}'.format(error_names)
                     cc.source_errors.append(message)
-                elif any(x.code is None for x in cc.copy_chunks):
+                elif any(x.code_lines is None for x in cc.copy_chunks):
                     still_unresolved_chunks.append(cc)
                 else:
                     cc.copy_code()
@@ -405,7 +405,7 @@ class CodeProcessor(object):
                 break
             if len(still_unresolved_chunks) == len(unresolved_chunks):
                 for cc in still_unresolved_chunks:
-                    unresolved_names = ', '.join('"{0}"'.format(name) for name, x in zip(cc.options['copy'], cc.copy_chunks) if x.code is None)
+                    unresolved_names = ', '.join('"{0}"'.format(name) for name, x in zip(cc.options['copy'], cc.copy_chunks) if x.code_lines is None)
                     if cc.options['name'] in cc.options['copy']:
                         message = 'Code chunk cannot copy itself: {0}'.format(unresolved_names)
                     else:
