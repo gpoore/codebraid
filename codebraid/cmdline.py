@@ -51,6 +51,9 @@ def main():
         elif narg == 1:
             parser_pandoc.add_argument(opt, dest=opt, metavar='PANDOC',
                                        help='Pandoc option; see Pandoc documentation')
+        elif narg == '?':
+            parser_pandoc.add_argument(opt, nargs='?', const=True, default=None, dest=opt, metavar='PANDOC',
+                                       help='Pandoc option; see Pandoc documentation')
         else:
             raise ValueError
 
@@ -141,9 +144,9 @@ PANDOC_OPTIONS  = {
     '--natbib': 0,
     '--biblatex': 0,
     '--mathml': 0,
-    '--webtex': 1,
-    '--mathjax': 1,
-    '--katex': 1,
+    '--webtex': '?',
+    '--mathjax': '?',
+    '--katex': '?',
     '--gladtex': 0,
     '--abbreviations': 1,
     '--trace': 0,
