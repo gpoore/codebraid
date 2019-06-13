@@ -7,8 +7,10 @@ simple as adding a class to your code blocks' attributes, and then running
 another format.  `codebraid` supports almost all of `pandoc`'s options and
 passes them to `pandoc` internally.
 
-Codebraid currently can run **Python 3.5+**, **Julia**, **Rust**, **R**,
-**Bash**, and **JavaScript** code.  Support for additional languages is coming soon.
+Codebraid provides two options for executing code.  It includes a built-in
+code execution system that currently supports **Python 3.5+**, **Julia**,
+**Rust**, **R**, **Bash**, and **JavaScript**.  Code can also be executed
+using **Jupyter kernels**, with support for rich output like plots.
 
 **Development:**  https://github.com/gpoore/codebraid
 
@@ -18,6 +20,9 @@ and Rust examples demonstrate more advanced features at the end):
   * [Python example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/python.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/python.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/python.html)]
+  * [Jupyter example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/jupyter.html)
+    [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/jupyter.cbmd)]
+    [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/jupyter.html)]
   * [Rust example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/rust.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/rust.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/rust.html)]
@@ -74,21 +79,23 @@ by default so that code is only re-executed when modified.
 
 |                                                | Codebraid | Jupyter Notebook |  knitr   | Pweave   |
 |------------------------------------------------|-----------|------------------|----------|----------|
-| multiple programming languages per document    | &check;   | &check;&ast;     | &check;† |          |
+| multiple programming languages per document    | &check;   | &check;&ast;     | &check;† | &check;&ast; |
 | multiple independent sessions per language     | &check;   |                  |          |          |
 | inline code execution within paragraphs        | &check;   |                  | &check;  | &check;  |
 | no out-of-order code execution                 | &check;   |                  | &check;‡ | &check;  |
 | no markdown preprocessor or custom syntax      | &check;   | &check;          |          |          |
 | minimal diffs for easy version control         | &check;   |                  | &check;  | &check;  |
-| hide or display code in final document         | &check;   |                  | &check;  | &check;  |
-| insert code output anywhere in a document      | &check;   |                  |          |          |
+| insert code output anywhere in a document      | &check;   |                  | &check;  |          |
 | can divide code into incomplete snippets       | &check;   |                  | &check;  | &check;  |
 | support for literate programming               | &check;   |                  | &check;  |          |
 | compatible with any text editor                | &check;   |                  | &check;  | &check;  |
 
-&ast; One primary language per notebook, plus additional languages via
-%%script magic.  There is no continuity between %%script cells, because
-each cell is executed in a separate process.
+&ast; One primary language from the Jupyter kernel.  The IPython kernel
+supports additional languages via `%%script` magics.  There is no continuity
+between `%%script` cells, because each cell is executed in a separate process.
+Some magics, such as those provided by
+[PyJulia](https://pyjulia.readthedocs.io) and
+[rpy2](https://rpy2.readthedocs.io), provide more advanced capabilities.
 <br>
 † knitr only provides continuity between code chunks for R, and more recently
 Python and Julia.  Code chunks in other languages are executed individually
@@ -99,8 +106,8 @@ in separate processes.
 <hr>
 
 The table above summarizes Codebraid features in comparison with Jupyter
-notebooks, knitr (R Markdown), and Pweave, emphasizing Codebraid's unique
-features.  Here are some additional points to consider:
+notebooks (without extensions), knitr (R Markdown), and Pweave, emphasizing
+Codebraid's unique features.  Here are some additional points to consider:
 
 *Jupyter notebooks* — Notebooks have a dedicated, browser-based graphical user
 interface.  Jupyter kernels typically allow the code in a cell to be executed
@@ -120,18 +127,13 @@ output.
 ### More about key features
 
 *Easy debugging* — By default, stderr is shown automatically in the document
-whenever there is an error, right next to the code that caused it.  Even
-though user code is typically inserted into a template for execution, line
-numbers in error messages will correctly correspond with line numbers in code
-blocks, because Codebraid tracks the origin of each line of code and
-synchronizes error messages.
+whenever there is an error, right next to the code that caused it.
 
-*Simple language support* — Adding support for a new language can take only
-a few minutes.  Codebraid's default system for executing code is based on
-writing delimiters to stdout and stderr that allow it to associate code output
-with individual code chunks.  Adding a language is as simple as creating a
-config file that tells Codebraid which program to run, which file extension to
-use, and how to write to stdout and stderr.  See
+*Simple language support* — Codebraid supports Jupyter kernels.  It also has a
+built-in system for executing code.  Adding support for a new language with
+this system can take only a few minutes.  Just create a config file that tells
+Codebraid which program to run, which file extension to use, and how to write
+to stdout and stderr.  See
 [`languages/`](https://github.com/gpoore/codebraid/tree/master/codebraid/languages)
 for examples.
 
@@ -161,10 +163,6 @@ Manual installation:  `python3 setup.py install` or `python setup.py install`
   * Python 3.5+ with `setuptools`, and [`bespon`](https://bespon.org) 0.3
     (`bespon` installation is typically managed by `pip`/`setup.py`)
 
-By default, the `python3` executable will be used to execute code.  If it does
-not exist, `python` will be tried to account for Windows and Arch Linux.
-Future releases will allow specifying the executable on systems with multiple
-Python 3 installations.
 
 
 ## Converting a document
@@ -183,12 +181,13 @@ By default, code output is cached, and code is only re-executed when it is
 modified.  The default cache location is a `_codebraid` directory in the
 directory with your markdown document.  This can be modified using
 `--cache-dir`.  Sharing a single cache location between multiple documents is
-not yet supported.
+not currently supported.
 
 If you are working with external data that changes, you should run `codebraid`
 with `--no-cache` to prevent the cache from becoming out of sync with your
 data.  Future releases will allow external dependencies to be specified so
-that caching will work correctly in these situations.
+that caching will work correctly in these situations.  Note that `--no-cache`
+currently prevents Jupyter kernels from displaying rich output like plots.
 
 
 ## Code options
@@ -205,12 +204,15 @@ For example, `` `code`{.python}` `` becomes
   chunks.
 
 * `.cb.expr` — Evaluate an expression and interpret the result as Markdown.
-  Only works with inline code.
+  Only works with inline code.  This is not currently compatible with Jupyter
+  kernels.
 
 * `.cb.nb` — Execute code in notebook mode.  For inline code, this is
-  equivalent to `.cb.expr`.  For code blocks, this inserts the code verbatim,
+  equivalent to `.cb.expr` unless a Jupyter kernel is used, in which case rich
+  output will be displayed.  For code blocks, this inserts the code verbatim,
   followed by any printed output (stdout) verbatim.  If stderr exists, it is
-  also inserted verbatim.
+  also inserted verbatim.  When a Jupyter kernel is used, rich output is also
+  displayed.
 
 * `.cb.paste` — Insert code and/or output copied from one or more named code
   chunks.  The `copy` keyword is used to specify chunks to be copied.  This
@@ -227,9 +229,9 @@ For example, `` `code`{.python}` `` becomes
   displaying the output of code that has been executed.  This restriction may
   be removed in the future.
 
-
 * `.cb.run` — Run code and interpret any printed content (stdout) as Markdown.
-  Also insert stderr verbatim if it exists.
+  Also insert stderr verbatim if it exists.  When a Jupyter kernel is used,
+  rich output is also displayed.
 
 ### Keyword arguments
 
@@ -243,6 +245,23 @@ quotation marks `"value"` are required.  For example,
 Codebraid adds support for additional keyword arguments.  In some cases,
 multiple keywords can be used for the same option.  This is primarily for
 Pandoc compatibility.
+
+#### First chunk settings
+
+These are only permitted for the first code chunk in a session (or the first
+chunk for a language, if a session is not specified and thus the default
+session is in use).
+
+* `executable`={string} — Executable to use for running or compiling code,
+  instead of the default.  This only applies to Codebraid's built-in code
+  execution system.
+
+* `jupyter_kernel`={string} — Jupyter kernel to use for executing code instead
+  of Codebraid's built-in code execution system.  Multiple Jupyter kernels can
+  be used within a single document, and multiple sessions are possible per
+  kernel.  Except when otherwise specified, Jupyter kernels should be usable
+  just like the built-in code execution system.
+
 
 #### Execution
 
@@ -258,9 +277,10 @@ Pandoc compatibility.
   automatically.
 
 * `outside_main`={`true`, `false`} — This allows code chunks to overwrite the
-  Codebraid template code.  It is primarily useful for languages like Rust, in
-  which code is inserted by default into a `main()` template.  In that case,
-  if a session *starts* with one or more code chunks with `outside_main=true`,
+  Codebraid template code when code is executed with Codebraid's built-in code
+  execution system.  It is primarily useful for languages like Rust, in which
+  code is inserted by default into a `main()` template.  In that case, if a
+  session *starts* with one or more code chunks with `outside_main=true`,
   these are used instead of the beginning of the `main()` template.
   Similarly, if a session *ends* with one or more code chunks with
   `outside_main=true`, these are used instead of the end of the `main()`
@@ -286,10 +306,12 @@ Pandoc compatibility.
   `next` means continue from the last code in the current session.
 
 * `hide`={`markup`, `copied_markup`, `code`, `stdout`, `stderr`, `expr`,
-  `all`} — Hide some or all of the elements that are displayed by default.
-  Elements can be combined.  For example, `hide=stdout+stderr`.  Note that
-  `expr` only applies to `.cb.expr` or `.cb.nb` with inline code, since only
-  these evaluate an expression.
+  `rich_output`, `all`} — Hide some or all of the elements that are displayed
+  by default.  Elements can be combined.  For example, `hide=stdout+stderr`.
+  Note that `expr` only applies to `.cb.expr` or `.cb.nb` with inline code
+  using Codebraid's built-in code execution system, since only these evaluate
+  an expression.  `rich_output` is currently only relevant for Jupyter
+  kernels.
 
 * `hide_markup_keys`={key(s)} — Hide the specified code chunk attribute key(s)
   in the Markdown source displayed via `markup` or `copied_markup`.  Multiple
@@ -303,11 +325,13 @@ Pandoc compatibility.
   — Number code lines in code blocks.
 
 * `show`={`markup`, `copied_markup`, `code`, `stdout`, `stderr`, `expr`,
-  `none`} — Override the elements that are displayed by default.  `expr` only
-  applies to `.cb.expr` and to `.cb.nb` with inline code, since only these
-  evaluate an expression.  Elements can be combined.  For example,
-  `show=code+stdout`.  Each element displayed can optionally specify a format
-  from `raw`, `verbatim`, or `verbatim_or_empty`.  For example,
+  `rich_output`, `none`} — Override the elements that are displayed by
+  default.  `expr` only applies to `.cb.expr` and to `.cb.nb` with inline code
+  using Codebraid's built-in code execution system, since only these evaluate
+  an expression.  Elements can be combined.  For example, `show=code+stdout`.
+
+  Each element except `rich_output` can optionally specify a format from
+  `raw`, `verbatim`, or `verbatim_or_empty`.  For example,
   `show=code:verbatim+stdout:raw`.
 
     - `raw` means interpreted as Markdown.
@@ -319,6 +343,22 @@ Pandoc compatibility.
       event that there is no content.  It is useful when a placeholder is
       desired, or a visual confirmation that there is indeed no output.
 
+  For `rich_output`, the format is specified as one or more abbreviations for
+  the mime types of the output to be displayed.  For example,
+  `rich_output:plain` will display `text/plain` output if it exists, and
+  otherwise nothing.  `rich_output:png|plain` will display a PNG image if it
+  exists, or otherwise will fall back to plain text if available.  The
+  following formats are currently supported:
+
+    - `latex` (corresponds to `text/latex`)
+    - `html` (`text/html`)
+    - `markdown` (`text/markdown`)
+    - `plain` (`text/plain`)
+    - `png` (`image/png`)
+    - `jpg` and `jpeg` (`image/jpeg`)
+    - `svg` (`image/svg+xml`)
+    - `pdf` (`application/pdf`)
+
   `markup` displays the Markdown source for the inline code or code block.
   Because the Markdown source is not available in the Pandoc AST but rather
   must be recreated from it, the Markdown source displayed with `markup` may
@@ -329,8 +369,9 @@ Pandoc compatibility.
   `copied_markup` displays the Markdown source for code chunks copied via
   `copy`.
 
-  `expr` defaults to `raw` if a format is not specified.  All others default
-  to `verbatim`.
+  `expr` defaults to `raw` if a format is not specified.  `rich_output`
+  defaults to `latex|markdown|png|jpg|plain`.  All others default to
+  `verbatim`.
 
 #### Copying
 
