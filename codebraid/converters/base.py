@@ -335,6 +335,7 @@ class Options(dict):
                                    'code_line_numbers': True})
 
     # The defaultdict handles unknown commands that are represented as None
+    _default_rich_output = 'latex|markdown|png|jpg|plain'.split('|')
     _default_inline_show = collections.defaultdict(lambda: ODict(),  # Unknown -> show nothing
                                                    {'code':  ODict([('code', 'verbatim')]),
                                                     'expr':  ODict([('expr', 'raw'),
@@ -345,21 +346,22 @@ class Options(dict):
                                                     # rich_output capabilities or there are other related changes,
                                                     # this may need refactoring.
                                                     'nb':    ODict([('expr', 'raw'),
-                                                                    ('rich_output', 'latex|markdown|png|jpg|plain'.split('|')),
+                                                                    ('rich_output', _default_rich_output),
                                                                     ('stderr', 'verbatim')]),
                                                     'paste': ODict(),
                                                     'run':   ODict([('stdout', 'raw'),
-                                                                    ('stderr', 'verbatim')])})
+                                                                    ('stderr', 'verbatim'),
+                                                                    ('rich_output', _default_rich_output)])})
     _default_block_show = collections.defaultdict(lambda: ODict(),  # Unknown -> show nothing
                                                   {'code': ODict([('code', 'verbatim')]),
                                                    'nb':   ODict([('code', 'verbatim'),
                                                                   ('stdout', 'verbatim'),
                                                                   ('stderr', 'verbatim'),
-                                                                  ('rich_output', 'latex|markdown|png|jpg|plain'.split('|'))]),
+                                                                  ('rich_output', _default_rich_output)]),
                                                    'paste': ODict(),
                                                    'run':  ODict([('stdout', 'raw'),
                                                                   ('stderr', 'verbatim'),
-                                                                  ('rich_output', 'latex|markdown|png|jpg|plain'.split('|'))])})
+                                                                  ('rich_output', _default_rich_output)])})
 
 
     def _option_bool_warning(self, key, value):
@@ -664,7 +666,7 @@ class Options(dict):
                         continue
                 elif output == 'rich_output':
                     if format is None:
-                        format = 'latex|markdown|png|jpg|plain'.split('|')
+                        format = self._default_rich_output
                     else:
                         format = format.split('|')
                         if not all(fmt in self.mime_map for fmt in format):
