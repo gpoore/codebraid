@@ -320,6 +320,54 @@ class PandocCodeChunk(CodeChunk):
                         nodes.append({'t': t_raw, 'c': ['markdown', self.layout_output(output, format)]})
                 else:
                     raise ValueError
+            elif output == 'rich_output':
+                if self.rich_output is None:
+                    continue
+                rich_output_nodes = []
+                for ro in self.rich_output:
+                    ro_data = ro['data']
+                    ro_files = ro['files']
+                    for fmt in format:
+                        fmt_mime_type = self.options.mime_map[fmt]
+                        if fmt_mime_type not in ro_data:
+                            continue
+                        if fmt_mime_type in ro_files:
+                            image_node = {'t': 'Image', 'c': [['', [], []], [], [ro_files[fmt_mime_type], '']]}
+                            if self.inline:
+                                rich_output_nodes.append(image_node)
+                            else:
+                                para_node = {'t': 'Para', 'c': [image_node]}
+                                rich_output_nodes.append(para_node)
+                            break
+                        data = ro_data[fmt_mime_type]
+                        if fmt == 'latex':
+                            raw_node = {'t': 'RawInline', 'c': ['tex', data]}
+                            if self.inline:
+                                rich_output_nodes.append(raw_node)
+                            else:
+                                para_node = {'t': 'Para', 'c': [raw_node]}
+                                rich_output_nodes.append(para_node)
+                            break
+                        if fmt in ('html', 'markdown'):
+                            raw_node = {'t': t_raw, 'c': [fmt, data]}
+                            rich_output_nodes.append(raw_node)
+                            break
+                        if fmt == 'plain':
+                            lines = util.splitlines_lf(data) or None
+                            if lines is not None:
+                                code_node = {'t': t_code, 'c': [['', [], []], self.layout_output(output, 'verbatim', lines)]}
+                                rich_output_nodes.append(code_node)
+                            break
+                if rich_output_nodes:
+                    nodes.extend(rich_output_nodes)
+                    # At some point, it may be useful to enable wrapping all
+                    # rich output in some sort of container
+                    # if self.inline:
+                    #     span_node = {'t': 'Span', 'c': [ ['', ['richOutput'], []], rich_output_nodes]}
+                    #     nodes.append(span_node)
+                    # else:
+                    #     div_node = {'t': 'Div', 'c': [ ['', ['richOutput'], []], rich_output_nodes]}
+                    #     nodes.append(div_node)
             else:
                 raise ValueError
         self._output_nodes = nodes
@@ -613,7 +661,6 @@ class PandocConverter(Converter):
             to_format_pandoc_extensions = ''
         if input and input_paths:
             raise TypeError
-
         cmd_list = [str(self.pandoc_path),
                     '--from', from_format + from_format_pandoc_extensions]
         if newline_lf:

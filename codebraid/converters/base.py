@@ -255,6 +255,7 @@ class Options(dict):
             self['session'] = None
         else:
             self['source'] = None
+        self['first_chunk_options'] = {}
         if any(k not in self.keywords for k in custom_options):
             unknown_keys = ', '.join('"{0}"'.format(k) for k in custom_options if k not in self.keywords)
             # Raise an error for unknown options.  There is no way to tell
@@ -314,8 +315,11 @@ class Options(dict):
     _layout_keywords = set(['{0}_{1}'.format(dsp, kw) if dsp else kw
                             for dsp in ('', 'markup', 'copied_markup', 'code', 'stdout', 'stderr')
                             for kw in ('first_number', 'line_numbers', 'rewrap_lines', 'rewrap_width', 'expand_tabs', 'tab_size')])
+    _first_chunk_execute_keywords = set(['executable', 'jupyter_kernel'])
+    _first_chunk_save_keywords = set(['save', 'save_as'])
+    _first_chunk_keywords = _first_chunk_execute_keywords | _first_chunk_save_keywords
 
-    keywords = _base_keywords | _layout_keywords
+    keywords = _base_keywords | _layout_keywords | _first_chunk_keywords
 
     _after_copy_keywords = set(['hide', 'show'])
 
@@ -335,7 +339,13 @@ class Options(dict):
                                                    {'code':  ODict([('code', 'verbatim')]),
                                                     'expr':  ODict([('expr', 'raw'),
                                                                     ('stderr', 'verbatim')]),
+                                                    # expr and rich_output don't clash, because expr is only present
+                                                    # with the built-in code execution system, while rich_output
+                                                    # requires a Jupyter kernel.  If the built-in system gains
+                                                    # rich_output capabilities or there are other related changes,
+                                                    # this may need refactoring.
                                                     'nb':    ODict([('expr', 'raw'),
+                                                                    ('rich_output', 'latex|markdown|png|jpg|plain'.split('|')),
                                                                     ('stderr', 'verbatim')]),
                                                     'paste': ODict(),
                                                     'run':   ODict([('stdout', 'raw'),
@@ -344,10 +354,12 @@ class Options(dict):
                                                   {'code': ODict([('code', 'verbatim')]),
                                                    'nb':   ODict([('code', 'verbatim'),
                                                                   ('stdout', 'verbatim'),
-                                                                  ('stderr', 'verbatim')]),
+                                                                  ('stderr', 'verbatim'),
+                                                                  ('rich_output', 'latex|markdown|png|jpg|plain'.split('|'))]),
                                                    'paste': ODict(),
                                                    'run':  ODict([('stdout', 'raw'),
-                                                                  ('stderr', 'verbatim')])})
+                                                                  ('stderr', 'verbatim'),
+                                                                  ('rich_output', 'latex|markdown|png|jpg|plain'.split('|'))])})
 
 
     def _option_bool_warning(self, key, value):
@@ -385,6 +397,29 @@ class Options(dict):
             self.code_chunk.source_errors.append('Invalid "{0}" value "{1}"'.format(key, value))
         else:
             self[key] = value
+
+    def _option_first_chunk_bool_error(self, key, value):
+        if not isinstance(value, bool):
+            self.code_chunk.source_errors.append('Invalid "{0}" value "{1}"'.format(key, value))
+        else:
+            self['first_chunk_options'][key] = value
+
+    def _option_first_chunk_string_error(self, key, value):
+        if not isinstance(value, str):
+            self.code_chunk.source_errors.append('Invalid "{0}" value "{1}"'.format(key, value))
+        else:
+            first_chunk_options = self['first_chunk_options']
+            if (key in self._first_chunk_execute_keywords and
+                    any(k in first_chunk_options for k in self._first_chunk_execute_keywords)):
+                conflicting_options = ', '.join('"{0}"'.format(k) for k in self._first_chunk_execute_keywords if k in first_chunk_options)
+                self.code_chunk.source_errors.append('Conflicting options: {0}'.format(conflicting_options))
+            else:
+                first_chunk_options[key] = value
+
+    _option_executable = _option_first_chunk_string_error
+    _option_jupyter_kernel = _option_first_chunk_string_error
+    _option_save = _option_first_chunk_bool_error
+    _option_save_as = _option_first_chunk_string_error
 
     _option_example = _option_bool_warning
     _option_lang = _option_str_error
@@ -468,7 +503,7 @@ class Options(dict):
 
 
     def _option_hide(self, key, value,
-                     display_values=set(['markup', 'copied_markup', 'code', 'stdout', 'stderr', 'expr'])):
+                     display_values=set(['markup', 'copied_markup', 'code', 'stdout', 'stderr', 'expr', 'rich_output'])):
         # 'hide' may be processed during `finalize_after_copy()` to allow for
         # 'show' and `.is_expr` inheritance.
         if not isinstance(value, str):
@@ -574,6 +609,16 @@ class Options(dict):
             self[key] = value
 
 
+    mime_map = {'latex': 'text/latex',
+                'html': 'text/html',
+                'markdown': 'text/markdown',
+                'plain': 'text/plain',
+                'png': 'image/png',
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'svg': 'image/svg+xml',
+                'pdf': 'application/pdf'}
+
     def _option_show(self, key, value):
         # 'show' may be processed during `finalize_after_copy()` to allow for
         # 'show' and `.is_expr` inheritance.  'hide' checks for 'show'
@@ -617,6 +662,14 @@ class Options(dict):
                     elif format not in ('verbatim', 'verbatim_or_empty', 'raw'):
                         self.code_chunk.source_warnings.append('Invalid "{0}" sub-value "{1}"'.format(key, output_and_format))
                         continue
+                elif output == 'rich_output':
+                    if format is None:
+                        format = 'latex|markdown|png|jpg|plain'.split('|')
+                    else:
+                        format = format.split('|')
+                        if not all(fmt in self.mime_map for fmt in format):
+                            self.code_chunk.source_warnings.append('Invalid "{0}" sub-value "{1}"'.format(key, output_and_format))
+                            continue
                 else:
                     self.code_chunk.source_warnings.append('Invalid "{0}" sub-value "{1}"'.format(key, output_and_format))
                     continue
@@ -685,7 +738,7 @@ class CodeChunk(object):
             self.placeholder_code_lines = None
         else:
             if inline:
-                if len(code_lines) > 1 or code_lines[0] not in (' ', '_'):
+                if len(code_lines) > 1 or code_lines[0] not in ('', ' ', '_'):
                     self.source_errors.append('Invalid placeholder code for copy or include (need space or underscore)')
             elif len(code_lines) > 1 or code_lines[0].rstrip(' ') not in ('', '_'):
                 self.source_errors.append('Invalid placeholder code for copy or include (need empty, space, or underscore)')
@@ -725,6 +778,7 @@ class CodeChunk(object):
             self.source_index = None
         self.stdout_lines = None
         self.stderr_lines = None
+        self.rich_output = None
         if self.is_expr:
             self.expr_lines = None
         self.markup_start_line_number = None
@@ -847,9 +901,11 @@ class CodeChunk(object):
         if len(copy_chunks) == 1:
             self.stdout_lines = copy_chunks[0].stdout_lines
             self.stderr_lines = copy_chunks[0].stderr_lines
+            self.rich_output = copy_chunks[0].rich_output
         else:
             self.stdout_lines = [line for x in copy_chunks if x.stdout_lines is not None for line in x.stdout_lines] or None
             self.stderr_lines = [line for x in copy_chunks if x.stderr_lines is not None for line in x.stderr_lines] or None
+            self.rich_output = [ro for x in copy_chunks if x.rich_output is not None for ro in x.rich_output] or None
         if self.is_expr:
             # expr compatibilty has already been checked in `copy_code()`
             self.expr_lines = copy_chunks[0].expr_lines
@@ -858,8 +914,16 @@ class CodeChunk(object):
         self.has_output = True
 
 
-    def layout_output(self, output_type, output_format):
-        if output_type == 'code':
+    def layout_output(self, output_type, output_format, lines=None):
+        '''
+        Layout all forms of output, except for rich output that is not
+        text/plain, by performing operations such as line rewrapping and tab
+        expansion.  If `lines` is supplied, it is used.  Otherwise, the
+        default lines (if any) are accessed for the specified output type.
+        '''
+        if lines is not None:
+            pass
+        elif output_type == 'code':
             lines = self.code_lines
         elif output_type in ('expr', 'stdout', 'stderr'):
             lines = getattr(self, output_type+'_lines')

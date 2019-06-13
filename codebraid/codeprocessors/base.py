@@ -127,12 +127,14 @@ class Session(object):
         if self.name is None:
             self._name_escaped = 'none'
         else:
-            self._name_escaped = '"{0}"'.format(self.name.replace('\\', '\\\\').replace('"', '\\"'))
+            self._name_escaped = '"{0}"'.format(self.name)
         if len(session_key) == 3:
             self.source_name = None
         else:
             self.source_name = session_key[3]
-        self.lang_def = self.code_processor.language_definitions[self.lang]
+        self.lang_def = None
+        self.executable = None
+        self.jupyter_kernel = None
         self._hash_function = self.code_processor.cache_config.get('hash_function', None)
 
         self.code_options = None
@@ -163,6 +165,18 @@ class Session(object):
         '''
         code_chunk.session_obj = self
         code_chunk.session_index = len(self.code_chunks)
+        if code_chunk.session_index == 0:
+            jupyter_kernel = code_chunk.options['first_chunk_options'].get('jupyter_kernel')
+            if jupyter_kernel is not None:
+                self.jupyter_kernel = jupyter_kernel
+            else:
+                self.lang_def = self.code_processor.language_definitions[self.lang]
+                self.executable = code_chunk.options['first_chunk_options'].get('executable')
+        elif code_chunk.options['first_chunk_options']:
+            invalid_options = ', '.join('"{0}"'.format(k) for k in code_chunk.options['first_chunk_options'])
+            del code_chunk.options['first_chunk_options']
+            code_chunk.source_errors.append('Some options are only valid for the first code chunk in a session: {0}'.format(invalid_options))
+
         self.code_chunks.append(code_chunk)
 
 
@@ -179,7 +193,7 @@ class Session(object):
         incomplete_ccs = []
         last_cc = None
         for cc in self.code_chunks:
-            if cc.is_expr and self.lang_def.inline_expression_formatter is None:
+            if cc.is_expr and self.lang_def is not None and self.lang_def.inline_expression_formatter is None:
                 cc.source_errors.append('Inline expressions are not supported for {0}'.format(self.lang_def.name))
             if last_cc is not None and last_cc.options['outside_main'] != cc.options['outside_main']:
                 if last_cc.options['outside_main']:
@@ -235,7 +249,8 @@ class Session(object):
             raise ValueError
         code_len = 0
         # Hash needs to depend on the language definition
-        hasher.update(self.lang_def.definition_bytes)
+        if self.lang_def is not None:
+            hasher.update(self.lang_def.definition_bytes)
         hasher.update(hasher.digest())
         # Hash needs to depend on session name to avoid the possibility of
         # collisions.  Some options can cause sessions with identical code to
@@ -281,7 +296,7 @@ class CodeProcessor(object):
         self.cache_path = cache_path
 
         self._load_cache_config_prep_cache()
-        self._load_language_definitions()
+        self._generate_keys_load_language_definitions()
         self._index_named_code_chunks()
         self._resolve_code_copying()
         self._create_sessions()
@@ -324,29 +339,48 @@ class CodeProcessor(object):
         self._updated_cache_hash_roots = []
 
 
-    def _load_language_definitions(self):
+    def _generate_keys_load_language_definitions(self):
         '''
-        Load language definitions, and mark any code chunks that lack
-        necessary definitions.
+        Assign code chunk session/source keys.  Load language definitions, and
+        mark any code chunks that lack necessary definitions.
         '''
+        required_lang_keys = set()
+        jupyter_lang_keys = set()
+        for cc in self.code_chunks:
+            if cc.execute:
+                if self.cross_source_sessions:
+                    key = (self, cc.options['lang'], cc.options['session'])
+                else:
+                    key = (self, cc.options['lang'], cc.options['session'], cc.source_name)
+                if key not in required_lang_keys and key not in jupyter_lang_keys:
+                    if 'jupyter_kernel' in cc.options['first_chunk_options']:
+                        jupyter_lang_keys.add(key)
+                    else:
+                        required_lang_keys.add(key)
+            elif self.cross_source_sessions:
+                key = (self, cc.options['lang'], cc.options['source'])
+            else:
+                key = (self, cc.options['lang'], cc.options['source'], cc.source_name)
+            cc.key = key
+
         raw_language_index = pkgutil.get_data('codebraid', 'languages/index.bespon')
         if raw_language_index is None:
             raise err.CodebraidError('Failed to find "codebraid/languages/index.bespon"')
         language_index = bespon.loads(raw_language_index)
         language_definitions = collections.defaultdict(lambda: None)
-        required_langs = set(cc.options['lang'] for cc in self.code_chunks if cc.execute)
+        required_langs = set(key[1] for key in required_lang_keys)
         for lang in required_langs:
             try:
                 lang_def_fname = language_index[lang]
             except KeyError:
                 for cc in self.code_chunks:
-                    if cc.options['lang'] == lang and cc.execute:
+                    if cc.options['lang'] == lang and cc.execute and cc.key in required_lang_keys:
                         cc.source_errors.append('Language definition for "{0}" does not exist, or is not indexed'.format(lang))
                 continue
             lang_def_bytes = pkgutil.get_data('codebraid', 'languages/{0}'.format(lang_def_fname))
             if lang_def_bytes is None:
                 for cc in self.code_chunks:
-                    if cc.options['lang'] == lang and cc.execute:
+                    if cc.options['lang'] == lang and cc.execute and cc.key in required_lang_keys:
                         cc.source_errors.append('Language definition for "{0}" does not exist'.format(lang))
             lang_def = bespon.loads(lang_def_bytes)
             language_definitions[lang] = Language(lang, lang_def[lang], lang_def_bytes)
@@ -451,11 +485,7 @@ class CodeProcessor(object):
         sessions = util.KeyDefaultDict(Session)
         for cc in self.code_chunks:
             if cc.execute:
-                if self.cross_source_sessions:
-                    key = (self, cc.options['lang'], cc.options['session'])
-                else:
-                    key = (self, cc.options['lang'], cc.options['session'], cc.source_name)
-                sessions[key].append(cc)
+                sessions[cc.key].append(cc)
             elif not cc.inline:
                 # Code blocks not in sessions need starting line numbers
                 cc.code_start_line_number = 1
@@ -474,7 +504,10 @@ class CodeProcessor(object):
             if not session.errors:
                 self._load_cache(session)
                 if session.hash not in self._cache:
-                    self._run(session)
+                    if session.jupyter_kernel is None:
+                        self._run(session)
+                    else:
+                        self._run_jupyter(session)
                 self._process_session(session)
         self._resolve_output_copying()
         self._update_cache()
@@ -635,8 +668,9 @@ class CodeProcessor(object):
             source_path = source_dir_path / '{0}.{1}'.format(source_name, session.lang_def.extension)
             source_path.write_text(''.join(run_code_list), encoding='utf8')
 
+            executable = session.code_chunks[0].options['first_chunk_options'].get('executable', session.lang_def.executable)
             # All paths use `.as_posix()` for `shlex.split()` compatibility
-            template_dict = {'executable': session.lang_def.executable,
+            template_dict = {'executable': executable,
                              'extension': session.lang_def.extension,
                              'source': source_path.as_posix(),
                              'source_dir': source_dir_path.as_posix(),
@@ -936,6 +970,132 @@ class CodeProcessor(object):
         self._updated_cache_hash_roots.append(session.hash_root)
 
 
+    def _run_jupyter(self, session):
+        chunk_stdout_dict = collections.defaultdict(list)
+        chunk_stderr_dict = collections.defaultdict(list)
+        chunk_expr_dict = collections.defaultdict(list)
+        chunk_rich_output_dict = collections.defaultdict(list)
+        chunk_runtime_source_error_dict = collections.defaultdict(list)
+        cache = {'stdout_lines': chunk_stdout_dict,
+                 'stderr_lines': chunk_stderr_dict,
+                 'expr_lines': chunk_expr_dict,
+                 'rich_output': chunk_rich_output_dict,
+                 'runtime_source_error_lines': chunk_runtime_source_error_dict}
+        import atexit
+        import queue
+        import base64
+
+        # https://jupyter-client.readthedocs.io/en/stable/api/client.html
+        # https://jupyter-client.readthedocs.io/en/stable/messaging.html#messages-on-the-iopub-pub-sub-channel
+        kernel_name = session.code_chunks[0].options['first_chunk_options']['jupyter_kernel']
+        try:
+            import jupyter_client
+        except ImportError:
+            chunk_runtime_source_error_dict[0].append('Cannot import "jupyter_client" module'.format(kernel_name))
+            self._cache[session.hash] = cache
+            self._updated_cache_hash_roots.append(session.hash_root)
+            return
+        jupyter_manager = jupyter_client.KernelManager(kernel_name=kernel_name)
+        try:
+            jupyter_manager.start_kernel()
+        except jupyter_client.kernelspec.NoSuchKernel:
+            chunk_runtime_source_error_dict[0].append('No such Jupyter kernel "{0}"'.format(kernel_name))
+            self._cache[session.hash] = cache
+            self._updated_cache_hash_roots.append(session.hash_root)
+            return
+        except Exception as e:
+            chunk_runtime_source_error_dict[0].append('Failed to start Jupyter kernel "{0}":\n"{1}"'.format(kernel_name, e))
+            self._cache[session.hash] = cache
+            self._updated_cache_hash_roots.append(session.hash_root)
+            return
+        jupyter_client = jupyter_manager.client()
+        def shutdown_kernel():
+            if jupyter_manager.has_kernel:
+                jupyter_client.stop_channels()
+                jupyter_manager.shutdown_kernel(now=True)
+        atexit.register(shutdown_kernel)
+        jupyter_client.start_channels()
+        try:
+            jupyter_client.wait_for_ready()
+        except RuntimeError as e:
+            jupyter_client.stop_channels()
+            jupyter_manager.shutdown_kernel()
+            chunk_runtime_source_error_dict[0].append('Jupyter kernel "{0}" timed out during startup:\n"{1}"'.format(kernel_name, e))
+            self._cache[session.hash] = cache
+            self._updated_cache_hash_roots.append(session.hash_root)
+            return
+
+        try:
+            errors = False
+            incomplete_cc_stack = []
+            for cc in session.code_chunks:
+                if errors:
+                    break
+                if cc.session_output_index != cc.session_index:
+                    # If incomplete code, accumulate until complete
+                    incomplete_cc_stack.append(cc)
+                    continue
+                if not incomplete_cc_stack:
+                    cc_jupyter_id = jupyter_client.execute(cc.code)
+                else:
+                    incomplete_cc_stack.append(cc)
+                    cc_jupyter_id = jupyter_client.execute('\n'.join(icc.code for icc in incomplete_cc_stack))
+                    incomplete_cc_stack = []
+                while True:
+                    try:
+                        msg = jupyter_client.iopub_channel.get_msg(timeout=15)
+                    except queue.Empty:
+                        chunk_runtime_source_error_dict[cc.session_ouput_index].append('Jupyter kernel "{0}" timed out during execution"'.format(kernel_name))
+                        errors = True
+                        break
+                    if msg['parent_header'].get('msg_id') != cc_jupyter_id:
+                        continue
+                    msg_type = msg['msg_type']
+                    msg_content = msg['content']
+                    if msg_type in ('execute_result', 'display_data'):
+                        # Rich output
+                        rich_output_files = {}
+                        rich_output = {'files': rich_output_files, 'data': msg_content['data']}
+                        if self.cache_path is not None:
+                            for mime_type, data in msg_content['data'].items():
+                                if mime_type in ('image/png', 'image/jpeg', 'image/svg+xml', 'application/pdf'):
+                                    file_extension = mime_type.split('/', 1)[1].split('+', 1)[0]
+                                    if file_extension == 'jpeg':
+                                        file_extension = 'jpg'
+                                    if session.name is None:
+                                        file_name = '{0}_{1:03d}-{2:02d}.{3}'.format(kernel_name,
+                                                                                     cc.session_output_index+1,
+                                                                                     len(chunk_rich_output_dict[cc.session_output_index])+1,
+                                                                                     file_extension)
+                                    else:
+                                        file_name = '{0}-{1}-{2:03d}-{3:02d}.{4}'.format(kernel_name,
+                                                                                         session.name,
+                                                                                         cc.session_output_index+1,
+                                                                                         len(chunk_rich_output_dict[cc.session_output_index])+1,
+                                                                                         file_extension)
+                                    p = self.cache_path / file_name
+                                    p.write_bytes(base64.b64decode(data))
+                                    rich_output_files[mime_type] = p.as_posix()
+                        chunk_rich_output_dict[cc.session_output_index].append(rich_output)
+                        continue
+                    if msg_type == 'status' and msg_content['execution_state'] == 'idle':
+                        break
+                    if msg_type == 'error':
+                        chunk_stderr_dict[cc.session_output_index].extend(util.splitlines_lf(re.sub('\x1b.*?m', '', '\n'.join(msg_content['traceback']))))
+                        continue
+                    if msg_type == 'stream':
+                        if msg_content['name'] == 'stdout':
+                            chunk_stdout_dict[cc.session_output_index].extend(util.splitlines_lf(msg_content['text']))
+                        elif msg_content['name'] == 'stderr':
+                            chunk_stderr_dict[cc.session_output_index].extend(util.splitlines_lf(msg_content['text']))
+                        continue
+        finally:
+            jupyter_client.stop_channels()
+            jupyter_manager.shutdown_kernel()
+        self._cache[session.hash] = cache
+        self._updated_cache_hash_roots.append(session.hash_root)
+
+
     def _process_session(self, session):
         cache = self._cache[session.hash]
         # `int()` handles keys from json cache
@@ -945,6 +1105,9 @@ class CodeProcessor(object):
             session.code_chunks[int(index)].stderr_lines = lines
         for index, lines in cache['expr_lines'].items():
             session.code_chunks[int(index)].expr_lines = lines
+        if 'rich_output' in cache:
+            for index, rich_output in cache['rich_output'].items():
+                session.code_chunks[int(index)].rich_output = rich_output
         for index, lines in cache['runtime_source_error_lines'].items():
             cc = session.code_chunks[int(index)]
             cc.source_errors.extend(lines)
