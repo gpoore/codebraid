@@ -49,7 +49,7 @@ def main():
             parser_pandoc.add_argument(opt, action='store_true', dest=opt,
                                        help='Pandoc option; see Pandoc documentation')
         elif narg == 1:
-            parser_pandoc.add_argument(opt, dest=opt, metavar='PANDOC',
+            parser_pandoc.add_argument(opt, dest=opt, metavar='PANDOC', action='append',
                                        help='Pandoc option; see Pandoc documentation')
         elif narg == '?':
             parser_pandoc.add_argument(opt, nargs='?', const=True, default=None, dest=opt, metavar='PANDOC',
@@ -67,9 +67,14 @@ def pandoc(args):
     other_pandoc_args = []
     for k, v in vars(args).items():
         if isinstance(k, str) and k.startswith('--') and v not in (None, False):
-            other_pandoc_args.append(k)
-            if not isinstance(v, bool):
-                other_pandoc_args.append(v)
+            if isinstance(v, list):
+                for v_i in v:
+                    other_pandoc_args.append(k)
+                    other_pandoc_args.append(v_i)
+            else:
+                other_pandoc_args.append(k)
+                if not isinstance(v, bool):
+                    other_pandoc_args.append(v)
 
     converter = converters.PandocConverter(paths=args.files,
                                            from_format=args.from_format,
