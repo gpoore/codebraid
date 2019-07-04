@@ -219,8 +219,6 @@ class PandocCodeChunk(CodeChunk):
         options = {}
 
         # Preprocess options
-        if node_id:
-            options['name'] = node_id
         inline = node['t'] == 'Code'
         for n, c in enumerate(node_classes):
             self._class_processors[c](self, options, n, c)
@@ -243,7 +241,7 @@ class PandocCodeChunk(CodeChunk):
                     'codebraid_pseudonode' in inline_parent_node or len(parent_node_list) > 1)):
                 self.source_errors.insert(0, 'Option "example" is only allowed for inline code that is in a paragraph by itself')
                 self.options['example'] = False
-        pandoc_id = self.options.get('name', '')
+        pandoc_id = node_id
         pandoc_classes = []
         pandoc_kvpairs = []
         if 'lang' in options:
@@ -269,6 +267,12 @@ class PandocCodeChunk(CodeChunk):
 
     # This may need additional refinement in future depending on allowed values
     _unquoted_kv_value_re = re.compile(r'[A-Za-z$_+\-][A-Za-z0-9$_+\-:]*')
+
+
+    def finalize_after_copy(self):
+        if self.options['lang'] is None:
+            self.pandoc_classes.insert(0, self.copy_chunks[0].options['lang'])
+        self.options.finalize_after_copy()
 
 
     @property
@@ -303,27 +307,26 @@ class PandocCodeChunk(CodeChunk):
         t_code = 'Code' if self.inline else 'CodeBlock'
         t_raw = 'RawInline' if self.inline else 'RawBlock'
         for output, format in self.options['show'].items():
-            if output == 'markup':
-                nodes.append({'t': t_code, 'c': [['', ['markdown'], []], self.layout_output(output, format)]})
-            elif output == 'copied_markup':
-                nodes.append({'t': t_code, 'c': [['', ['markdown'], []], self.layout_output(output, format)]})
+            new_nodes = None
+            if output in ('markup', 'copied_markup'):
+                new_nodes = [{'t': t_code, 'c': [['', ['markdown'], []], self.layout_output(output, format)]}]
             elif output == 'code':
-                nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]})
+                new_nodes = [{'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]}]
             elif output in ('expr', 'stdout', 'stderr'):
                 if format == 'verbatim':
                     if getattr(self, output+'_lines') is not None:
-                        nodes.append({'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]})
+                        new_nodes = [{'t': t_code, 'c': [['', [self.lang if output == 'expr' else output], []], self.layout_output(output, format)]}]
                 elif format == 'verbatim_or_empty':
-                    nodes.append({'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]})
+                    new_nodes = [{'t': t_code, 'c': [['', [self.lang if output == 'expr' else output], []], self.layout_output(output, format)]}]
                 elif format == 'raw':
                     if getattr(self, output+'_lines') is not None:
-                        nodes.append({'t': t_raw, 'c': ['markdown', self.layout_output(output, format)]})
+                        new_nodes = [{'t': t_raw, 'c': ['markdown', self.layout_output(output, format)]}]
                 else:
                     raise ValueError
             elif output == 'rich_output':
                 if self.rich_output is None:
                     continue
-                rich_output_nodes = []
+                new_nodes = []
                 for ro in self.rich_output:
                     ro_data = ro['data']
                     ro_files = ro['files']
@@ -334,42 +337,35 @@ class PandocCodeChunk(CodeChunk):
                         if fmt_mime_type in ro_files:
                             image_node = {'t': 'Image', 'c': [['', [], []], [], [ro_files[fmt_mime_type], '']]}
                             if self.inline:
-                                rich_output_nodes.append(image_node)
+                                new_nodes.append(image_node)
                             else:
                                 para_node = {'t': 'Para', 'c': [image_node]}
-                                rich_output_nodes.append(para_node)
+                                new_nodes.append(para_node)
                             break
                         data = ro_data[fmt_mime_type]
                         if fmt == 'latex':
                             raw_node = {'t': 'RawInline', 'c': ['tex', data]}
                             if self.inline:
-                                rich_output_nodes.append(raw_node)
+                                new_nodes.append(raw_node)
                             else:
                                 para_node = {'t': 'Para', 'c': [raw_node]}
-                                rich_output_nodes.append(para_node)
+                                new_nodes.append(para_node)
                             break
                         if fmt in ('html', 'markdown'):
                             raw_node = {'t': t_raw, 'c': [fmt, data]}
-                            rich_output_nodes.append(raw_node)
+                            new_nodes.append(raw_node)
                             break
                         if fmt == 'plain':
                             lines = util.splitlines_lf(data) or None
                             if lines is not None:
                                 code_node = {'t': t_code, 'c': [['', [], []], self.layout_output(output, 'verbatim', lines)]}
-                                rich_output_nodes.append(code_node)
+                                new_nodes.append(code_node)
                             break
-                if rich_output_nodes:
-                    nodes.extend(rich_output_nodes)
-                    # At some point, it may be useful to enable wrapping all
-                    # rich output in some sort of container
-                    # if self.inline:
-                    #     span_node = {'t': 'Span', 'c': [ ['', ['richOutput'], []], rich_output_nodes]}
-                    #     nodes.append(span_node)
-                    # else:
-                    #     div_node = {'t': 'Div', 'c': [ ['', ['richOutput'], []], rich_output_nodes]}
-                    #     nodes.append(div_node)
+                        raise ValueError
             else:
                 raise ValueError
+            if new_nodes is not None:
+                nodes.extend(new_nodes)
         self._output_nodes = nodes
         return nodes
 

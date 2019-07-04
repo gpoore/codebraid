@@ -284,7 +284,7 @@ class Options(dict):
                     getattr(self, '_option_'+k)(k, v)
 
 
-    def finalize_after_copy(self, *, lang, show):
+    def finalize_after_copy(self):
         '''
         Complete any option processing that must wait until after copying.
         For the paste command, 'show' can be inherited.  For paste and code,
@@ -293,15 +293,15 @@ class Options(dict):
         code_chunk = self.code_chunk
         custom_options = self.custom_options
         if self['lang'] is None:
-            self['lang'] = lang
+            self['lang'] = code_chunk.copy_chunks[0].options['lang']
         if code_chunk.inline:
             if code_chunk.command == 'paste' and 'show' not in custom_options:
-                self['show'] = show.copy()  # Inherit
+                self['show'] = code_chunk.copy_chunks[0].options['show'].copy()  # Inherit
             else:
                 self['show'] = self._default_inline_show[code_chunk.command].copy()
         else:
             if code_chunk.command == 'paste' and 'show' not in custom_options:
-                self['show'] = show.copy()  # Inherit
+                self['show'] = code_chunk.copy_chunks[0].options['show'].copy()  # Inherit
             else:
                 self['show'] = self._default_block_show[code_chunk.command].copy()
 
@@ -817,6 +817,14 @@ class CodeChunk(object):
         return code
 
 
+    def finalize_after_copy(self):
+        '''
+        Finalize options.  This can be redefined by subclasses so that they
+        can modify themselves based on inherited 'lang' or 'show'.
+        '''
+        self.options.finalize_after_copy()
+
+
     def copy_code(self):
         '''
         Copy code for 'copy' option.  Code is copied before execution, which
@@ -844,10 +852,8 @@ class CodeChunk(object):
             self.source_errors.append('An expression command cannot copy a non-expression code chunk')
         if self.source_errors:
             return
-        # Finalizing options must come after any potential `.is_expr`
-        # modifications
-        self.options.finalize_after_copy(lang=copy_chunks[0].options['lang'],
-                                         show=copy_chunks[0].options['show'])
+        # Finalization must come after any potential `.is_expr` modifications
+        self.finalize_after_copy()
         if self.inline and 'code' in self.options['show'] and (len(copy_chunks) > 1 or len(copy_chunks[0].code_lines) > 1):
             self.source_errors.append('Cannot copy and then display multiple lines of code in an inline context')
             return
