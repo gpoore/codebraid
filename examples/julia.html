@@ -12,9 +12,9 @@
       div.column{display: inline-block; vertical-align: top; width: 50%;}
   </style>
   <style>
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -24,14 +24,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(title);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -40,9 +42,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -167,13 +169,13 @@ println(&quot;Mean: $(mean(rnums))&quot;)
 ```</code></pre>
 </div>
 <div class="exampleOutput">
-<div class="sourceCode" id="cb9" data-startFrom="1"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia"><a class="sourceLine" id="cb9-1" title="1">using Random</a>
-<a class="sourceLine" id="cb9-2" title="2">using Statistics</a>
-<a class="sourceLine" id="cb9-3" title="3">Random.seed!(<span class="fl">1</span>)</a>
-<a class="sourceLine" id="cb9-4" title="4">rnums = rand(<span class="fl">1</span>:<span class="fl">100</span>, <span class="fl">10</span>)</a>
-<a class="sourceLine" id="cb9-5" title="5">println(<span class="st">&quot;Random numbers: $(rnums)&quot;</span>)</a>
-<a class="sourceLine" id="cb9-6" title="6">println(<span class="st">&quot;Median: $(median(rnums))&quot;</span>)</a>
-<a class="sourceLine" id="cb9-7" title="7">println(<span class="st">&quot;Mean: $(mean(rnums))&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb9" data-startFrom="1"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia"><span id="cb9-1"><a href="#cb9-1"></a>using Random</span>
+<span id="cb9-2"><a href="#cb9-2"></a>using Statistics</span>
+<span id="cb9-3"><a href="#cb9-3"></a>Random.seed!(<span class="fl">1</span>)</span>
+<span id="cb9-4"><a href="#cb9-4"></a>rnums = rand(<span class="fl">1</span>:<span class="fl">100</span>, <span class="fl">10</span>)</span>
+<span id="cb9-5"><a href="#cb9-5"></a>println(<span class="st">&quot;Random numbers: $(rnums)&quot;</span>)</span>
+<span id="cb9-6"><a href="#cb9-6"></a>println(<span class="st">&quot;Median: $(median(rnums))&quot;</span>)</span>
+<span id="cb9-7"><a href="#cb9-7"></a>println(<span class="st">&quot;Mean: $(mean(rnums))&quot;</span>)</span></code></pre></div>
 <pre class="stdout"><code>Random numbers: [47, 3, 66, 54, 67, 60, 83, 52, 93, 81]
 Median: 63.0
 Mean: 60.6</code></pre>
@@ -191,10 +193,10 @@ var += &quot;a&quot;
 ```</code></pre>
 </div>
 <div class="exampleOutput">
-<div class="sourceCode" id="cb12" data-startFrom="1"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia"><a class="sourceLine" id="cb12-1" title="1">var = <span class="fl">123</span></a>
-<a class="sourceLine" id="cb12-2" title="2">println(var)</a>
-<a class="sourceLine" id="cb12-3" title="3">flush(stdout)</a>
-<a class="sourceLine" id="cb12-4" title="4">var += <span class="st">&quot;a&quot;</span></a></code></pre></div>
+<div class="sourceCode" id="cb12" data-startFrom="1"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia"><span id="cb12-1"><a href="#cb12-1"></a>var = <span class="fl">123</span></span>
+<span id="cb12-2"><a href="#cb12-2"></a>println(var)</span>
+<span id="cb12-3"><a href="#cb12-3"></a>flush(stdout)</span>
+<span id="cb12-4"><a href="#cb12-4"></a>var += <span class="st">&quot;a&quot;</span></span></code></pre></div>
 <pre class="stdout"><code>123</code></pre>
 <pre class="stderr"><code>ERROR: LoadError: MethodError: no method matching +(::Int64, ::String)
 Closest candidates are:
@@ -235,7 +237,7 @@ x = 1 + 2
 ```</code></pre>
 </div>
 <div class="exampleOutput">
-<div class="sourceCode" id="cb18" data-startFrom="1"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia"><a class="sourceLine" id="cb18-1" title="1">x = <span class="fl">1</span> + <span class="fl">2</span></a></code></pre></div>
+<div class="sourceCode" id="cb18" data-startFrom="1"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia"><span id="cb18-1"><a href="#cb18-1"></a>x = <span class="fl">1</span> + <span class="fl">2</span></span></code></pre></div>
 <pre class="stderr"><code> </code></pre>
 </div>
 </div>
@@ -247,7 +249,7 @@ println(x)
 ```</code></pre>
 </div>
 <div class="exampleOutput">
-<div class="sourceCode" id="cb21" data-startFrom="2"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia"><a class="sourceLine" id="cb21-2" title="2">println(x)</a></code></pre></div>
+<div class="sourceCode" id="cb21" data-startFrom="2"><pre class="sourceCode numberSource julia numberLines"><code class="sourceCode julia" style="counter-reset: source-line 1;"><span id="cb21-2"><a href="#cb21-2"></a>println(x)</span></code></pre></div>
 </div>
 </div>
 <p><code>hide</code> takes any combination of <code>code</code>, <code>stderr</code>, and <code>stdout</code>, or simply <code>all</code>.</p>
