@@ -347,7 +347,7 @@ class Options(dict):
                                                     # requires a Jupyter kernel.  If the built-in system gains
                                                     # rich_output capabilities or there are other related changes,
                                                     # this may need refactoring.
-                                                    'nb':    ODict([('expr', 'raw'),
+                                                    'nb':    ODict([('expr', 'verbatim'),
                                                                     ('rich_output', _default_rich_output),
                                                                     ('stderr', 'verbatim')]),
                                                     'paste': ODict(),

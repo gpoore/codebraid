@@ -219,11 +219,11 @@ For example, `` `code`{.python}` `` becomes
   kernels.
 
 * `.cb.nb` — Execute code in notebook mode.  For inline code, this is
-  equivalent to `.cb.expr` unless a Jupyter kernel is used, in which case rich
-  output will be displayed.  For code blocks, this inserts the code verbatim,
-  followed by any printed output (stdout) verbatim.  If stderr exists, it is
-  also inserted verbatim.  When a Jupyter kernel is used, rich output is also
-  displayed.
+  equivalent to `.cb.expr` with verbatim output unless a Jupyter kernel is
+  used, in which case rich output will be displayed.  For code blocks, this
+  inserts the code verbatim, followed by any printed output (stdout) verbatim.
+  If stderr exists, it is also inserted verbatim.  When a Jupyter kernel is
+  used, rich output is also displayed.
 
 * `.cb.paste` — Insert code and/or output copied from one or more named code
   chunks.  The `copy` keyword is used to specify chunks to be copied.  This
