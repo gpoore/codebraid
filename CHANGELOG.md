@@ -1,5 +1,55 @@
 # Change Log
 
+## v0.4.0 (2019-07-10)
+
+* Added support for Jupyter kernels with the `jupyter_kernel` option, which
+  can be used with the first code chunk in a session to specify a kernel.
+  Multiple Jupyter kernels can be used within a single document, and multiple
+  sessions are possible per kernel.  Added associated `rich_output` display
+  options.  Rich output such as plots is displayed automatically.
+
+* A single cache location can now be shared by multiple documents.  When
+  multiple documents are built in a single directory with the default cache
+  settings, they no longer remove each other's cached output.
+
+* Inline `cb.nb` is no longer the same as `cb.expr`.  Inline `cb.nb` now shows
+  output verbatim when used with Codebraid's built-in code execution system,
+  and shows rich output or a verbatim text representation when used with
+  Jupyter kernels.  This makes inline and block `cb.nb` behavior more
+  parallel.
+
+* Added `executable` option, which can be used with the first code chunk in a
+  session.  This overrides the default executable called by the built-in code
+  execution system.
+
+* Added `include_file` and associated options.  This allows code from an
+  external file to be included for execution and/or display.
+
+* Added JavaScript support.
+
+* Pandoc options like `--syntax-definition` can now be used multiple times.
+
+* Fixed a bug that prevented `--webtex`, `--mathjax`, and `--katex` from
+  working with Pandoc.  They now work when a URL is not specified, but do not
+  yet work when a URL is given.
+
+* When a `paste` code chunk is copied, now everything is copied, not just what
+  is actually displayed by the `paste` chunk.  Improved and simplified copying
+  logic.
+
+* Added `copied_markup` option for `show` and `hide`.  This is used with
+  `copy` to show the Markdown source of copied code chunks.
+
+* Added keyword argument `hide_markup_keys` for code chunks.  This allows
+  specified keys in code chunk attributes to be hidden in the Markdown source
+  displayed with `markup` and `copied_markup`.
+
+* Code chunk options `line_anchors` and `line_numbers` are now properly
+  converted to boolean values.
+
+* Improved option processing.
+
+
 ## v0.3.0 (2019-05-19)
 
 * Added Bash support.
