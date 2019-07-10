@@ -39,7 +39,8 @@ def main():
     parser_pandoc.add_argument('--file-scope', action='store_true', dest='pandoc_file_scope',
                                help='Pandoc parses multiple files individually before merging their output, instead of merging before parsing')
     parser_pandoc.add_argument('--no-cache', action='store_true',
-                               help='Do not cache code output (all code will be executed on each run)')
+                               help='Do not cache code output so that code is always executed during each build '
+                                    '(a cache directory may still be created for use with temporary files)')
     parser_pandoc.add_argument('--cache-dir',
                                help='Location for caching code output (default is "_codebraid" in document directory)')
     parser_pandoc.add_argument('files', nargs='+', metavar='FILE',

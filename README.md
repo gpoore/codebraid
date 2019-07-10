@@ -179,15 +179,26 @@ releases will allow customization of the working directory.
 
 By default, code output is cached, and code is only re-executed when it is
 modified.  The default cache location is a `_codebraid` directory in the
-directory with your markdown document.  This can be modified using
-`--cache-dir`.  Sharing a single cache location between multiple documents is
-not currently supported.
+working directory (directory where `codebraid` is run, typically the document
+directory).  This can be modified using `--cache-dir`.  Multiple documents can
+share a single cache location.  A cache directory can be synced between
+different operating systems (such as Windows and Linux) while retaining full
+functionality so long as documents are in equivalent locations under the
+user's home directory (as resolved by
+[`os.path.expanduser()`](https://docs.python.org/3/library/os.path.html#os.path.expanduser)).
+
+When multiple documents share the same cache location, each document will
+automatically clean up its own unused, outdated files.  However, if a document
+is deleted or renamed, it may leave behind unused files in the cache, so it
+may be worth manually deleting and regenerating the cache in those
+circumstances.  Future cache enhancements should be able to detect all unused
+files, making this unnecessary.
 
 If you are working with external data that changes, you should run `codebraid`
-with `--no-cache` to prevent the cache from becoming out of sync with your
-data.  Future releases will allow external dependencies to be specified so
-that caching will work correctly in these situations.  Note that `--no-cache`
-currently prevents Jupyter kernels from displaying rich output like plots.
+with `--no-cache` or delete the cache as necessary to prevent the cache from
+becoming out of sync with your data.  Future releases will allow external
+dependencies to be specified so that caching will work correctly in these
+situations.
 
 
 ## Code options

@@ -8,6 +8,7 @@
 #
 
 
+import atexit
 import bespon
 import collections
 import hashlib
@@ -22,6 +23,7 @@ import shlex
 import shutil
 import sys
 import tempfile
+import time
 import zipfile
 from .. import err
 from .. import util
@@ -135,7 +137,6 @@ class Session(object):
         self.lang_def = None
         self.executable = None
         self.jupyter_kernel = None
-        self._hash_function = self.code_processor.cache_config.get('hash_function', None)
 
         self.code_options = None
         self.code_chunks = []
@@ -241,12 +242,10 @@ class Session(object):
             # undefined.
             return
 
-        if self._hash_function is None:
-            hasher = hashlib.blake2b()
-        elif self._hash_function == 'sha512':
+        if sys.version_info < (3, 6):
             hasher = hashlib.sha512()
         else:
-            raise ValueError
+            hasher = hashlib.blake2b()
         code_len = 0
         # Hash needs to depend on the language definition
         if self.lang_def is not None:
@@ -289,54 +288,130 @@ class CodeProcessor(object):
     Process code chunks.  This can involve executing code, extracting code
     from files for inclusion, or a combination of the two.
     '''
-    def __init__(self, *, code_chunks, code_options, cross_source_sessions, cache_path):
+    def __init__(self, *, code_chunks, code_options, cross_source_sessions,
+                 no_cache, cache_path, cache_key, cache_source_paths):
         self.code_chunks = code_chunks
         self.code_options = code_options
         self.cross_source_sessions = cross_source_sessions
+        self.no_cache = no_cache
         self.cache_path = cache_path
+        self.cache_key = cache_key
+        self.cache_source_paths = cache_source_paths
+        if cache_source_paths is None:
+            self.cache_source_paths_as_strings = None
+        else:
+            self.cache_source_paths_as_strings = [p.as_posix() for p in cache_source_paths]
 
-        self._load_cache_config_prep_cache()
+        self.cache_key_path = cache_path / cache_key
+        self.cache_index_path = cache_path / cache_key / '{0}_index.zip'.format(cache_key)
+        self.cache_lock_path = cache_path / cache_key / '{0}.lock'.format(cache_key)
+
+        self._prep_cache()
         self._generate_keys_load_language_definitions()
         self._index_named_code_chunks()
         self._resolve_code_copying()
         self._create_sessions()
 
 
-    def _load_cache_config_prep_cache(self):
+    def _prep_cache(self):
         '''
-        Load existing cache configuration, or generate default config.
+        Prepare the cache.
+
+        A document's cache is located at `<cache_path>/<cache_key>/`, where
+        <cache_key> is derived from a hash of the absolute source path(s).
+        Thus, the cache depends on source locations.  To provide some
+        cross-platform cache compatibility, source paths always use `~` to
+        represent the user's home directory, even under Windows.  This is
+        expanded via `pathlib.Path.expanduser()`.
+
+        Each document cache contains per-session cache files that include
+        stdout, sterr, expr, rich output, and runtime source errors.  When
+        there is rich output, additional files such as images are also
+        created.  The file `<cache_key>_index.zip` includes all source path(s)
+        and a complete list of all cache files created (including itself).
+
+        The cache is compatible with multiple documents being built
+        simultaneously within a single `<cache_path>`, since the cache for
+        each build will be located in its own subdirectory.  However, for a
+        given document, only one build at a time is possible.  A lock file
+        `<cache_key>.lock` is used to enforce this.
+
+        Notice that in cleaning outdated or invalid cache material, there is
+        never wholesale directory removal.  Only files created directly by
+        Codebraid are deleted.  Users should never manually create files in
+        the cache, but if that happens those files should not be deleted
+        unless they overwrite existing cache files.
         '''
-        cache_config = {}
-        if self.cache_path is not None:
-            cache_config_path = self.cache_path / 'config.zip'
-            if cache_config_path.is_file():
-                with zipfile.ZipFile(str(cache_config_path)) as zf:
-                    with zf.open('config.json') as f:
-                        if sys.version_info < (3, 6):
-                            cache_config = json.loads(f.read().decode('utf8'))
-                        else:
-                            cache_config = json.load(f)
-        if not cache_config and sys.version_info < (3, 6):
-            cache_config['hash_function'] = 'sha512'
-        self.cache_config = cache_config
+        self.cache_key_path.mkdir(parents=True, exist_ok=True)
+        max_lock_wait = 2
+        lock_check_interval = 0.1
+        lock_time = 0
+        while True:
+            try:
+                self.cache_lock_path.touch(exist_ok=False)
+            except FileExistsError:
+                if lock_time > max_lock_wait:
+                    raise err.CodebraidError('This document is already being built with the specified cache '
+                                             'or another process is cleaning the cache; the cache is locked')
+                time.sleep(lock_check_interval)
+                lock_time += lock_check_interval
+            else:
+                break
+        def final_cache_cleanup():
+            try:
+                self.cache_lock_path.unlink()
+            except FileNotFoundError:
+                pass
+            for p in (self.cache_key_path, self.cache_path):
+                try:
+                    p.rmdir()
+                except OSError:
+                    pass
+        atexit.register(final_cache_cleanup)
+
+        try:
+            with zipfile.ZipFile(str(self.cache_index_path)) as zf:
+                with zf.open('index.json') as f:
+                    if sys.version_info < (3, 6):
+                        cache_index = json.loads(f.read().decode('utf8'))
+                    else:
+                        cache_index = json.load(f)
+        except (FileNotFoundError, KeyError, json.decoder.JSONDecodeError):
+            cache_index = {}
+        else:
+            # These checks include handling source hash collisions and
+            # corrupted caches
+            if (self.no_cache or
+                    not isinstance(cache_index, dict) or
+                    cache_index.get('codebraid_version') != codebraid_version or
+                    cache_index['sources'] != self.cache_source_paths_as_strings or
+                    not all((self.cache_key_path / f).is_file() for f in cache_index['files'])):
+                if isinstance(cache_index, dict) and 'files' in cache_index:
+                    for f in cache_index['files']:
+                        try:
+                            (self.cache_key_path / f).unlink()
+                        except FileNotFoundError:
+                            pass
+                else:
+                    try:
+                        self.cache_index_path.unlink()
+                    except FileNotFoundError:
+                        pass
+                cache_index = {}
+        if not cache_index:
+            cache_index['codebraid_version'] = codebraid_version
+            cache_index['sources'] = self.cache_source_paths_as_strings
+            cache_index['files'] = []
+        self.cache_index = cache_index
 
         # Cached stdout and stderr, plus any other relevant data.  Each
         # session has a key based on a BLAKE2b hash of its code plus the
         # length in bytes of the code when encoded with UTF8.  (SHA-512 is
         # used as a fallback for Python 3.5.)
         self._cache = {}
-        # Used files from the cache.  By default, these will be in
-        # `<doc directory>/_codebraid` and will have names of the form
-        # `<first 16 chars of hex session hash>.zip`.  They contain
-        # `cache.json`, which is a dict mapping session keys to dicts that
-        # contain lists of stdout and stderr, among other things.  While
-        # each cache file will typically contain only a single session, it is
-        # possible for a file to contain multiple sessions since the cache
-        # file name is based on a truncated session hash.
-        self._used_cache_files = set()
         # All session hash roots (<first 16 chars of hex session hash>) that
         # correspond to sessions with new or updated caches.
-        self._updated_cache_hash_roots = []
+        self._updated_cache_hash_roots = set()
 
 
     def _generate_keys_load_language_definitions(self):
@@ -516,21 +591,28 @@ class CodeProcessor(object):
     def _load_cache(self, session):
         '''
         Load cached output, if it exists.
+
+        There's no need to check that all cache files are present in the case
+        of rich output that results in additional files, because that is done
+        during cache prep.
         '''
-        if self.cache_path is not None and session.hash not in self._cache:
-            session_cache_path = self.cache_path / '{0}.zip'.format(session.hash_root)
-            if session_cache_path.is_file():
-                # It may be worth modifying this in future to handle
-                # some failure modes or do more validation on loaded data.
+        if session.hash not in self._cache:
+            session_cache_path = self.cache_key_path / '{0}.zip'.format(session.hash_root)
+            try:
                 with zipfile.ZipFile(str(session_cache_path)) as zf:
                     with zf.open('cache.json') as f:
                         if sys.version_info < (3, 6):
                             saved_cache = json.loads(f.read().decode('utf8'))
                         else:
                             saved_cache = json.load(f)
+            except (FileNotFoundError, KeyError, json.decoder.JSONDecodeError):
+                pass
+            else:
                 if saved_cache['codebraid_version'] == codebraid_version:
-                    self._cache.update(saved_cache)
-                self._used_cache_files.add(session_cache_path.name)
+                    try:
+                        self._cache[session.hash] = saved_cache['cache'][session.hash]
+                    except KeyError:
+                        pass
 
 
     def _subproc(self, cmd, tmpdir_path, hash,
@@ -733,11 +815,15 @@ class CodeProcessor(object):
             chunk_stdout_dict = {}
             chunk_stderr_dict = {0: ['PRE-RUN ERROR:', *session.pre_run_error_lines]}
             chunk_expr_dict = {}
+            chunk_rich_output_dict = {}
+            files_list = []
             chunk_runtime_source_error_dict = {}
         elif session.post_run_errors:
             chunk_stdout_dict = {}
             chunk_stderr_dict = {0: ['POST-RUN ERROR:', *session.post_run_error_lines]}
             chunk_expr_dict = {}
+            chunk_rich_output_dict = {}
+            files_list = []
             chunk_runtime_source_error_dict = {}
         else:
             # Ensure that there's at least one delimiter to serve as a
@@ -752,6 +838,8 @@ class CodeProcessor(object):
             chunk_stdout_dict = {}
             chunk_stderr_dict = {}
             chunk_expr_dict = {}
+            chunk_rich_output_dict = {}
+            files_list = []
             chunk_runtime_source_error_dict = {}
             # More source patterns may be needed in future to cover the
             # possibility of languages that make paths lowercase on
@@ -965,9 +1053,11 @@ class CodeProcessor(object):
         cache = {'stdout_lines': chunk_stdout_dict,
                  'stderr_lines': chunk_stderr_dict,
                  'expr_lines': chunk_expr_dict,
+                 'rich_output': chunk_rich_output_dict,
+                 'files': files_list,
                  'runtime_source_error_lines': chunk_runtime_source_error_dict}
         self._cache[session.hash] = cache
-        self._updated_cache_hash_roots.append(session.hash_root)
+        self._updated_cache_hash_roots.add(session.hash_root)
 
 
     def _run_jupyter(self, session):
@@ -975,13 +1065,17 @@ class CodeProcessor(object):
         chunk_stderr_dict = collections.defaultdict(list)
         chunk_expr_dict = collections.defaultdict(list)
         chunk_rich_output_dict = collections.defaultdict(list)
+        files_list = []
         chunk_runtime_source_error_dict = collections.defaultdict(list)
         cache = {'stdout_lines': chunk_stdout_dict,
                  'stderr_lines': chunk_stderr_dict,
                  'expr_lines': chunk_expr_dict,
                  'rich_output': chunk_rich_output_dict,
+                 'files': files_list,
                  'runtime_source_error_lines': chunk_runtime_source_error_dict}
-        import atexit
+        self._updated_cache_hash_roots.add(session.hash_root)
+        self._cache[session.hash] = cache
+
         import queue
         import base64
 
@@ -992,21 +1086,15 @@ class CodeProcessor(object):
             import jupyter_client
         except ImportError:
             chunk_runtime_source_error_dict[0].append('Cannot import "jupyter_client" module'.format(kernel_name))
-            self._cache[session.hash] = cache
-            self._updated_cache_hash_roots.append(session.hash_root)
             return
         jupyter_manager = jupyter_client.KernelManager(kernel_name=kernel_name)
         try:
             jupyter_manager.start_kernel()
         except jupyter_client.kernelspec.NoSuchKernel:
             chunk_runtime_source_error_dict[0].append('No such Jupyter kernel "{0}"'.format(kernel_name))
-            self._cache[session.hash] = cache
-            self._updated_cache_hash_roots.append(session.hash_root)
             return
         except Exception as e:
             chunk_runtime_source_error_dict[0].append('Failed to start Jupyter kernel "{0}":\n"{1}"'.format(kernel_name, e))
-            self._cache[session.hash] = cache
-            self._updated_cache_hash_roots.append(session.hash_root)
             return
         jupyter_client = jupyter_manager.client()
         def shutdown_kernel():
@@ -1021,8 +1109,6 @@ class CodeProcessor(object):
             jupyter_client.stop_channels()
             jupyter_manager.shutdown_kernel()
             chunk_runtime_source_error_dict[0].append('Jupyter kernel "{0}" timed out during startup:\n"{1}"'.format(kernel_name, e))
-            self._cache[session.hash] = cache
-            self._updated_cache_hash_roots.append(session.hash_root)
             return
 
         try:
@@ -1041,11 +1127,12 @@ class CodeProcessor(object):
                     incomplete_cc_stack.append(cc)
                     cc_jupyter_id = jupyter_client.execute('\n'.join(icc.code for icc in incomplete_cc_stack))
                     incomplete_cc_stack = []
+                external_file_mime_types = set(['image/png', 'image/jpeg', 'image/svg+xml', 'application/pdf'])
                 while True:
                     try:
                         msg = jupyter_client.iopub_channel.get_msg(timeout=15)
                     except queue.Empty:
-                        chunk_runtime_source_error_dict[cc.session_ouput_index].append('Jupyter kernel "{0}" timed out during execution"'.format(kernel_name))
+                        chunk_runtime_source_error_dict[cc.session_output_index].append('Jupyter kernel "{0}" timed out during execution"'.format(kernel_name))
                         errors = True
                         break
                     if msg['parent_header'].get('msg_id') != cc_jupyter_id:
@@ -1056,26 +1143,25 @@ class CodeProcessor(object):
                         # Rich output
                         rich_output_files = {}
                         rich_output = {'files': rich_output_files, 'data': msg_content['data']}
-                        if self.cache_path is not None:
-                            for mime_type, data in msg_content['data'].items():
-                                if mime_type in ('image/png', 'image/jpeg', 'image/svg+xml', 'application/pdf'):
-                                    file_extension = mime_type.split('/', 1)[1].split('+', 1)[0]
-                                    if file_extension == 'jpeg':
-                                        file_extension = 'jpg'
-                                    if session.name is None:
-                                        file_name = '{0}_{1:03d}-{2:02d}.{3}'.format(kernel_name,
+                        for mime_type, data in msg_content['data'].items():
+                            if mime_type in external_file_mime_types:
+                                file_extension = mime_type.split('/', 1)[1].split('+', 1)[0]
+                                if file_extension == 'jpeg':
+                                    file_extension = 'jpg'
+                                if 'name' not in cc.options:
+                                    file_name = '{0}-{1}-{2:03d}-{3:02d}.{4}'.format(kernel_name,
+                                                                                     session.name or '',
                                                                                      cc.session_output_index+1,
                                                                                      len(chunk_rich_output_dict[cc.session_output_index])+1,
                                                                                      file_extension)
-                                    else:
-                                        file_name = '{0}-{1}-{2:03d}-{3:02d}.{4}'.format(kernel_name,
-                                                                                         session.name,
-                                                                                         cc.session_output_index+1,
-                                                                                         len(chunk_rich_output_dict[cc.session_output_index])+1,
-                                                                                         file_extension)
-                                    p = self.cache_path / file_name
-                                    p.write_bytes(base64.b64decode(data))
-                                    rich_output_files[mime_type] = p.as_posix()
+                                else:
+                                    file_name = '{0}-{1:02d}.{2}'.format(cc.options['name'],
+                                                                         len(chunk_rich_output_dict[cc.session_output_index])+1,
+                                                                         file_extension)
+                                files_list.append(file_name)
+                                ro_path = self.cache_key_path / file_name
+                                ro_path.write_bytes(base64.b64decode(data))
+                                rich_output_files[mime_type] = ro_path.as_posix()
                         chunk_rich_output_dict[cc.session_output_index].append(rich_output)
                         continue
                     if msg_type == 'status' and msg_content['execution_state'] == 'idle':
@@ -1092,8 +1178,6 @@ class CodeProcessor(object):
         finally:
             jupyter_client.stop_channels()
             jupyter_manager.shutdown_kernel()
-        self._cache[session.hash] = cache
-        self._updated_cache_hash_roots.append(session.hash_root)
 
 
     def _process_session(self, session):
@@ -1115,17 +1199,41 @@ class CodeProcessor(object):
 
 
     def _update_cache(self):
-        if self.cache_path is not None:
-            for cache_zip_path in self.cache_path.glob('*.zip'):
-                if cache_zip_path.name not in self._used_cache_files:
-                    cache_zip_path.unlink()
+        if self.no_cache:
+            created_cache_files = set()
+            for hash, value in self._cache.items():
+                created_cache_files.update(value['files'])
+            if created_cache_files:
+                cache_key_path = self.cache_key_path
+                def cleanup_created_cache_files():
+                    for f in created_cache_files:
+                        try:
+                            (cache_key_path / f).unlink()
+                        except FileNotFoundError:
+                            pass
+                atexit.register(cleanup_created_cache_files)
+        else:
+            used_cache_files = set()
+            used_cache_files.add('{0}_index.zip'.format(self.cache_key))
+            for hash, value in self._cache.items():
+                used_cache_files.add('{0}.zip'.format(hash[:16]))
+                used_cache_files.update(value['files'])
+            for f in set(self.cache_index['files']) - used_cache_files:
+                try:
+                    (self.cache_key_path / f).unlink()
+                except FileNotFoundError:
+                    pass
+            self.cache_index['files'] = list(used_cache_files)
+            with zipfile.ZipFile(str(self.cache_index_path), 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr('index.json', json.dumps(self.cache_index))
+            hash_root_to_hash_dict = collections.defaultdict(list)
+            for hash in self._cache:
+                hash_root_to_hash_dict[hash[:16]].append(hash)
             for hash_root in self._updated_cache_hash_roots:
-                cache_zip_path = self.cache_path / '{0}.zip'.format(hash_root)
+                cache_zip_path = self.cache_key_path / '{0}.zip'.format(hash_root)
                 with zipfile.ZipFile(str(cache_zip_path), 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-                    data = {k: v for k, v in self._cache.items() if k.startswith(hash_root)}
-                    data['codebraid_version'] = codebraid_version
+                    data = {'codebraid_version': codebraid_version,
+                            'cache': {}}
+                    for hash in hash_root_to_hash_dict[hash_root]:
+                        data['cache'][hash] = self._cache[hash]
                     zf.writestr('cache.json', json.dumps(data))
-            if self.cache_config:
-                cache_config_path = self.cache_path / 'config.zip'
-                with zipfile.ZipFile(str(cache_config_path), 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-                    zf.writestr('config.json', json.dumps(self.cache_config))

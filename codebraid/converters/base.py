@@ -10,11 +10,13 @@
 
 import collections
 from collections import OrderedDict as ODict
+import hashlib
 import io
 import json
 import os
 import pathlib
 import re
+import sys
 import textwrap
 import typing; from typing import List, Optional, Sequence, Union
 import zipfile
@@ -1028,6 +1030,7 @@ class Converter(object):
         self.cross_source_sessions = cross_source_sessions
         self.expanduser = expanduser
         self.expandvars = expandvars
+
         if paths is not None and strings is None:
             if isinstance(paths, str):
                 paths = [pathlib.Path(paths)]
@@ -1101,31 +1104,44 @@ class Converter(object):
             raise TypeError
         if len(self.source_strings) > 1 and from_format not in self.multi_source_formats:
             raise TypeError('Multiple sources are not supported for format {0}'.format(from_format))
+
         if not isinstance(no_cache, bool):
             raise TypeError
         self.no_cache = no_cache
-        if isinstance(cache_path, str):
+        if cache_path is None:
+            cache_path = pathlib.Path('_codebraid')
+        elif isinstance(cache_path, str):
             cache_path = pathlib.Path(cache_path)
-        elif not isinstance(cache_path, pathlib.Path) and cache_path is not None:
+        elif not isinstance(cache_path, pathlib.Path):
             raise TypeError
-        if no_cache:
-            cache_path = None
-        elif cache_path is None:
-            if paths is not None:
-                cache_path = self.expanded_source_paths[0].parent / '_codebraid'
-        else:
-            if expandvars:
-                cache_path = pathlib.Path(os.path.expandvars(str(cache_path.as_posix())))
-            if expanduser:
-                cache_path = cache_path.expanduser()
-        if cache_path is not None and not cache_path.is_dir():
-            cache_path.mkdir(parents=True)
+        if expandvars:
+            cache_path = pathlib.Path(os.path.expandvars(cache_path.as_posix()))
+        if expanduser:
+            cache_path = cache_path.expanduser()
         self.cache_path = cache_path
+        if sys.version_info < (3, 6):
+            cache_key_hasher = hashlib.sha512()
+        else:
+            cache_key_hasher = hashlib.blake2b()
+        if self.expanded_source_paths is None:
+            cache_source_paths = None
+            cache_key_hasher.update(b'<string>')
+        else:
+            cache_source_paths = []
+            for p in self.expanded_source_paths:
+                try:
+                    p_final = pathlib.Path('~') / p.absolute().relative_to(pathlib.Path.home())
+                except ValueError:
+                    p_final = p.absolute()
+                cache_source_paths.append(p_final)
+                cache_key_hasher.update(p_final.as_posix().encode('utf8'))
+                cache_key_hasher.update(cache_key_hasher.digest())
+        self.cache_source_paths = cache_source_paths
+        self.cache_key = cache_key_hasher.hexdigest()[:16]
+
         self._io_map = False
         if not isinstance(synctex, bool):
             raise TypeError
-        if synctex and cache_path is None:
-            raise TypeError('Cache path must be specified')
         self.synctex = synctex
         if synctex:
             self._io_map = True
@@ -1153,7 +1169,10 @@ class Converter(object):
         cp = codeprocessors.CodeProcessor(code_chunks=self.code_chunks,
                                           code_options=self.code_options,
                                           cross_source_sessions=self.cross_source_sessions,
-                                          cache_path=self.cache_path)
+                                          no_cache=self.no_cache,
+                                          cache_path=self.cache_path,
+                                          cache_key=self.cache_key,
+                                          cache_source_paths=self.cache_source_paths)
         cp.process()
 
     def _postprocess_code_chunks(self):
