@@ -107,21 +107,21 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </div>
 </div>
 <h3 id="expression-and-inline-notebook">Expression and inline notebook</h3>
-<p>Inline code with <code>.cb.expr</code> and <code>.cb.nb</code> (<code>nb</code> is short for <code>notebook</code>) evaluate an expression and then insert the raw output into the document, where it is interpreted as Markdown. Notice that since these are expressions, a trailing semicolon must not be used. This is only compatible with expressions that return Rust types implementing the <code>Display</code> trait.</p>
+<p>Inline code with <code>.cb.expr</code> evaluates an expression and then inserts the raw output into the document, where it is interpreted as Markdown. Inline code with <code>.cb.nb</code> (<code>nb</code> is short for <code>notebook</code>) is similar, except output is shown verbatim. Notice that since these are expressions, a trailing semicolon must not be used. This is only compatible with expressions that return Rust types implementing the <code>Display</code> trait.</p>
 <div class="example">
 <div class="exampleMarkup">
-<pre><code>`(1..1000).map(|x| x*x).sum::&lt;i32&gt;()`{.rust .cb.expr}</code></pre>
-</div>
-<div class="exampleOutput">
-<p>332833500</p>
-</div>
-</div>
-<div class="example">
-<div class="exampleMarkup">
-<pre><code>`format!(&quot;*{}*&quot;, (1..1000).sum::&lt;i32&gt;())`{.rust .cb.nb}</code></pre>
+<pre><code>`format!(&quot;*{}*&quot;, (1..1000).sum::&lt;i32&gt;())`{.rust .cb.expr}</code></pre>
 </div>
 <div class="exampleOutput">
 <p><em>499500</em></p>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`(1..1000).map(|x| x*x).sum::&lt;i32&gt;()`{.rust .cb.nb}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="expr">332833500</code></p>
 </div>
 </div>
 <p>If you need to work with an expression that returns a type without the <code>Display</code> trait, simply use <code>format!</code> with the <code>Debug</code> trait (<code>&quot;{:?}&quot;</code>, or <code>&quot;{:#?}&quot;</code> for pretty-print) to convert to a string manually. Since the string implements <code>Display</code>, everything works:</p>
@@ -150,7 +150,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <pre><code>`println!(&quot;{}&quot;, 1 + 2);`{.rus .cb.run session=inline_source_error}</code></pre>
 </div>
 <div class="exampleOutput">
-<p><code class="sourceError">SOURCE ERROR in &quot;rust.cbmd&quot; near line 72: Language definition for &quot;rus&quot; does not exist, or is not indexed</code></p>
+<p><code class="sourceError">SOURCE ERROR in &quot;rust.cbmd&quot; near line 73: Language definition for &quot;rus&quot; does not exist, or is not indexed</code></p>
 </div>
 </div>
 <h2 id="block-code">Block code</h2>
@@ -259,7 +259,7 @@ println!(&quot;{}&quot;, 1 + 2);
 ```</code></pre>
 </div>
 <div class="exampleOutput">
-<pre class="sourceError"><code>SOURCE ERROR in &quot;rust.cbmd&quot; near line 150:
+<pre class="sourceError"><code>SOURCE ERROR in &quot;rust.cbmd&quot; near line 151:
 Unknown or unsupported Codebraid command &quot;cb.ruuun&quot;
 Missing valid Codebraid command</code></pre>
 </div>

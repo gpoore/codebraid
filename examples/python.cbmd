@@ -15,9 +15,10 @@ Inline code with `.cb.run` gives raw stdout.
 
 ### Expression and inline notebook
 
-Inline code with `.cb.expr` and `.cb.nb` (`nb` is short for `notebook`)
-evaluate an expression and then insert the raw output into the document, where
-it is interpreted as Markdown.
+Inline code with `.cb.expr` evaluates an expression and then inserts the raw
+output into the document, where it is interpreted as Markdown.  Inline code
+with `.cb.nb` (`nb` is short for `notebook`) is similar, except output is
+shown verbatim.
 
 `"...".join(["*emphasis*", "**strong**", "~~strikeout~~"])`{.python .cb.expr example=true}
 

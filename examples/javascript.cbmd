@@ -16,13 +16,14 @@ specified with `.javascript`, `.js` works as well.
 
 ### Expression and inline notebook
 
-Inline code with `.cb.expr` and `.cb.nb` (`nb` is short for `notebook`)
-evaluate an expression and then insert the raw output into the document, where
-it is interpreted as Markdown.
+Inline code with `.cb.expr` evaluates an expression and then inserts the raw
+output into the document, where it is interpreted as Markdown.  Inline code
+with `.cb.nb` (`nb` is short for `notebook`) is similar, except output is
+shown verbatim.
 
-`4*16`{.js .cb.expr example=true}
+`` `\$2^8 = ${2**8}\$` ``{.js .cb.expr example=true}
 
-`` `\$2^8 = ${2**8}\$` ``{.js .cb.nb example=true}
+`4*16`{.js .cb.nb example=true}
 
 
 ### Stderr

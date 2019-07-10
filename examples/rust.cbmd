@@ -36,15 +36,16 @@ Inline code with `.cb.run` gives raw stdout.
 
 ### Expression and inline notebook
 
-Inline code with `.cb.expr` and `.cb.nb` (`nb` is short for `notebook`)
-evaluate an expression and then insert the raw output into the document, where
-it is interpreted as Markdown.  Notice that since these are expressions, a
-trailing semicolon must not be used.  This is only compatible with expressions
-that return Rust types implementing the `Display` trait.
+Inline code with `.cb.expr` evaluates an expression and then inserts the raw
+output into the document, where it is interpreted as Markdown.  Inline code
+with `.cb.nb` (`nb` is short for `notebook`) is similar, except output is
+shown verbatim.  Notice that since these are expressions, a trailing semicolon
+must not be used.  This is only compatible with expressions that return Rust
+types implementing the `Display` trait.
 
-`(1..1000).map(|x| x*x).sum::<i32>()`{.rust .cb.expr example=true}
+`format!("*{}*", (1..1000).sum::<i32>())`{.rust .cb.expr example=true}
 
-`format!("*{}*", (1..1000).sum::<i32>())`{.rust .cb.nb example=true}
+`(1..1000).map(|x| x*x).sum::<i32>()`{.rust .cb.nb example=true}
 
 If you need to work with an expression that returns a type without the
 `Display` trait, simply use `format!` with the `Debug` trait (`"{:?}"`, or

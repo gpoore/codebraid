@@ -97,21 +97,21 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </div>
 </div>
 <h3 id="expression-and-inline-notebook">Expression and inline notebook</h3>
-<p>Inline code with <code>.cb.expr</code> and <code>.cb.nb</code> (<code>nb</code> is short for <code>notebook</code>) evaluate an expression and then insert the raw output into the document, where it is interpreted as Markdown.</p>
+<p>Inline code with <code>.cb.expr</code> evaluates an expression and then inserts the raw output into the document, where it is interpreted as Markdown. Inline code with <code>.cb.nb</code> (<code>nb</code> is short for <code>notebook</code>) is similar, except output is shown verbatim.</p>
 <div class="example">
 <div class="exampleMarkup">
-<pre><code>`4*16`{.js .cb.expr}</code></pre>
-</div>
-<div class="exampleOutput">
-<p>64</p>
-</div>
-</div>
-<div class="example">
-<div class="exampleMarkup">
-<pre><code>`` `\$2^8 = ${2**8}\$` ``{.js .cb.nb}</code></pre>
+<pre><code>`` `\$2^8 = ${2**8}\$` ``{.js .cb.expr}</code></pre>
 </div>
 <div class="exampleOutput">
 <p><span class="math inline">2<sup>8</sup> = 256</span></p>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`4*16`{.js .cb.nb}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="expr">64</code></p>
 </div>
 </div>
 <h3 id="stderr">Stderr</h3>
@@ -121,7 +121,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <pre><code>`console.logs(1 + 2);`{.js .cb.run session=inline_error}</code></pre>
 </div>
 <div class="exampleOutput">
-<p><code class="stderr">&lt;string&gt;:1 console.logs(1 + 2);         ^  TypeError: console.logs is not a function     at Object.&lt;anonymous&gt; (&lt;string&gt;:1:9)     at Module._compile (internal/modules/cjs/loader.js:701:30)     at Object.Module._extensions..js (internal/modules/cjs/loader.js:712:10)     at Module.load (internal/modules/cjs/loader.js:600:32)     at tryModuleLoad (internal/modules/cjs/loader.js:539:12)     at Function.Module._load (internal/modules/cjs/loader.js:531:3)     at Function.Module.runMain (internal/modules/cjs/loader.js:754:12)     at startup (internal/bootstrap/node.js:283:19)     at bootstrapNodeJSCore (internal/bootstrap/node.js:622:3)</code></p>
+<p><code class="stderr">&lt;string&gt;:1 console.logs(1 + 2);         ^  TypeError: console.logs is not a function     at Object.&lt;anonymous&gt; (&lt;string&gt;:1:9)     at Module._compile (internal/modules/cjs/loader.js:776:30)     at Object.Module._extensions..js (internal/modules/cjs/loader.js:787:10)     at Module.load (internal/modules/cjs/loader.js:653:32)     at tryModuleLoad (internal/modules/cjs/loader.js:593:12)     at Function.Module._load (internal/modules/cjs/loader.js:585:3)     at Function.Module.runMain (internal/modules/cjs/loader.js:829:12)     at startup (internal/bootstrap/node.js:283:19)     at bootstrapNodeJSCore (internal/bootstrap/node.js:622:3)</code></p>
 </div>
 </div>
 <h2 id="block-code">Block code</h2>
@@ -193,16 +193,14 @@ x = 1 + ;
         ^
 
 SyntaxError: Unexpected token ;
-    at new Script (vm.js:80:7)
-    at createScript (vm.js:274:10)
-    at Object.runInThisContext (vm.js:326:10)
-    at Module._compile (internal/modules/cjs/loader.js:664:28)
-    at Object.Module._extensions..js (internal/modules/cjs/loader.js:712:10)
-    at Module.load (internal/modules/cjs/loader.js:600:32)
-    at tryModuleLoad (internal/modules/cjs/loader.js:539:12)
-    at Function.Module._load (internal/modules/cjs/loader.js:531:3)
-    at Function.Module.runMain (internal/modules/cjs/loader.js:754:12)
-    at startup (internal/bootstrap/node.js:283:19)</code></pre>
+    at Module._compile (internal/modules/cjs/loader.js:721:23)
+    at Object.Module._extensions..js (internal/modules/cjs/loader.js:787:10)
+    at Module.load (internal/modules/cjs/loader.js:653:32)
+    at tryModuleLoad (internal/modules/cjs/loader.js:593:12)
+    at Function.Module._load (internal/modules/cjs/loader.js:585:3)
+    at Function.Module.runMain (internal/modules/cjs/loader.js:829:12)
+    at startup (internal/bootstrap/node.js:283:19)
+    at bootstrapNodeJSCore (internal/bootstrap/node.js:622:3)</code></pre>
 </div>
 </div>
 </body>

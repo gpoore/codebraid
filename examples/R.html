@@ -99,21 +99,21 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 </div>
 </div>
 <h3 id="expression-and-inline-notebook">Expression and inline notebook</h3>
-<p>Inline code with <code>.cb.expr</code> and <code>.cb.nb</code> (<code>nb</code> is short for <code>notebook</code>) evaluate an expression and then insert the raw output into the document, where it is interpreted as Markdown. Expressions are converted to strings via <code>toString()</code>.</p>
+<p>Inline code with <code>.cb.expr</code> evaluates an expression and then inserts the raw output into the document, where it is interpreted as Markdown. Inline code with <code>.cb.nb</code> (<code>nb</code> is short for <code>notebook</code>) is similar, except output is shown verbatim. Expressions are converted to strings via <code>toString()</code>.</p>
 <div class="example">
 <div class="exampleMarkup">
-<pre><code>`(x &lt;- 1:20)[x %% 3 == 0]`{.R .cb.expr}</code></pre>
-</div>
-<div class="exampleOutput">
-<p>3, 6, 9, 12, 15, 18</p>
-</div>
-</div>
-<div class="example">
-<div class="exampleMarkup">
-<pre><code>`paste(&quot;$2^8 = &quot;, 2^8, &quot;$&quot;, sep=&quot;&quot;)`{.R .cb.nb}</code></pre>
+<pre><code>`paste(&quot;$2^8 = &quot;, 2^8, &quot;$&quot;, sep=&quot;&quot;)`{.R .cb.expr}</code></pre>
 </div>
 <div class="exampleOutput">
 <p><span class="math inline">2<sup>8</sup> = 256</span></p>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`(x &lt;- 1:20)[x %% 3 == 0]`{.R .cb.nb}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="expr">3, 6, 9, 12, 15, 18</code></p>
 </div>
 </div>
 <h3 id="stderr">Stderr</h3>
