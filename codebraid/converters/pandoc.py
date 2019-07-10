@@ -315,9 +315,9 @@ class PandocCodeChunk(CodeChunk):
             elif output in ('expr', 'stdout', 'stderr'):
                 if format == 'verbatim':
                     if getattr(self, output+'_lines') is not None:
-                        new_nodes = [{'t': t_code, 'c': [['', [self.lang if output == 'expr' else output], []], self.layout_output(output, format)]}]
+                        new_nodes = [{'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]}]
                 elif format == 'verbatim_or_empty':
-                    new_nodes = [{'t': t_code, 'c': [['', [self.lang if output == 'expr' else output], []], self.layout_output(output, format)]}]
+                    new_nodes = [{'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]}]
                 elif format == 'raw':
                     if getattr(self, output+'_lines') is not None:
                         new_nodes = [{'t': t_raw, 'c': ['markdown', self.layout_output(output, format)]}]
