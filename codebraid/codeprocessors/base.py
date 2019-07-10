@@ -1130,7 +1130,7 @@ class CodeProcessor(object):
                 external_file_mime_types = set(['image/png', 'image/jpeg', 'image/svg+xml', 'application/pdf'])
                 while True:
                     try:
-                        msg = jupyter_client.iopub_channel.get_msg(timeout=15)
+                        msg = jupyter_client.iopub_channel.get_msg(timeout=60)
                     except queue.Empty:
                         chunk_runtime_source_error_dict[cc.session_output_index].append('Jupyter kernel "{0}" timed out during execution"'.format(kernel_name))
                         errors = True
