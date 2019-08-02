@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Codebraid with SageMath</title>
+  <style>
+      code{white-space: pre-wrap;}
+      span.smallcaps{font-variant: small-caps;}
+      span.underline{text-decoration: underline;}
+      div.column{display: inline-block; vertical-align: top; width: 50%;}
+  </style>
+  <style>
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode { white-space: pre; position: relative; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+code.sourceCode { white-space: pre-wrap; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <style type="text/css">body {display: block;text-align: left;max-width: 40rem;padding-left: 0.5rem;padding-right: 0.5rem;margin: auto;}pre.numberSource a.sourceLine {position: relative;left: -3em;}pre.numberSource a.sourceLine::before{content: attr(title);position: relative;left: -1em;text-align: right;vertical-align: baseline;border: none;pointer-events: all;display: inline-block;-webkit-touch-callout: none;-webkit-user-select: none;-khtml-user-select: none;-moz-user-select: none;-ms-user-select: none;user-select: none;padding: 0 4px;width: 3em;color: #aaaaaa;}pre.numberSource {margin-left: 2em;border-left: 1px solid #aaaaaa;padding-left: 4px;}div.exampleMarkup:before{content: "Markdown";font-family: monospace;display: block;height: 2em;font-size: 150%;}div.exampleMarkup {padding-top: 0.5em;padding-left: 0.5em;padding-right: 0.5em;margin-top: 2em;margin-bottom: 1em;background-color: honeydew;border-style: solid;border-width: 1px;border-color: limegreen;border-radius: 0.2em;}div.exampleOutput:before{content: "Output";font-family: monospace;display: block;font-size: 150%;}div.exampleOutput {color: black;padding-top: 0.5em;padding-left: 0.5em;padding-right: 0.5em;margin-top: 1em;margin-bottom: 2em;background-color: whitesmoke;border-style: solid;border-width: 1px;border-color: lightgray;border-radius: 0.2em;}div.sourceCode {padding: 0.5em;background-color: aliceblue;border-style: solid;border-width: 1px;border-color: lightskyblue;border-radius: 0.2em;}div.exampleOutput div.sourceCode:before{content: "code";font-family: monospace;display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stdout:before{content: "stdout";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stdout {color: black;padding: 0.5em;background-color: azure;border-style: solid;border-width: 1px;border-color: turquoise;border-radius: 0.2em;padding-left: 0.5em;}code.stdout {color: black;background-color: azure;border-style: solid;border-width: 1px;border-color: turquoise;}pre.stderr:before{content: "stderr";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stderr {color: red;padding: 0.5em;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;border-radius: 0.2em;padding-left: 0.5em;}code.stderr {color: red;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;}pre.sourceError:before{content: "Source error";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.sourceError {color: red;padding: 0.5em;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;border-radius: 0.2em;padding-left: 0.5em;}code.sourceError {color: red;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;}</style>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Codebraid with SageMath</h1>
+</header>
+<h2 id="inline-code">Inline code</h2>
+<h3 id="run">Run</h3>
+<p>Inline code with <code>.cb.run</code> gives raw stdout.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`print(1 + 2)`{.sage .cb.run}</code></pre>
+</div>
+<div class="exampleOutput">
+<p>3</p>
+</div>
+</div>
+<h3 id="expression-and-inline-notebook">Expression and inline notebook</h3>
+<p>Inline code with <code>.cb.expr</code> evaluates an expression and then inserts the raw output into the document, where it is interpreted as Markdown. Inline code with <code>.cb.nb</code> (<code>nb</code> is short for <code>notebook</code>) is similar, except output is shown verbatim.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`&quot;...&quot;.join([&quot;*emphasis*&quot;, &quot;**strong**&quot;, &quot;~~strikeout~~&quot;])`{.sage .cb.expr}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><em>emphasis</em>…<strong>strong</strong>…<del>strikeout</del></p>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`&quot;$2^8 = {}$&quot;.format(2**8)`{.sage .cb.nb}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="expr">$2^8 = 256$</code></p>
+</div>
+</div>
+<h3 id="stderr">Stderr</h3>
+<p>In the event of an error, inline code automatically shows stderr by default. This code is executed in its own session, <code>inline_error</code>, so that it does not impact other examples.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`1 + &quot;a&quot;`{.sage .cb.run session=inline_error}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="stderr">Traceback (most recent call last):   File &quot;&lt;string&gt;.py&quot;, line 1, in &lt;module&gt;     _sage_const_1  + &quot;a&quot;   File &quot;sage/rings/integer.pyx&quot;, line 1584, in sage.rings.integer.Integer.__add__ (/build/sagemath-zWcbUi/sagemath-7.4/sage/src/build/cythonized/sage/rings/integer.c:11080)   File &quot;sage/structure/coerce.pyx&quot;, line 1107, in sage.structure.coerce.CoercionModel_cache_maps.bin_op (/build/sagemath-zWcbUi/sagemath-7.4/sage/src/build/cythonized/sage/structure/coerce.c:10497) TypeError: unsupported operand parent(s) for &#39;+&#39;: &#39;Integer Ring&#39; and &#39;&lt;type &#39;str&#39;&gt;&#39;</code></p>
+</div>
+</div>
+<h3 id="source-errors">Source errors</h3>
+<p>A message is also displayed for errors in the Markdown source. This usually includes the name of the document source and the approximate line number.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`print(1 + 2)`{.pythn .cb.run session=inline_source_error}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="sourceError">SOURCE ERROR in &quot;sagemath.cbmd&quot; near line 42: Language definition for &quot;pythn&quot; does not exist, or is not indexed</code></p>
+</div>
+</div>
+<h3 id="code">Code</h3>
+<p>Inline code with <code>.cb.code</code> simply displays the code. Nothing is executed.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`print(&quot;Hello from SageMath!&quot;)`{.sage .cb.code}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="sage">print(&quot;Hello from SageMath!&quot;)</code></p>
+</div>
+</div>
+<p>The output is identical to that of</p>
+<pre><code>`print(&quot;Hello from SageMath!&quot;)`{.sage}</code></pre>
+<p>so <code>.cb.code</code> is only really useful when it is combined with other Codebraid features. For example, it is possible to give code with <code>.cb.code</code> a <code>name</code>, and then copy it by <code>name</code> into a separate location where it is executed.</p>
+<h2 id="block-code">Block code</h2>
+<h3 id="run-1">Run</h3>
+<p>Code blocks with <code>.cb.run</code> give raw stdout. There is continuity between code blocks so long as they are in the same session; variables persist.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.sage .cb.run session=hello}
+x = &#39;Hello from *SageMath!*&#39;
+```</code></pre>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.sage .cb.run session=hello}
+print(x)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<p>Hello from <em>SageMath!</em></p>
+</div>
+</div>
+<h3 id="notebook">Notebook</h3>
+<p>Code blocks with <code>.cb.nb</code> show the code and also the verbatim stdout.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.sage .cb.nb session=random}
+import random
+random.seed(2)
+rnums = [random.randrange(100) for n in range(10)]
+print(&quot;Random numbers: {}&quot;.format(rnums))
+print(&quot;Sorted numbers: {}&quot;.format(sorted(rnums)))
+print(&quot;Range: {}&quot;.format([min(rnums), max(rnums)]))
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb11" data-startFrom="1"><pre class="sourceCode numberSource sage numberLines"><code class="sourceCode"><span id="cb11-1"><a href="#cb11-1"></a>import random</span>
+<span id="cb11-2"><a href="#cb11-2"></a>random.seed(2)</span>
+<span id="cb11-3"><a href="#cb11-3"></a>rnums = [random.randrange(100) for n in range(10)]</span>
+<span id="cb11-4"><a href="#cb11-4"></a>print(&quot;Random numbers: {}&quot;.format(rnums))</span>
+<span id="cb11-5"><a href="#cb11-5"></a>print(&quot;Sorted numbers: {}&quot;.format(sorted(rnums)))</span>
+<span id="cb11-6"><a href="#cb11-6"></a>print(&quot;Range: {}&quot;.format([min(rnums), max(rnums)]))</span></code></pre></div>
+<pre class="stdout"><code>Random numbers: [95, 94, 5, 8, 83, 73, 66, 30, 60, 60]
+Sorted numbers: [5, 8, 30, 60, 60, 66, 73, 83, 94, 95]
+Range: [5, 95]</code></pre>
+</div>
+</div>
+<h3 id="stderr-1">Stderr</h3>
+<p>Code blocks show stderr automatically by default.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.sage .cb.nb session=block_error}
+var = 123
+print(var)
+sys.stdout.flush()
+var += &quot;a&quot;
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb14" data-startFrom="1"><pre class="sourceCode numberSource sage numberLines"><code class="sourceCode"><span id="cb14-1"><a href="#cb14-1"></a>var = 123</span>
+<span id="cb14-2"><a href="#cb14-2"></a>print(var)</span>
+<span id="cb14-3"><a href="#cb14-3"></a>sys.stdout.flush()</span>
+<span id="cb14-4"><a href="#cb14-4"></a>var += &quot;a&quot;</span></code></pre></div>
+<pre class="stdout"><code>123</code></pre>
+<pre class="stderr"><code>Traceback (most recent call last):
+  File &quot;source.sage.py&quot;, line 4, in &lt;module&gt;
+    var += &quot;a&quot;
+  File &quot;sage/rings/integer.pyx&quot;, line 1584, in sage.rings.integer.Integer.__add__ (/build/sagemath-zWcbUi/sagemath-7.4/sage/src/build/cythonized/sage/rings/integer.c:11080)
+  File &quot;sage/structure/coerce.pyx&quot;, line 1107, in sage.structure.coerce.CoercionModel_cache_maps.bin_op (/build/sagemath-zWcbUi/sagemath-7.4/sage/src/build/cythonized/sage/structure/coerce.c:10497)
+TypeError: unsupported operand parent(s) for &#39;+&#39;: &#39;Integer Ring&#39; and &#39;&lt;type &#39;str&#39;&gt;&#39;</code></pre>
+</div>
+</div>
+<h3 id="source-errors-1">Source errors</h3>
+<p>A message is also displayed for errors in the Markdown source. This usually includes the name of the document source and the approximate line number.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.sage .cb.ruuun session=block_source_error}
+print(1 + 2)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<pre class="sourceError"><code>SOURCE ERROR in &quot;sagemath.cbmd&quot; near line 110:
+Unknown or unsupported Codebraid command &quot;cb.ruuun&quot;
+Missing valid Codebraid command</code></pre>
+</div>
+</div>
+<h3 id="code-1">Code</h3>
+<p>Code blocks with <code>.cb.code</code> simply display the code. Nothing is executed.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.sage .cb.code}
+print(&quot;Hello from SageMath!&quot;)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb20" data-startFrom="1"><pre class="sourceCode numberSource sage numberLines"><code class="sourceCode"><span id="cb20-1"><a href="#cb20-1"></a>print(&quot;Hello from SageMath!&quot;)</span></code></pre></div>
+</div>
+</div>
+<p>The output is essentially identical to that of a normal code block; the only differences are some default display options, like line numbering. Thus <code>.cb.code</code> is primarily useful when it is combined with other Codebraid features. For example, it is possible to give code with <code>.cb.code</code> a <code>name</code>, and then copy it by <code>name</code> into a separate location where it is executed.</p>
+<h2 id="other-options">Other options</h2>
+<p>By default, stdout and stderr are only shown if they are non-empty. In some situations, it may be useful to represent empty output visually as confirmation that there indeed was none.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.sage .cb.run show=code+stdout+stderr:verbatim_or_empty}
+x = 1 + 2
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb22" data-startFrom="1"><pre class="sourceCode numberSource sage numberLines"><code class="sourceCode"><span id="cb22-1"><a href="#cb22-1"></a>x = 1 + 2</span></code></pre></div>
+<pre class="stderr"><code> </code></pre>
+</div>
+</div>
+<p>It is also possible to selectively hide output from a code chunk.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.sage .cb.nb hide=stdout}
+print(x)
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb25" data-startFrom="2"><pre class="sourceCode numberSource sage numberLines"><code class="sourceCode" style="counter-reset: source-line 1;"><span id="cb25-2"><a href="#cb25-2"></a>print(x)</span></code></pre></div>
+</div>
+</div>
+<p><code>hide</code> takes any combination of <code>code</code>, <code>stderr</code>, and <code>stdout</code>, or simply <code>all</code>.</p>
+</body>
+</html>

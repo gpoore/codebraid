@@ -1,0 +1,147 @@
+---
+title: "Codebraid with SageMath"
+---
+
+
+## Inline code
+
+
+### Run
+
+Inline code with `.cb.run` gives raw stdout.
+
+`print(1 + 2)`{.sage .cb.run example=true}
+
+
+### Expression and inline notebook
+
+Inline code with `.cb.expr` evaluates an expression and then inserts the raw
+output into the document, where it is interpreted as Markdown.  Inline code
+with `.cb.nb` (`nb` is short for `notebook`) is similar, except output is
+shown verbatim.
+
+`"...".join(["*emphasis*", "**strong**", "~~strikeout~~"])`{.sage .cb.expr example=true}
+
+`"$2^8 = {}$".format(2**8)`{.sage .cb.nb example=true}
+
+
+### Stderr
+
+In the event of an error, inline code automatically shows stderr by default.
+This code is executed in its own session, `inline_error`, so that it does
+not impact other examples.
+
+`1 + "a"`{.sage .cb.run session=inline_error example=true}
+
+
+### Source errors
+
+A message is also displayed for errors in the Markdown source.  This usually
+includes the name of the document source and the approximate line number.
+
+`print(1 + 2)`{.pythn .cb.run session=inline_source_error example=true}
+
+
+### Code
+
+Inline code with `.cb.code` simply displays the code.  Nothing is executed.
+
+`print("Hello from SageMath!")`{.sage .cb.code example=true}
+
+The output is identical to that of
+```
+`print("Hello from SageMath!")`{.sage}
+```
+so `.cb.code` is only really useful when it is combined with other Codebraid
+features.  For example, it is possible to give code with `.cb.code` a `name`,
+and then copy it by `name` into a separate location where it is executed.
+
+
+
+## Block code
+
+
+### Run
+
+Code blocks with `.cb.run` give raw stdout.  There is continuity between code
+blocks so long as they are in the same session; variables persist.
+
+```{.sage .cb.run session=hello example=true}
+x = 'Hello from *SageMath!*'
+```
+
+```{.sage .cb.run session=hello example=true}
+print(x)
+```
+
+
+### Notebook
+
+Code blocks with `.cb.nb` show the code and also the verbatim stdout.
+
+```{.sage .cb.nb session=random example=true}
+import random
+random.seed(2)
+rnums = [random.randrange(100) for n in range(10)]
+print("Random numbers: {}".format(rnums))
+print("Sorted numbers: {}".format(sorted(rnums)))
+print("Range: {}".format([min(rnums), max(rnums)]))
+```
+
+
+### Stderr
+
+Code blocks show stderr automatically by default.
+
+```{.sage .cb.nb session=block_error example=true}
+var = 123
+print(var)
+sys.stdout.flush()
+var += "a"
+```
+
+
+### Source errors
+
+A message is also displayed for errors in the Markdown source.  This usually
+includes the name of the document source and the approximate line number.
+
+```{.sage .cb.ruuun session=block_source_error example=true}
+print(1 + 2)
+```
+
+
+### Code
+
+Code blocks with `.cb.code` simply display the code.  Nothing is executed.
+
+```{.sage .cb.code example=true}
+print("Hello from SageMath!")
+```
+
+The output is essentially identical to that of a normal code block; the only
+differences are some default display options, like line numbering.  Thus
+`.cb.code` is primarily useful when it is combined with other Codebraid
+features.  For example, it is possible to give code with `.cb.code` a `name`,
+and then copy it by `name` into a separate location where it is executed.
+
+
+
+## Other options
+
+By default, stdout and stderr are only shown if they are non-empty.  In some
+situations, it may be useful to represent empty output visually as
+confirmation that there indeed was none.
+
+```{.sage .cb.run show=code+stdout+stderr:verbatim_or_empty example=true}
+x = 1 + 2
+```
+
+It is also possible to selectively hide output from a code chunk.
+
+```{.sage .cb.nb hide=stdout example=true}
+print(x)
+```
+
+`hide` takes any combination of `code`, `stderr`, and `stdout`, or simply
+`all`.

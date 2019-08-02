@@ -33,3 +33,34 @@ inline_expression_formatter =
 error_patterns = 'Error:'
 warning_patterns = 'Warning:'
 line_number_patterns = ['line {number}', ':{number}:']
+
+
+|=== sage
+(default=$~.python)>
+extension = 'sage'
+
+executable = 'sage'
+
+source_template =
+    |```
+    # -*- coding: utf-8 -*-
+
+    import sys
+    import codecs
+    if sys.version_info[0] == 2:
+        sys.stdout = codecs.getwriter('utf8')(sys.stdout, 'strict')
+        sys.stderr = codecs.getwriter('utf8')(sys.stderr, 'strict')
+    else:
+        sys.stdout = codecs.getwriter('utf8')(sys.stdout.buffer, 'strict')
+        sys.stderr = codecs.getwriter('utf8')(sys.stderr.buffer, 'strict')
+
+    {code}
+    |```/
+
+chunk_wrapper =
+    |```
+    sys.stdout.write('\n{stdout_delim}\n')
+    sys.stdout.flush()
+    sys.stderr.write('\n{stderr_delim}\n')
+    {code}
+    |```/
