@@ -178,7 +178,7 @@ summary(random_ints)
    6.00   28.75   60.00   55.10   84.00   95.00 </code></pre>
 </div>
 </div>
-<p>While there is not yet support for automatically including plots, including them manually is straightforward.</p>
+<p>While there is not yet support for automatically including plots when using the built-in code execution system, including them manually is straightforward. (Plots <em>are</em> included automatically when using the <code>jupyter_kernel</code> option. See the documentation and Jupyter example document.)</p>
 <p>Note that this example uses the <code>show</code> keyword argument for the code block so that the output is interpreted as raw Markdown rather than displayed verbatim (the default for <code>.cb.nb</code>).</p>
 <div class="example">
 <div class="exampleMarkup">
@@ -239,7 +239,7 @@ cat(1 + 2)
 ```</code></pre>
 </div>
 <div class="exampleOutput">
-<pre class="sourceError"><code>SOURCE ERROR in &quot;R.cbmd&quot; near line 122:
+<pre class="sourceError"><code>SOURCE ERROR in &quot;R.cbmd&quot; near line 124:
 Unknown or unsupported Codebraid command &quot;cb.ruuun&quot;
 Missing valid Codebraid command</code></pre>
 </div>

@@ -81,8 +81,10 @@ cat("Random integers: ", random_ints, "\n\n")
 summary(random_ints)
 ```
 
-While there is not yet support for automatically including plots, including
-them manually is straightforward.
+While there is not yet support for automatically including plots when using
+the built-in code execution system, including them manually is
+straightforward.  (Plots *are* included automatically when using the
+`jupyter_kernel` option.  See the documentation and Jupyter example document.)
 
 Note that this example uses the `show` keyword argument for the code block
 so that the output is interpreted as raw Markdown rather than displayed
