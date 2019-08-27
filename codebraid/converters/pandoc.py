@@ -1037,7 +1037,7 @@ class PandocConverter(Converter):
                         line_index += len(node_contents)
                     else:
                         line_index = last_line_index
-                        for node_contents_elem in node_contents.split(' '):
+                        for node_contents_elem in node_contents.replace('\n', ' ').split(' '):
                             line_index = line.find(node_contents_elem, line_index)
                             if line_index >= 0:
                                 line_index += len(node_contents_elem)
