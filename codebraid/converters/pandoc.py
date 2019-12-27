@@ -482,10 +482,14 @@ def _get_walk_closure(enumerate=enumerate, isinstance=isinstance):
             if isinstance(obj, list):
                 yield from walk_node_list(obj)
             elif isinstance(obj, dict):
+                try:
+                    node_type = obj['t']
+                except KeyError:
+                    continue
                 yield (obj, node_list, index)
                 obj_contents = obj.get('c', None)
                 if isinstance(obj_contents, list):
-                    if obj['t'] != 'DefinitionList':
+                    if node_type != 'DefinitionList':
                         yield from walk_node_list(obj_contents)
                     else:
                         for elem in obj_contents:
@@ -509,12 +513,16 @@ def _get_walk_less_note_contents_closure(enumerate=enumerate, isinstance=isinsta
             if isinstance(obj, list):
                 yield from walk_node_list_less_note_contents(obj)
             elif isinstance(obj, dict):
+                try:
+                    node_type = obj['t']
+                except KeyError:
+                    continue
                 yield (obj, node_list, index)
-                if obj['t'] == 'Note':
+                if node_type == 'Note':
                     continue
                 obj_contents = obj.get('c', None)
                 if isinstance(obj_contents, list):
-                    if obj['t'] != 'DefinitionList':
+                    if node_type != 'DefinitionList':
                         yield from walk_node_list_less_note_contents(obj_contents)
                     else:
                         for elem in obj_contents:
