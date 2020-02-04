@@ -9,10 +9,14 @@ passes them to `pandoc` internally.
 
 Codebraid provides two options for executing code.  It includes a built-in
 code execution system that currently supports **Python 3.5+**, **Julia**,
-**Rust**, **R**, **Bash**, and **JavaScript**.  Code can also be executed
-using **Jupyter kernels**, with support for rich output like plots.
+**Rust**, **R**, **Bash**, **JavaScript**, and **SageMath**.  Code can also be
+executed using **Jupyter kernels**, with support for rich output like plots.
 
 **Development:**  https://github.com/gpoore/codebraid
+
+**Citing Codebraid:**
+["Codebraid: Live Code in Pandoc Markdown"](http://conference.scipy.org/proceedings/scipy2019/geoffrey_poore.html),
+Geoffrey M. Poore, *Proceedings of the 18th Python in Science Conference,* 2019, 54-61.
 
 View example HTML output, or see the Markdown source or raw HTML (the Python
 and Rust examples demonstrate more advanced features at the end):
@@ -207,8 +211,8 @@ situations.
 
 Code is made executable by adding a Codebraid class to its
 [Pandoc attributes](http://pandoc.org/MANUAL.html#fenced-code-blocks).
-For example, `` `code`{.python}` `` becomes
-`` `code`{.python .cb.run}` ``.
+For example, `` `code`{.python} `` becomes
+`` `code`{.python .cb.run} ``.
 
 * `.cb.code` — Insert code verbatim, but do not run it.  This is primarily
   useful when combined with other features like naming and then copying code
