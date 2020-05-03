@@ -36,7 +36,7 @@ line_number_patterns = ['line {number}', ':{number}:']
 
 
 |=== sage
-(default=$~.python)>
+(dict, default=$~.python)>
 extension = 'sage'
 
 executable = 'sage'
