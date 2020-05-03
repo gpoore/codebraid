@@ -1,5 +1,18 @@
 # Change Log
 
+## v0.5.0 (2020-05-??)
+
+* Fixed Pandoc 2.8+ compatibility by using `-raw_attribute` in intermediate
+  Markdown.  Code output in raw format (interpreted as Markdown) is no longer
+  lost when converting to document formats other than Markdown (#26).
+* Added support for SageMath (#5).
+* Documentation now includes details of code execution and how this can result
+  in different output compared to interactive sessions (#11).
+* AST walking code no longer assumes that all dict nodes represent types and
+  have a "t" (type) key.  Dict nodes without a "t" key are now skipped.  This
+  fixes a bug with citations of the form `[@cite]` (#12).
+
+
 ## v0.4.0 (2019-07-10)
 
 * Added support for Jupyter kernels with the `jupyter_kernel` option, which

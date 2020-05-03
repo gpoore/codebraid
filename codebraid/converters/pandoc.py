@@ -888,10 +888,13 @@ class PandocConverter(Converter):
         # such as might occur in an incomplete bullet list, are difficult to
         # deal with.
 
-        # Convert source string to trace plus AST with Pandoc
-        from_format_pandoc_extensions = self.from_format_pandoc_extensions or ''
-        if self.from_format == 'markdown':
-            from_format_pandoc_extensions += '-latex_macros-smart'
+        # Convert source string to trace plus AST with Pandoc.
+        # Order of extensions is important: earlier override later.
+        from_format_pandoc_extensions = ''.join(['-latex_macros',
+                                                 '-smart'])
+        if self.from_format_pandoc_extensions is not None:
+            from_format_pandoc_extensions += self.from_format_pandoc_extensions
+
         stdout_bytes, stderr_bytes = self._run_pandoc(input=source_string,
                                                       input_name=single_source_name,
                                                       from_format=self.from_format,
@@ -909,9 +912,7 @@ class PandocConverter(Converter):
         if not (isinstance(ast, dict) and
                 'pandoc-api-version' in ast and isinstance(ast['pandoc-api-version'], list) and
                 all(isinstance(x, int) for x in ast['pandoc-api-version']) and 'blocks' in ast):
-            raise PandocError('Incompatible Pandoc API version')
-        if ast['pandoc-api-version'][0:2] != [1, 17]:
-            warnings.warn('Pandoc API is {0}.{1}, but Codebraid is designed for 1.17; this might cause issues'.format(*ast['pandoc-api-version'][0:2]))
+            raise PandocError('Unrecognized AST format (incompatible Pandoc version?)')
         self._asts[single_source_name] = ast
 
         source_string_lines = util.splitlines_lf(source_string) or ['']
@@ -1171,8 +1172,13 @@ class PandocConverter(Converter):
                     node['c'].insert(0, io_map_span_node(source_name, line_number))
 
         # Convert modified AST to markdown, then back, so that raw output
-        # can be reinterpreted as markdown
-        processed_to_format_extensions = self.from_format_pandoc_extensions or '' + '-latex_macros-smart'
+        # can be reinterpreted as markdown.
+        # Order of extensions is important: earlier override later.
+        processed_to_format_extensions = ''.join(['-latex_macros',
+                                                  '-raw_attribute',
+                                                  '-smart'])
+        if self.from_format_pandoc_extensions is not None:
+            processed_to_format_extensions += self.from_format_pandoc_extensions
         processed_markup = collections.OrderedDict()
         for source_name, ast in self._asts.items():
             markup_bytes, stderr_bytes = self._run_pandoc(input=json.dumps(ast),

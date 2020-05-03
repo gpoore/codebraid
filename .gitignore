@@ -1,5 +1,8 @@
 # codebraid
 _dev_research/
+*/_codebraid
+examples/*.jpg
+examples/*.png
 *.ffs_db
 
 # Byte-compiled / optimized / DLL files
