@@ -6,6 +6,7 @@
   Markdown.  Code output in raw format (interpreted as Markdown) is no longer
   lost when converting to document formats other than Markdown (#26).
 * Added support for SageMath (#5).
+* Julia now uses `--project=@.` (#10).
 * Documentation now includes details of code execution and how this can result
   in different output compared to interactive sessions (#11).
 * AST walking code no longer assumes that all dict nodes represent types and

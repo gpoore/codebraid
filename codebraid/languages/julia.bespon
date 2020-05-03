@@ -1,6 +1,8 @@
 |=== julia
 extension = 'jl'
 
+run_command = '{executable} --project=@. {source}'
+
 run_encoding = 'utf8'
 
 chunk_wrapper =
