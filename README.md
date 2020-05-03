@@ -214,6 +214,34 @@ Code is made executable by adding a Codebraid class to its
 For example, `` `code`{.python} `` becomes
 `` `code`{.python .cb.run} ``.
 
+When code is executed, the output will depend on whether the built-in code
+execution system or a Jupyter kernel is used.
+
+When code is executed with the built-in system, the output is equivalent to
+collecting all code for each session of each language, saving it to a file,
+and then executing it (with an added compile step for some languages).  For
+example, running Python code is equivalent to saving it to `file.py` and then
+running `python file.py`, while running R code is equivalent to saving it to
+`file.R` and then running `Rscript file.R`.  Code is not executed as it would
+be in an interactive session (like running `python` or `R` at the command
+prompt).  As a result, some output that would be present in an interactive
+session is absent.  For example, in interactive sessions for some languages,
+simply entering a variable returns a string representation without explicit
+printing, and plotting opens a separate image window or displays an image
+inline.  Such output is absent in Codebraid unless it is also produced when
+code is executed as a script rather than in an interactive session.  The
+`.cb.expr` command is provided for when an inline string representation of a
+variable is desired.
+
+An option for interactive-style code execution with the built-in system is
+planned for a future release.  In the meantime, many interactive-style
+features are available between the `.cb.expr` command and Jupyter kernels.
+
+When code is executed with a Jupyter kernel, the default output will be
+equivalent to executing it in a Jupyter notebook.  Rich output such plots,
+images, and LaTeX math will be displayed automatically by default.  This can
+be customized by using the `show` and `hide` options.
+
 * `.cb.code` — Insert code verbatim, but do not run it.  This is primarily
   useful when combined with other features like naming and then copying code
   chunks.
@@ -224,10 +252,10 @@ For example, `` `code`{.python} `` becomes
 
 * `.cb.nb` — Execute code in notebook mode.  For inline code, this is
   equivalent to `.cb.expr` with verbatim output unless a Jupyter kernel is
-  used, in which case rich output will be displayed.  For code blocks, this
-  inserts the code verbatim, followed by any printed output (stdout) verbatim.
-  If stderr exists, it is also inserted verbatim.  When a Jupyter kernel is
-  used, rich output is also displayed.
+  used, in which case rich output like plots or LaTeX will be displayed.  For
+  code blocks, this inserts the code verbatim, followed by any printed output
+  (stdout) verbatim.  If stderr exists, it is also inserted verbatim.  When a
+  Jupyter kernel is used, rich output like plots or LaTeX is also displayed.
 
 * `.cb.paste` — Insert code and/or output copied from one or more named code
   chunks.  The `copy` keyword is used to specify chunks to be copied.  This
@@ -246,7 +274,7 @@ For example, `` `code`{.python} `` becomes
 
 * `.cb.run` — Run code and interpret any printed content (stdout) as Markdown.
   Also insert stderr verbatim if it exists.  When a Jupyter kernel is used,
-  rich output is also displayed.
+  rich output like plots or LaTeX is also displayed.
 
 ### Keyword arguments
 
