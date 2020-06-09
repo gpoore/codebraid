@@ -319,7 +319,8 @@ class Options(dict):
                             for kw in ('first_number', 'line_numbers', 'rewrap_lines', 'rewrap_width', 'expand_tabs', 'tab_size')])
     _first_chunk_execute_keywords = set(['executable', 'jupyter_kernel'])
     _first_chunk_save_keywords = set(['save', 'save_as'])
-    _first_chunk_keywords = _first_chunk_execute_keywords | _first_chunk_save_keywords
+    _first_chunk_other_keywords = set(['jupyter_timeout'])
+    _first_chunk_keywords = _first_chunk_execute_keywords | _first_chunk_save_keywords | _first_chunk_other_keywords
 
     keywords = _base_keywords | _layout_keywords | _first_chunk_keywords
 
@@ -420,8 +421,15 @@ class Options(dict):
             else:
                 first_chunk_options[key] = value
 
+    def _option_first_chunk_int_warning(self, key, value):
+        if not isinstance(value, int):
+            self.code_chunk.source_warnings.append('Invalid "{0}" value "{1}"'.format(key, value))
+        else:
+            self['first_chunk_options'][key] = value
+
     _option_executable = _option_first_chunk_string_error
     _option_jupyter_kernel = _option_first_chunk_string_error
+    _option_jupyter_timeout = _option_first_chunk_int_warning
     _option_save = _option_first_chunk_bool_error
     _option_save_as = _option_first_chunk_string_error
 

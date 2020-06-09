@@ -137,6 +137,7 @@ class Session(object):
         self.lang_def = None
         self.executable = None
         self.jupyter_kernel = None
+        self.jupyter_timeout = None
 
         self.code_options = None
         self.code_chunks = []
@@ -170,6 +171,7 @@ class Session(object):
             jupyter_kernel = code_chunk.options['first_chunk_options'].get('jupyter_kernel')
             if jupyter_kernel is not None:
                 self.jupyter_kernel = jupyter_kernel
+                self.jupyter_timeout = code_chunk.options['first_chunk_options'].get('jupyter_timeout')
             else:
                 self.lang_def = self.code_processor.language_definitions[self.lang]
                 self.executable = code_chunk.options['first_chunk_options'].get('executable')
@@ -1081,7 +1083,7 @@ class CodeProcessor(object):
 
         # https://jupyter-client.readthedocs.io/en/stable/api/client.html
         # https://jupyter-client.readthedocs.io/en/stable/messaging.html#messages-on-the-iopub-pub-sub-channel
-        kernel_name = session.code_chunks[0].options['first_chunk_options']['jupyter_kernel']
+        kernel_name = session.jupyter_kernel
         try:
             import jupyter_client
         except ImportError:
@@ -1130,7 +1132,7 @@ class CodeProcessor(object):
                 external_file_mime_types = set(['image/png', 'image/jpeg', 'image/svg+xml', 'application/pdf'])
                 while True:
                     try:
-                        msg = jupyter_client.iopub_channel.get_msg(timeout=60)
+                        msg = jupyter_client.iopub_channel.get_msg(timeout=session.jupyter_timeout or 60)
                     except queue.Empty:
                         chunk_runtime_source_error_dict[cc.session_output_index].append('Jupyter kernel "{0}" timed out during execution"'.format(kernel_name))
                         errors = True

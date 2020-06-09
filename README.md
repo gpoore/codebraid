@@ -305,6 +305,9 @@ session is in use).
   kernel.  Except when otherwise specified, Jupyter kernels should be usable
   just like the built-in code execution system.
 
+* `jupyter_timeout`={int} — Jupyter kernel timeout per code chunk in seconds.
+  The default is 60.
+
 
 #### Execution
 

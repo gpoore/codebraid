@@ -183,6 +183,7 @@ def _get_keyval_processors():
                                     **expand_tabs,
                                     **first_number,
                                     **include,
+                                    'jupyter_timeout': keyval_int,
                                     **line_anchors,
                                     **line_numbers,
                                     'name': keyval_generic,

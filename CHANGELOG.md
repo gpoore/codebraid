@@ -1,7 +1,8 @@
 # Change Log
 
-## v0.5.0 (2020-05-??)
+## v0.5.0 (dev)
 
+* Added option `jupyter_timeout` for the first code chunk in a session (#30).
 * Fixed Pandoc 2.8+ compatibility by using `-raw_attribute` in intermediate
   Markdown.  Code output in raw format (interpreted as Markdown) is no longer
   lost when converting to document formats other than Markdown (#26).
