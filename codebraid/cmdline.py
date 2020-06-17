@@ -9,6 +9,7 @@
 
 
 import argparse
+import io
 import sys
 from . import converters
 from .version import __version__ as version
@@ -17,7 +18,34 @@ from .version import __version__ as version
 
 
 def main():
-    parser = argparse.ArgumentParser(prog='codebraid')
+    class ArgumentParser(argparse.ArgumentParser):
+        '''
+        Custom argument parser that lists "[<PANDOC OPTIONS>]" in help,
+        instead of either leaving them off altogether due to
+        argparse.SUPPRESS, or listing them all and making help unnecessarily
+        verbose.
+        '''
+        def print_help(self):
+            original_stdout = sys.stdout
+            try:
+                temp_stdout = io.StringIO()
+                sys.stdout = temp_stdout
+                super().print_help()
+                help_text = temp_stdout.getvalue()
+            finally:
+                sys.stdout = original_stdout
+            try:
+                before, after = help_text.split('FILE', 1)
+            except ValueError:
+                print(help_text)
+            else:
+                indent = before.rsplit('\n', 1)[1]
+                help_text = before + '[<PANDOC OPTIONS>]\n' + indent + 'FILE' + after
+                help_text += '  [<PANDOC OPTIONS>]\n'
+                help_text += indent + 'See output of "pandoc --help"\n'
+                print(help_text)
+
+    parser = ArgumentParser(prog='codebraid', allow_abbrev=False)
     parser.set_defaults(func=lambda x: parser.print_help())
     parser.add_argument('--version', action='version', version='Codebraid {0}'.format(version))
     subparsers = parser.add_subparsers(dest='subparser_name')
@@ -25,9 +53,9 @@ def main():
     parser_pandoc = subparsers.add_parser('pandoc',
                                           help='Execute code embedded in a document format supported by Pandoc (requires Pandoc >= 2.4)')
     parser_pandoc.set_defaults(func=pandoc)
-    parser_pandoc.add_argument('-f', '--from', dest='from_format',
+    parser_pandoc.add_argument('-f', '--from', '-r', '--read', dest='from_format',
                                help='From format (may include Pandoc format extensions: format+ext1-ext2)')
-    parser_pandoc.add_argument('-t', '--to', dest='to_format',
+    parser_pandoc.add_argument('-t', '--to', '-w', '--write', dest='to_format',
                                help='To format (may include Pandoc format extensions: format+ext1-ext2)')
     parser_pandoc.add_argument('-o', '--output',
                                help='File for saving output (otherwise it is written to stdout)')
@@ -35,9 +63,9 @@ def main():
                                help='Overwrite existing files',
                                action='store_true')
     parser_pandoc.add_argument('-s', '--standalone', action='store_true',
-                               help='Create Pandoc standalone document')
+                               help=argparse.SUPPRESS)
     parser_pandoc.add_argument('--file-scope', action='store_true', dest='pandoc_file_scope',
-                               help='Pandoc parses multiple files individually before merging their output, instead of merging before parsing')
+                               help=argparse.SUPPRESS)
     parser_pandoc.add_argument('--no-cache', action='store_true',
                                help='Do not cache code output so that code is always executed during each build '
                                     '(a cache directory may still be created for use with temporary files)')
@@ -45,16 +73,32 @@ def main():
                                help='Location for caching code output (default is "_codebraid" in document directory)')
     parser_pandoc.add_argument('files', nargs='+', metavar='FILE',
                                help="Files (multiple files are allowed for formats supported by Pandoc)")
-    for opt, narg in PANDOC_OPTIONS.items():
+    for opts_or_long_opt, narg in PANDOC_OPTIONS.items():
+        if isinstance(opts_or_long_opt, tuple):
+            short_opt, long_opt = opts_or_long_opt
+        else:
+            short_opt, long_opt = (None, opts_or_long_opt)
         if narg == 0:
-            parser_pandoc.add_argument(opt, action='store_true', dest=opt,
-                                       help='Pandoc option; see Pandoc documentation')
+            if short_opt is None:
+                parser_pandoc.add_argument(long_opt, action='store_true', dest=long_opt,
+                                           help=argparse.SUPPRESS)
+            else:
+                parser_pandoc.add_argument(short_opt, long_opt, action='store_true', dest=long_opt,
+                                           help=argparse.SUPPRESS)
         elif narg == 1:
-            parser_pandoc.add_argument(opt, dest=opt, metavar='PANDOC', action='append',
-                                       help='Pandoc option; see Pandoc documentation')
+            if short_opt is None:
+                parser_pandoc.add_argument(long_opt, dest=long_opt, action='append',
+                                           help=argparse.SUPPRESS)
+            else:
+                parser_pandoc.add_argument(short_opt, long_opt, dest=long_opt, action='append',
+                                           help=argparse.SUPPRESS)
         elif narg == '?':
-            parser_pandoc.add_argument(opt, nargs='?', const=True, default=None, dest=opt, metavar='PANDOC',
-                                       help='Pandoc option; see Pandoc documentation')
+            if short_opt is None:
+                parser_pandoc.add_argument(long_opt, nargs='?', const=True, default=None, dest=long_opt,
+                                           help=argparse.SUPPRESS)
+            else:
+                parser_pandoc.add_argument(short_opt, long_opt, nargs='?', const=True, default=None, dest=long_opt,
+                                           help=argparse.SUPPRESS)
         else:
             raise ValueError
 
@@ -66,6 +110,15 @@ def main():
 
 def pandoc(args):
     other_pandoc_args = []
+    if vars(args).get('--defaults') is not None:
+        if args.from_format is None:
+            sys.exit('Must specify input format ("--from" or "--read") when using default options ("--defaults")')
+        if args.to_format is None:
+            sys.exit('Must specify output format ("--to" or "--write") when using default options ("--defaults")')
+        if args.output is None:
+            sys.exit('Must specify output file ("--output") when using default options ("--defaults"); for stdout, use "-o -"')
+    if args.output == '-':
+        args.output = None
     for k, v in vars(args).items():
         if isinstance(k, str) and k.startswith('--') and v not in (None, False):
             if isinstance(v, list):
@@ -92,16 +145,18 @@ PANDOC_OPTIONS  = {
     '--base-header-level': 1,
     '--strip-empty-paragraphs': 0,
     '--indented-code-classes': 1,
-    '--filter': 1,
-    '--lua-filter': 1,
-    '--preserve-tabs': 0,
+    ('-F', '--filter'): 1,
+    ('-L', '--lua-filter'): 1,
+    '--shift-heading-level-by': 1,
+    ('-p', '--preserve-tabs'): 0,
     '--tab-stop': 1,
     '--track-changes': 1,
     '--extract-media': 1,
     '--template': 1,
-    '--metadata': 1,
+    ('-M', '--metadata'): 1,
     '--metadata-file': 1,
-    '--variable': 1,
+    ('-d', '--defaults'): 1,
+    ('-V', '--variable'): 1,
     '--dpi': 1,
     '--eol': 1,
     '--wrap': 1,
@@ -113,11 +168,12 @@ PANDOC_OPTIONS  = {
     '--no-highlight': 0,
     '--highlight-style': 1,
     '--syntax-definition': 1,
-    '--include-in-header': 1,
-    '--include-before-body': 1,
-    '--include-after-body': 1,
+    ('-H', '--include-in-header'): 1,
+    ('-B', '--include-before-body'): 1,
+    ('-A', '--include-after-body'): 1,
     '--resource-path': 1,
     '--request-header': 1,
+    '--abbreviations': 1,
     '--self-contained': 0,
     '--html-q-tags': 0,
     '--ascii': 0,
@@ -125,17 +181,17 @@ PANDOC_OPTIONS  = {
     '--reference-location': 1,
     '--atx-headers': 0,
     '--top-level-division': 1,
-    '--number-sections': 0,
+    ('-N', '--number-sections'): 0,
     '--number-offset': 1,
     '--listings': 0,
-    '--incremental': 0,
+    ('-i', '--incremental'): 0,
     '--slide-level': 1,
     '--section-divs': 0,
     '--default-image-extension': 1,
     '--email-obfuscation': 1,
     '--id-prefix': 1,
-    '--title-prefix': 1,
-    '--css': 1,
+    ('-T', '--title-prefix'): 1,
+    ('-c', '--css'): 1,
     '--reference-doc': 1,
     '--epub-subdirectory': 1,
     '--epub-cover-image': 1,
@@ -144,6 +200,7 @@ PANDOC_OPTIONS  = {
     '--epub-chapter-level': 1,
     '--pdf-engine': 1,
     '--pdf-engine-opt': 1,
+    '--ipynb-output': 1,
     '--bibliography': 1,
     '--csl': 1,
     '--citation-abbreviations': 1,
@@ -154,7 +211,6 @@ PANDOC_OPTIONS  = {
     '--mathjax': '?',
     '--katex': '?',
     '--gladtex': 0,
-    '--abbreviations': 1,
     '--trace': 0,
     '--dump-args': 0,
     '--ignore-args': 0,
