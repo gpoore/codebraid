@@ -654,6 +654,7 @@ class PandocConverter(Converter):
                     standalone: bool=False,
                     trace: bool=False,
                     newline_lf: bool=False,
+                    preserve_tabs: bool=False,
                     other_pandoc_args: Optional[List[str]]=None):
         '''
         Convert between formats using Pandoc.
@@ -678,6 +679,8 @@ class PandocConverter(Converter):
             cmd_list.append('--trace')
         if file_scope:
             cmd_list.append('--file-scope')
+        if preserve_tabs:
+            cmd_list.append('--preserve-tabs')
         if output_path:
             cmd_list.extend(['--output', output_path.as_posix()])
         if other_pandoc_args:
@@ -902,7 +905,8 @@ class PandocConverter(Converter):
                                                       from_format_pandoc_extensions=from_format_pandoc_extensions,
                                                       to_format='json',
                                                       trace=True,
-                                                      newline_lf=True)
+                                                      newline_lf=True,
+                                                      preserve_tabs=True)
         try:
             if sys.version_info < (3, 6):
                 ast = json.loads(stdout_bytes.decode('utf8'))
@@ -1187,7 +1191,8 @@ class PandocConverter(Converter):
                                                           to_format='markdown',
                                                           to_format_pandoc_extensions=processed_to_format_extensions,
                                                           standalone=True,
-                                                          newline_lf=True)
+                                                          newline_lf=True,
+                                                          preserve_tabs=True)
             if stderr_bytes:
                 sys.stderr.buffer.write(stderr_bytes)
             processed_markup[source_name] = markup_bytes
@@ -1198,7 +1203,8 @@ class PandocConverter(Converter):
                                                                  from_format='markdown',
                                                                  from_format_pandoc_extensions=self.from_format_pandoc_extensions,
                                                                  to_format='json',
-                                                                 newline_lf=True)
+                                                                 newline_lf=True,
+                                                                 preserve_tabs=True)
                 if stderr_bytes:
                     sys.stderr.buffer.write(stderr_bytes)
         else:
@@ -1214,7 +1220,8 @@ class PandocConverter(Converter):
                                                                  from_format='markdown',
                                                                  from_format_pandoc_extensions=self.from_format_pandoc_extensions,
                                                                  to_format='json',
-                                                                 newline_lf=True)
+                                                                 newline_lf=True,
+                                                                 preserve_tabs=True)
                 if stderr_bytes:
                     sys.stderr.buffer.write(stderr_bytes)
         if sys.version_info < (3, 6):
@@ -1276,7 +1283,8 @@ class PandocConverter(Converter):
                                                              to_format_pandoc_extensions=to_format_pandoc_extensions,
                                                              standalone=standalone,
                                                              output_path=output_path,
-                                                             other_pandoc_args=other_pandoc_args)
+                                                             other_pandoc_args=other_pandoc_args,
+                                                             preserve_tabs=True)
             if stderr_bytes:
                 sys.stderr.buffer.write(stderr_bytes)
             if output_path is None:
@@ -1290,7 +1298,8 @@ class PandocConverter(Converter):
                                                              to_format_pandoc_extensions=to_format_pandoc_extensions,
                                                              standalone=standalone,
                                                              newline_lf=True,
-                                                             other_pandoc_args=other_pandoc_args)
+                                                             other_pandoc_args=other_pandoc_args,
+                                                             preserve_tabs=True)
             if stderr_bytes:
                 sys.stderr.buffer.write(stderr_bytes)
             converted_lines = util.splitlines_lf(converted_bytes.decode(encoding='utf8')) or ['']

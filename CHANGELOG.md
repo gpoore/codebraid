@@ -7,6 +7,9 @@
   Markdown.  Code output in raw format (interpreted as Markdown) is no longer
   lost when converting to document formats other than Markdown (#26).
 * Added support for SageMath (#5).
+* All document transformations now use `--preserve-tabs`, so code indentation
+  is maintained without change and tabs no longer cause errors in syncing code
+  to input line numbers (#18).
 * Added support for remaining unsupported Pandoc command-line options,
   including `--defaults` (#14).
 * Julia now uses `--project=@.` (#10).
