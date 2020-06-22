@@ -18,6 +18,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 from typing import Dict, List, Optional, Sequence, Union
 import warnings
 from .base import CodeChunk, Converter, Include
@@ -577,6 +578,25 @@ class PandocConverter(Converter):
         elif float(pandoc_version_match.group()) < 2.4:
             raise RuntimeError('Pandoc at "{0}" is version {1}, but >= 2.4 is required'.format(pandoc_path, float(pandoc_version_match.group())))
         self.pandoc_path = pandoc_path
+        if platform.system() == 'Windows':
+            pandoc_template_path = pathlib.Path('~/AppData/Roaming/pandoc/templates').expanduser()
+        else:
+            pandoc_data_path = pathlib.Path(os.environ.get('XDG_DATA_HOME', '~/.local/share')).expanduser() / 'pandoc'
+            if not pandoc_data_path.is_dir():
+                pandoc_data_path = pathlib.Path('~/.pandoc').expanduser()
+            pandoc_template_path = pandoc_data_path / 'templates'
+        if not pandoc_template_path.is_dir():
+            pandoc_template_path.mkdir(parents=True)
+        codebraid_markdown_roundtrip_template_path = pandoc_template_path / 'codebraid_pandoc_markdown_roundtrip.md'
+        if not codebraid_markdown_roundtrip_template_path.is_file():
+            codebraid_markdown_roundtrip_template_path.write_text(textwrap.dedent('''\
+                $if(titleblock)$
+                $titleblock$
+
+                $endif$
+                $body$
+                '''), encoding='utf8')
+        self.codebraid_markdown_roundtrip_template_path = codebraid_markdown_roundtrip_template_path
 
         if not isinstance(pandoc_file_scope, bool):
             raise TypeError
@@ -675,6 +695,11 @@ class PandocConverter(Converter):
             cmd_list.extend(['--to', to_format + to_format_pandoc_extensions])
         if standalone:
             cmd_list.append('--standalone')
+            if to_format is None:
+                if output_path is not None and output_path.suffix in ('.md', '.markdown'):
+                    cmd_list.extend(['--template', self.codebraid_markdown_roundtrip_template_path.as_posix()])
+            elif to_format == 'markdown':
+                cmd_list.extend(['--template', self.codebraid_markdown_roundtrip_template_path.as_posix()])
         if trace:
             cmd_list.append('--trace')
         if file_scope:

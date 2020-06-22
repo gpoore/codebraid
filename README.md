@@ -172,11 +172,30 @@ Manual installation:  `python3 setup.py install` or `python setup.py install`
 ## Converting a document
 
 Simply run `codebraid pandoc <normal pandoc options>`.  Note that
-`--overwrite` is required for existing files.
+`--overwrite` is required to overwrite existing files.  If you are using a
+defaults file, `--from`, `--to`, and `--output` must be given explicitly and
+cannot be inherited from the defaults file.  If you are using a defaults file
+and converting to a standalone Pandoc Markdown document, `--standalone` should
+be given explicitly rather than being inherited from the defaults file.
 
 `codebraid` should typically be run in the same directory as the document, so
 that the default working directory for code is the document directory.  Future
 releases will allow customization of the working directory.
+
+If you are converting from Pandoc Markdown to Pandoc Markdown with
+`--standalone` (basically using `codebraid` to preprocess Markdown documents),
+note that the following YAML metadata fields and command-line options are
+ignored in that situation:
+  * `header-includes` and `--include-in-header`
+  * `include-before` and `--include-before-body`
+  * `include-after` and `--include-after-body`
+  * `toc`/`table-of-contents` and `--toc`/`--table-of-contents`
+
+This is typically what you want.  Usually, "include" and a table of contents
+are desired in a final output format like HTML or PDF, not in a Pandoc
+Markdown file.  In the rare cases where "includes" and a table of contents are
+needed in Markdown documents, this can be accomplished by piping the output of
+`codebraid` through `pandoc`.
 
 
 ## Caching

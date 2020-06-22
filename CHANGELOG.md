@@ -2,6 +2,15 @@
 
 ## v0.5.0 (dev)
 
+* "Includes" are now skipped during internal, intermediate file
+  transformations, which prevents duplicated "includes" and associated errors
+  (#20).  This applies to `header-includes`, `include-before`,
+  `include-after`, `--include-in-header`, `--include-before-body`, and
+  `--include-after-body`.  Roundtrip conversion from Pandoc Markdown to Pandoc
+  Markdown now skips all "includes" and also ignores `toc`/`table-of-contents`
+  and `--toc`/`--table-of-contents`.  This allows Codebraid to be used as a
+  preprocessor and saves YAML metadata settings for a subsequent conversion
+  from Pandoc Markdown to another format.
 * Added option `jupyter_timeout` for the first code chunk in a session (#30).
 * Fixed Pandoc 2.8+ compatibility by using `-raw_attribute` in intermediate
   Markdown.  Code output in raw format (interpreted as Markdown) is no longer
