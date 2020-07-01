@@ -2,6 +2,9 @@
 
 ## v0.5.0 (dev)
 
+* Added `live_output` option for the first code chunk in a session.  This
+  shows code output (stdout and stderr) live in the terminal during code
+  execution (#21).
 * "Includes" are now skipped during internal, intermediate file
   transformations, which prevents duplicated "includes" and associated errors
   (#20).  This applies to `header-includes`, `include-before`,

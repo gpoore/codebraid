@@ -187,6 +187,7 @@ def _get_keyval_processors():
                                     'jupyter_timeout': keyval_int,
                                     **line_anchors,
                                     **line_numbers,
+                                    'live_output': keyval_bool,
                                     'name': keyval_generic,
                                     'outside_main': keyval_bool,
                                     **rewrap_lines,

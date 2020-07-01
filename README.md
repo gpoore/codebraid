@@ -327,6 +327,24 @@ session is in use).
 * `jupyter_timeout`={int} — Jupyter kernel timeout per code chunk in seconds.
   The default is 60.
 
+* `live_output`={`true`, `false`} — Show code output (stdout and stderr) live
+  in the terminal during code execution.  Output still appears in the document
+  as normal.
+
+  All output is written to stderr, so stdout only contains the document when
+  `--output` is not specified.  Output is interspersed with delimiters marking
+  the start of each session and the start of each code chunk.  The delimiters
+  for the start of each code chunk include source names and line numbers.
+
+  The output for a code chunk may be delayed until all code in the chunk has
+  finished executing, unless code output is line buffered or code manually
+  flushes stdout and stderr.  For example, with Python you may want to use
+  print functions like `print("text", flush=True)`.  Another option is to use
+  Python in line-buffered mode by setting `executable="python -u"` or
+  `executable="python3 -u"` in the first code chunk of a session.
+
+  This option currently has no effect for Jupyter kernels.
+
 
 #### Execution
 

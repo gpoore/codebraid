@@ -18,7 +18,7 @@ source_template =
 chunk_wrapper =
     |```
     print('\n{stdout_delim}', flush=True)
-    sys.stderr.write('\n{stderr_delim}\n')
+    print('\n{stderr_delim}', file=sys.stderr, flush=True)
     {code}
     |```/
 

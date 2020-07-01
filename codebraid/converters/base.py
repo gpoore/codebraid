@@ -319,7 +319,7 @@ class Options(dict):
                             for kw in ('first_number', 'line_numbers', 'rewrap_lines', 'rewrap_width', 'expand_tabs', 'tab_size')])
     _first_chunk_execute_keywords = set(['executable', 'jupyter_kernel'])
     _first_chunk_save_keywords = set(['save', 'save_as'])
-    _first_chunk_other_keywords = set(['jupyter_timeout'])
+    _first_chunk_other_keywords = set(['jupyter_timeout', 'live_output'])
     _first_chunk_keywords = _first_chunk_execute_keywords | _first_chunk_save_keywords | _first_chunk_other_keywords
 
     keywords = _base_keywords | _layout_keywords | _first_chunk_keywords
@@ -432,6 +432,7 @@ class Options(dict):
     _option_jupyter_timeout = _option_first_chunk_int_warning
     _option_save = _option_first_chunk_bool_error
     _option_save_as = _option_first_chunk_string_error
+    _option_live_output = _option_first_chunk_bool_error
 
     _option_example = _option_bool_warning
     _option_lang = _option_str_error
