@@ -576,8 +576,9 @@ class PandocConverter(Converter):
         pandoc_version_match = re.search(rb'\d+\.\d+', proc.stdout)
         if not pandoc_version_match:
             raise RuntimeError('Could not determine Pandoc version from "{0} --version"; faulty Pandoc installation?'.format(pandoc_path))
-        elif float(pandoc_version_match.group()) < 2.4:
-            raise RuntimeError('Pandoc at "{0}" is version {1}, but >= 2.4 is required'.format(pandoc_path, float(pandoc_version_match.group())))
+        pandoc_version_major, pandoc_version_minor = (float(x) for x in pandoc_version_match.group().split(b'.', 1))
+        if pandoc_version_major < 2 or pandoc_version_minor < 4:
+            raise RuntimeError('Pandoc at "{0}" is version {1}.{2}, but >= 2.4 is required'.format(pandoc_path, pandoc_version_major, pandoc_version_minor))
         self.pandoc_path = pandoc_path
         if platform.system() == 'Windows':
             pandoc_template_path = pathlib.Path('~/AppData/Roaming/pandoc/templates').expanduser()

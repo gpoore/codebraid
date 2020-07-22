@@ -2,6 +2,7 @@
 
 ## v0.5.0 (dev)
 
+* Check for compatible Pandoc version now works correctly with Pandoc 2.10.
 * Added `live_output` option for the first code chunk in a session.  This
   shows code output (stdout and stderr) live in the terminal during code
   execution (#21).
