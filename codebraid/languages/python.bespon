@@ -35,6 +35,83 @@ warning_patterns = 'Warning:'
 line_number_patterns = ['line {number}', ':{number}:']
 
 
+|=== python_repl
+language = 'python'
+
+run_command = '{executable} {source} {delim_start} {hash}'
+
+repl = true
+
+executable = 'python'
+
+extension = 'py'
+
+run_encoding = 'utf8'
+
+repl_template =
+    |```
+    # -*- coding: utf-8 -*-
+
+    import code
+    import codecs
+    import sys
+
+    # Prevent apport systems in some Linux distributions from breaking
+    # exception handling
+    sys.excepthook = sys.__excepthook__
+
+    sys.stdin = codecs.getreader('utf8')(sys.stdin.buffer, 'strict')
+    sys.stdout = codecs.getwriter('utf8')(sys.stdout.buffer, 'strict')
+    sys.stderr = codecs.getwriter('utf8')(sys.stderr.buffer, 'strict')
+
+    delim_start = sys.argv[1]
+    hash = sys.argv[2]
+
+    class Console(code.InteractiveConsole):
+        def __init__(self):
+            super().__init__(filename='<stdin>')
+            self._line_iter = (line.rstrip('\n') for line in sys.stdin)
+            self._cached_line = None
+            self._last_line = None
+
+        def raw_input(self, prompt):
+            line = self._cached_line
+            self._cached_line = None
+            while True:
+                if line is None:
+                    try:
+                        line = next(self._line_iter)
+                    except StopIteration:
+                        raise EOFError
+                if line.startswith(delim_start) and hash in line:
+                    if prompt == sys.ps2:
+                        if self._last_line:
+                            self._cached_line = line
+                            line = ''
+                            break
+                        raise EOFError
+                    print('\n'+line)
+                    print('\n'+line, file=sys.stderr)
+                    line = None
+                else:
+                    break
+            self._last_line = line
+            if line:
+                print('{0}{1}'.format(prompt, line))
+            elif prompt == sys.ps2:
+                print(sys.ps2.rstrip())
+            else:
+                print('')
+            return line
+
+        def write(self, text):
+            print(text, end='')
+
+    console = Console()
+    console.interact(banner='', exitmsg='')
+    |```/
+
+
 |=== sage
 (dict, default=$~.python)>
 extension = 'sage'

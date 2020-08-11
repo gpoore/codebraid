@@ -247,8 +247,13 @@ class PandocCodeChunk(CodeChunk):
         pandoc_id = node_id
         pandoc_classes = []
         pandoc_kvpairs = []
-        if 'lang' in options:
-            pandoc_classes.append(options['lang'])
+        lang = options.get('lang', None)
+        if lang is not None:
+            if lang.endswith('_repl'):
+                lang = lang.rsplit('_')[0]
+            pandoc_classes.append(lang)
+            if self.command == 'repl':
+                pandoc_classes.append('repl')
         if line_anchors:
             pandoc_classes.append('lineAnchors')
         if self.options.get('code_line_numbers', False):
@@ -314,6 +319,10 @@ class PandocCodeChunk(CodeChunk):
             if output in ('markup', 'copied_markup'):
                 new_nodes = [{'t': t_code, 'c': [['', ['markdown'], []], self.layout_output(output, format)]}]
             elif output == 'code':
+                new_nodes = [{'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]}]
+            elif output == 'repl':
+                if self.repl_lines is None:
+                    continue
                 new_nodes = [{'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]}]
             elif output in ('expr', 'stdout', 'stderr'):
                 if format == 'verbatim':

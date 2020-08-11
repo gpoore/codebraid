@@ -362,6 +362,7 @@ class Options(dict):
                                                                   ('stderr', 'verbatim'),
                                                                   ('rich_output', _default_rich_output)]),
                                                    'paste': ODict(),
+                                                   'repl': ODict([('repl', 'verbatim')]),
                                                    'run':  ODict([('stdout', 'raw'),
                                                                   ('stderr', 'verbatim'),
                                                                   ('rich_output', _default_rich_output)])})
@@ -443,6 +444,8 @@ class Options(dict):
             self.code_chunk.source_errors.append('Invalid "{0}" value "{1}"'.format(key, value))
         elif not self.code_chunk.execute:
             self.code_chunk.source_errors.append('Option "complete" is only compatible with executed code chunks')
+        elif self.code_chunk.command == 'repl':
+            self.code_chunk.source_errors.append('Option "complete" is not compatible with "repl" command')
         elif self.code_chunk.is_expr and not value:
             self.code_chunk.source_errors.append('Option "complete" value "false" is incompatible with expr command')
         elif self['outside_main']:
@@ -587,6 +590,8 @@ class Options(dict):
             self.code_chunk.source_errors.append('Invalid "{0}" value "{1}"'.format(key, value))
         elif not self.code_chunk.execute:
             self.code_chunk.source_errors.append('Option "outside_main" is only compatible with executed code chunks')
+        elif self.code_chunk.command == 'repl':
+            self.code_chunk.source_errors.append('Option "outside_main" is not compatible with "repl" command')
         elif self.code_chunk.is_expr and value:
             self.code_chunk.source_errors.append('Option "outside_main" value "true" is incompatible with expr command')
         elif value and 'complete' in self.custom_options:
@@ -651,7 +656,7 @@ class Options(dict):
                 if output in value_processed:
                     self.code_chunk.source_warnings.append('Option "{0}" value "{1}" contains duplicate "{2}"'.format(key, value, output))
                     continue
-                if output in ('markup', 'copied_markup', 'code'):
+                if output in ('markup', 'copied_markup', 'code', 'repl'):
                     if format is None:
                         format = 'verbatim'
                     elif format != 'verbatim':
@@ -727,6 +732,8 @@ class CodeChunk(object):
             self.command = command
         if command == 'expr' and not inline:
             self.source_errors.append('Codebraid command "{0}" is only allowed inline'.format(command))
+        if command == 'repl' and inline:
+            self.source_errors.append('Codebraid command "{0}" is not supported inline'.format(command))
         self.execute = self._default_execute[command]
         if command == 'expr' or (inline and command == 'nb'):
             self.is_expr = True
@@ -791,6 +798,7 @@ class CodeChunk(object):
             self.source_index = None
         self.stdout_lines = None
         self.stderr_lines = None
+        self.repl_lines = None
         self.rich_output = None
         if self.is_expr:
             self.expr_lines = None
@@ -812,10 +820,10 @@ class CodeChunk(object):
             self.source_warnings = []
 
 
-    commands = set(['code', 'expr', 'nb', 'run', 'paste'])
+    commands = set(['code', 'expr', 'nb', 'paste', 'repl', 'run'])
 
     _default_execute = collections.defaultdict(lambda: False,  # Unknown command -> do not run
-                                               {k: True for k in ('expr', 'nb', 'run')})
+                                               {k: True for k in ('expr', 'nb', 'repl', 'run')})
 
 
     @property
@@ -920,10 +928,12 @@ class CodeChunk(object):
         if len(copy_chunks) == 1:
             self.stdout_lines = copy_chunks[0].stdout_lines
             self.stderr_lines = copy_chunks[0].stderr_lines
+            self.repl_lines = copy_chunks[0].repl_lines
             self.rich_output = copy_chunks[0].rich_output
         else:
             self.stdout_lines = [line for x in copy_chunks if x.stdout_lines is not None for line in x.stdout_lines] or None
             self.stderr_lines = [line for x in copy_chunks if x.stderr_lines is not None for line in x.stderr_lines] or None
+            self.repl_lines = [line for x in copy_chunks if x.repl_lines is not None for line in x.repl_lines] or None
             self.rich_output = [ro for x in copy_chunks if x.rich_output is not None for ro in x.rich_output] or None
         if self.is_expr:
             # expr compatibilty has already been checked in `copy_code()`
@@ -944,6 +954,8 @@ class CodeChunk(object):
             pass
         elif output_type == 'code':
             lines = self.code_lines
+        elif output_type == 'repl':
+            lines = self.repl_lines
         elif output_type in ('expr', 'stdout', 'stderr'):
             lines = getattr(self, output_type+'_lines')
             if lines is None and output_format == 'verbatim_or_empty':

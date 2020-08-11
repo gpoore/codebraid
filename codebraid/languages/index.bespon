@@ -87,6 +87,7 @@
 bash = "shell.bespon"
 julia = "julia.bespon"
 python = "python.bespon"
+python_repl = "python.bespon"
 sage = $~.python
 R = "R.bespon"
 rust = "rust.bespon"

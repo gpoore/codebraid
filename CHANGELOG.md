@@ -2,6 +2,8 @@
 
 ## v0.5.0 (dev)
 
+* Added preliminary support for the Python REPL (`python_repl`) via Python's
+  `code` module.  Added `cb.repl` command.
 * Check for compatible Pandoc version now works correctly with Pandoc 2.10.
 * Added `live_output` option for the first code chunk in a session.  This
   shows code output (stdout and stderr) live in the terminal during code
