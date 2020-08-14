@@ -181,8 +181,12 @@ class Session(object):
                 self.jupyter_timeout = code_chunk.options['first_chunk_options'].get('jupyter_timeout')
             else:
                 self.lang_def = self.code_processor.language_definitions[self.lang]
-                self.repl = self.lang_def.repl
-                self.executable = code_chunk.options['first_chunk_options'].get('executable')
+                if self.lang_def is None:
+                    self.executable = None
+                    self.repl = None
+                else:
+                    self.executable = code_chunk.options['first_chunk_options'].get('executable')
+                    self.repl = self.lang_def.repl
         elif code_chunk.options['first_chunk_options']:
             invalid_options = ', '.join('"{0}"'.format(k) for k in code_chunk.options['first_chunk_options'])
             del code_chunk.options['first_chunk_options']
