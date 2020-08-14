@@ -2,6 +2,7 @@
 
 ## v0.5.0 (dev)
 
+* `codebraid` now reads from `stdin` (#33).
 * Added preliminary support for the Python REPL (`python_repl`) via Python's
   `code` module.  Added `cb.repl` command.
 * Synchronization of code with source line numbers is now simpler and more

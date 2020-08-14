@@ -9,6 +9,7 @@
 
 
 import argparse
+import codecs
 import io
 import sys
 from . import converters
@@ -71,7 +72,7 @@ def main():
                                     '(a cache directory may still be created for use with temporary files)')
     parser_pandoc.add_argument('--cache-dir',
                                help='Location for caching code output (default is "_codebraid" in document directory)')
-    parser_pandoc.add_argument('files', nargs='+', metavar='FILE',
+    parser_pandoc.add_argument('files', nargs='*', metavar='FILE',
                                help="Files (multiple files are allowed for formats supported by Pandoc)")
     for opts_or_long_opt, narg in PANDOC_OPTIONS.items():
         if isinstance(opts_or_long_opt, tuple):
@@ -109,6 +110,9 @@ def main():
 
 
 def pandoc(args):
+    # Stay consistent with Pandoc's requirement of UTF-8
+    sys.stdin = codecs.getreader('utf_8_sig')(sys.stdin.buffer, 'strict')
+
     other_pandoc_args = []
     if vars(args).get('--defaults') is not None:
         if args.from_format is None:
@@ -130,14 +134,30 @@ def pandoc(args):
                 if not isinstance(v, bool):
                     other_pandoc_args.append(v)
 
-    converter = converters.PandocConverter(paths=args.files,
+    if not args.files or (len(args.files) == 1 and args.files[0] == '-'):
+        paths = None
+        try:
+            strings = sys.stdin.read()
+        except UnicodeDecodeError as e:
+            sys.exit('Input must be UTF-8:\n{0}'.format(e))
+    else:
+        paths = args.files
+        strings = None
+    converter = converters.PandocConverter(paths=paths,
+                                           strings=strings,
                                            from_format=args.from_format,
                                            pandoc_file_scope=args.pandoc_file_scope,
                                            no_cache=args.no_cache,
                                            cache_path=args.cache_dir)
+
     converter.code_braid()
+
+    if args.output in (None, '-'):
+        output_path = None
+    else:
+        output_path = args.output
     converter.convert(to_format=args.to_format, standalone=args.standalone,
-                      output_path=args.output, overwrite=args.overwrite,
+                      output_path=output_path, overwrite=args.overwrite,
                       other_pandoc_args=other_pandoc_args)
 
 PANDOC_OPTIONS  = {
