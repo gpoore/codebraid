@@ -177,6 +177,7 @@ class Session(object):
         if code_chunk.session_index == 0:
             jupyter_kernel = code_chunk.options['first_chunk_options'].get('jupyter_kernel')
             if jupyter_kernel is not None:
+                self.repl = False
                 self.jupyter_kernel = jupyter_kernel
                 self.jupyter_timeout = code_chunk.options['first_chunk_options'].get('jupyter_timeout')
             else:
