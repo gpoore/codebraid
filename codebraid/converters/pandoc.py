@@ -683,7 +683,6 @@ class PandocConverter(Converter):
                     input_name: Optional[str]=None,
                     output_path: Optional[pathlib.Path]=None,
                     standalone: bool=False,
-                    trace: bool=False,
                     newline_lf: bool=False,
                     preserve_tabs: bool=False,
                     other_pandoc_args: Optional[List[str]]=None):
@@ -711,8 +710,6 @@ class PandocConverter(Converter):
                     cmd_list.extend(['--template', self.codebraid_markdown_roundtrip_template_path.as_posix()])
             elif to_format == 'markdown':
                 cmd_list.extend(['--template', self.codebraid_markdown_roundtrip_template_path.as_posix()])
-        if trace:
-            cmd_list.append('--trace')
         if file_scope:
             cmd_list.append('--file-scope')
         if preserve_tabs:
@@ -874,14 +871,6 @@ class PandocConverter(Converter):
         node['c'] = [raw_format, '\x02CodebraidTrace({0})\x03'.format(trace) + node['c'][1]]
 
 
-    # Regex for footnotes.  While they shouldn't be indented, the Pandoc
-    # parser does recognize them as long as the indentation is less than 4
-    # spaces.  The restrictions on the footnote identifier are minimal.
-    # https://pandoc.org/MANUAL.html#footnotes
-    # https://github.com/jgm/pandoc/blob/master/src/Text/Pandoc/Readers/Markdown.hs
-    _footnote_re = re.compile(r' {0,3}\[\^[^ \t]+?\]:')
-
-
     def _load_and_process_initial_ast(self, *,
                                       source_string, single_source_name=None,
                                       any=any, int=int, len=len, next=next):
@@ -905,30 +894,9 @@ class PandocConverter(Converter):
         # cases, since not all AST information like attributes is used in
         # searching, but it will usually give exact results.  Since syncing is
         # a usability feature, an occasional small loss of precision isn't
-        # critical.  Pandoc's `--trace` output is used to simplify this
-        # process.  The trace can be used to determine the exact start of
-        # root-level nodes, so it periodically corrects any errors that have
-        # accumulated.  It can also be used to locate and skip over footnotes
-        # and link definitions.  These do not appear in the AST except in
-        # processed form, so they would be a primary source of sync errors
-        # otherwise.
-        #
-        # The original attempt at implementing line number syncing used only
-        # the trace plus AST, with no string searching.  That might have had
-        # much better performance had it worked.  Unfortunately, the data in
-        # the trace is typically only sufficient to give approximate locations
-        # at best.  The Pandoc markdown extension markdown_in_html_blocks can
-        # produce markdown nodes preceded and followed by HTML RawBlocks, but
-        # only the following RawBlock appears in the trace.  Similarly, HTML
-        # RawBlocks can appear out of order in the trace (at the end of the
-        # current chunk, rather than where they appear relative to other leaf
-        # nodes; for example, `<hr/>`).  The trace data for DefinitionList
-        # follows different rules (line numbers typically larger by 1),
-        # presumably because of how Pandoc's parsing works.  Empty elements,
-        # such as might occur in an incomplete bullet list, are difficult to
-        # deal with.
+        # critical.
 
-        # Convert source string to trace plus AST with Pandoc.
+        # Convert source string to AST with Pandoc.
         # Order of extensions is important: earlier override later.
         from_format_pandoc_extensions = ''.join(['-latex_macros',
                                                  '-smart'])
@@ -940,9 +908,10 @@ class PandocConverter(Converter):
                                                       from_format=self.from_format,
                                                       from_format_pandoc_extensions=from_format_pandoc_extensions,
                                                       to_format='json',
-                                                      trace=True,
                                                       newline_lf=True,
                                                       preserve_tabs=True)
+        if stderr_bytes:
+            sys.stderr.buffer.write(stderr_bytes)
         try:
             if sys.version_info < (3, 6):
                 ast = json.loads(stdout_bytes.decode('utf8'))
@@ -956,87 +925,18 @@ class PandocConverter(Converter):
             raise PandocError('Unrecognized AST format (incompatible Pandoc version?)')
         self._asts[single_source_name] = ast
 
-        source_string_lines = util.splitlines_lf(source_string) or ['']
-
-        # Process trace to determine location of footnotes and link
-        # definitions, and mark those line numbers as invalid
-        invalid_line_numbers = set()
-        left_trace_type_slice_index = len('[trace] Parsed [')
-        right_trace_chunk_slice_index = len(' of chunk')
-        footnote_re = self._footnote_re
-        in_footnote = False
-        trace = ('', 1, False)  # (<node type>, <line number>, <in chunk>)
-        # Decode stderr using universal newlines
-        stderr_str = io.TextIOWrapper(io.BytesIO(stderr_bytes), encoding='utf8').read()
-        try:
-            for trace_line in util.splitlines_lf(stderr_str):
-                if trace_line.startswith('[WARNING]'):
-                    print(trace_line, file=sys.stderr)
-                    continue
-                last_trace_node_type, last_trace_line_number, last_trace_in_chunk = trace
-                trace_line = trace_line[left_trace_type_slice_index:]
-                trace_node_type, trace_line = trace_line.split(' ', 1)
-                trace_node_type = trace_node_type.rstrip(']')
-                if trace_line.endswith('chunk'):
-                    trace_in_chunk = True
-                    trace_line_number = int(trace_line.split('at line ', 1)[1][:-right_trace_chunk_slice_index])
-                else:
-                    trace_in_chunk = False
-                    trace_line_number = int(trace_line.split('at line ', 1)[1])
-                trace = (trace_node_type, trace_line_number, trace_in_chunk)
-                # Since footnotes must be at root level in the AST, line
-                # numbers are guaranteed to be correct for their start
-                # locations (no chunk numbering involved), so this will always
-                # detect and skip them correctly.  There shouldn't be any
-                # indentation before the `[^<identifier>]:`, but a regex is
-                # used to cover all cases that the parser will accept.  A
-                # footnote is always followed by a Null at root level.
-                if (trace_in_chunk and not last_trace_in_chunk and
-                        footnote_re.match(source_string_lines[last_trace_line_number-1])):
-                    in_footnote = True
-                    invalid_line_number = last_trace_line_number
-                    continue
-                if in_footnote:
-                    if trace_in_chunk:
-                        continue
-                    in_footnote = False
-                    while invalid_line_number < trace_line_number:
-                        invalid_line_numbers.add(invalid_line_number)
-                        invalid_line_number += 1
-                # Link definitions must be at root level and produce Nulls.
-                # Since they can contain much less text compared to footnotes,
-                # it is unlikely that they will significantly affect line
-                # numbers.  If more precision is needed later, something like
-                # approach below could be used.  However, it would need to be
-                # supplemented with a regex, like the footnote case, because
-                # the conditions below are also met by some raw nodes.
-                # ```
-                # if not trace_node_type and not last_trace_in_chunk and not trace_in_chunk:
-                #     invalid_line_number = last_trace_line_number
-                #     while invalid_line_number < trace_line_number:
-                #         invalid_line_numbers.add(invalid_line_number)
-                #         invalid_line_number += 1
-                # ```
-        except Exception as e:
-            raise PandocError('Incompatible Pandoc version or trace; cannot parse trace format:\n{0}'.format(e))
 
         # Iterator for source lines and line numbers that skips invalid lines
         if self.pandoc_file_scope or len(self.source_strings) == 1:
+            source_string_lines = util.splitlines_lf(source_string) or ['']
             source_name_line_and_number_iter = ((single_source_name, line, n+1)
-                                                for (n, line) in enumerate(source_string_lines)
-                                                if n+1 not in invalid_line_numbers)
+                                                for (n, line) in enumerate(source_string_lines))
         else:
             def make_source_name_line_and_number_iter():
-                line_and_concat_line_number_iter = ((line, n+1) for (n, line) in enumerate(source_string_lines))
                 for src_name, src_string in zip(self.source_names, self.source_strings):
-                    len_src_string_lines = src_string.count('\n')
-                    if src_string[-1:] != '\n':
-                        len_src_string_lines += 1
-                    for line_number in range(1, len_src_string_lines+1):
-                        line, concat_line_number = next(line_and_concat_line_number_iter)
-                        if concat_line_number in invalid_line_numbers:
-                            continue
-                        yield (src_name, line, line_number)
+                    src_string_lines = util.splitlines_lf(src_string) or ['']
+                    for n, line in enumerate(src_string_lines):
+                        yield (src_name, line, n+1)
             source_name_line_and_number_iter = make_source_name_line_and_number_iter()
 
 
@@ -1059,17 +959,21 @@ class PandocConverter(Converter):
                 pass
             elif node_type == 'Str':
                 node_contents = node['c']
-                line_index = line.find(node_contents, line_index)
-                if line_index >= 0:
-                    line_index += len(node_contents)
-                else:
-                    source_name, line, line_number = next(source_name_line_and_number_iter)
-                    line_index = line.find(node_contents)
-                    if line_index < 0:
-                        while line_index < 0:
+                for char in node_contents:
+                    if line[line_index:line_index+1] == char:
+                        line_index += 1
+                    else:
+                        line_index = line.find(char, line_index)
+                        if line_index >= 0:
+                            line_index += 1
+                        else:
                             source_name, line, line_number = next(source_name_line_and_number_iter)
-                            line_index = line.find(node_contents)
-                    line_index += len(node_contents)
+                            line_index = line.find(char)
+                            if line_index < 0:
+                                while line_index < 0:
+                                    source_name, line, line_number = next(source_name_line_and_number_iter)
+                                    line_index = line.find(char)
+                            line_index += 1
                 if para_plain_node is not None:
                     para_plain_source_name_node_line_number.append((source_name, para_plain_node, line_number))
                     para_plain_node = None

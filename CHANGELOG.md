@@ -4,6 +4,8 @@
 
 * Added preliminary support for the Python REPL (`python_repl`) via Python's
   `code` module.  Added `cb.repl` command.
+* Synchronization of code with source line numbers is now simpler and more
+  robust to prevent `StopIteration` errors (#36).
 * Check for compatible Pandoc version now works correctly with Pandoc 2.10.
 * Added `live_output` option for the first code chunk in a session.  This
   shows code output (stdout and stderr) live in the terminal during code
