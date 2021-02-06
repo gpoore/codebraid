@@ -1361,7 +1361,7 @@ class CodeProcessor(object):
                     try:
                         msg = jupyter_client.iopub_channel.get_msg(timeout=session.jupyter_timeout or 60)
                     except queue.Empty:
-                        chunk_runtime_source_error_dict[cc.session_output_index].append('Jupyter kernel "{0}" timed out during execution"'.format(kernel_name))
+                        chunk_runtime_source_error_dict[cc.session_output_index].append('Jupyter kernel "{0}" timed out during execution'.format(kernel_name))
                         errors = True
                         break
                     if msg['parent_header'].get('msg_id') != cc_jupyter_id:
