@@ -958,7 +958,7 @@ class CodeProcessor(object):
                 if error:
                     break
                 encoding = session.lang_def.pre_run_encoding or locale.getpreferredencoding(False)
-                pre_proc = subproc(session=session,
+                pre_proc = subproc(session=session, stdin=None,
                                    stage='pre-run', stage_num=n+1, stage_tot_num=len(session.lang_def.pre_run_commands),
                                    cmd=cmd_template.format(**template_dict),
                                    encoding=encoding,
@@ -973,7 +973,7 @@ class CodeProcessor(object):
                 if error:
                     break
                 encoding = session.lang_def.compile_encoding or locale.getpreferredencoding(False)
-                comp_proc = subproc(session=session,
+                comp_proc = subproc(session=session, stdin=None,
                                     stage='compile', stage_num=n+1, stage_tot_num=len(session.lang_def.compile_commands),
                                     cmd=cmd_template.format(**template_dict),
                                     encoding=encoding,
@@ -1009,7 +1009,7 @@ class CodeProcessor(object):
                 if error:
                     break
                 encoding = session.lang_def.post_run_encoding or locale.getpreferredencoding(False)
-                post_proc = subproc(session=session,
+                post_proc = subproc(session=session, stdin=None,
                                     stage='post-run', stage_num=n+1, stage_tot_num=len(session.lang_def.post_run_commands),
                                     cmd=cmd_template.format(**template_dict),
                                     encoding=encoding,
