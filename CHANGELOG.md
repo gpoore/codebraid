@@ -2,7 +2,12 @@
 
 ## v0.5.0 (dev)
 
-* `codebraid` now reads from `stdin` (#33).
+* Most example documents now come with both HTML and Markdown output.  This is
+  convenient for seeing how a Markdown-to-Markdown conversion process works.
+  It also significantly simplifies Codebraid testing for new releases, which
+  uses the example documents.  The HTML output changes whenever Pandoc updates
+  its HTML templates.  Markdown output should be much more stable.
+* `codebraid` now reads from stdin (#33).
 * Added preliminary support for the Python REPL (`python_repl`) via Python's
   `code` module.  Added `cb.repl` command.
 * Synchronization of code with source line numbers is now simpler and more
