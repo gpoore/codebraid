@@ -2,6 +2,7 @@
 
 ## v0.5.0 (dev)
 
+* Added support for Pandoc command-line options `-C` and `--citeproc` (#42).
 * `rich_output` formats with a `text/*` mime type can now be displayed `raw`,
   `verbatim`, or `verbatim_or_empty`.  For example,
   `show=rich_output:latex:raw` and `show=rich_output:latex:verbatim`.

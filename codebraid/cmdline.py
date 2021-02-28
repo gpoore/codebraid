@@ -221,6 +221,7 @@ PANDOC_OPTIONS  = {
     '--pdf-engine': 1,
     '--pdf-engine-opt': 1,
     '--ipynb-output': 1,
+    ('-C', '--citeproc'): 0,
     '--bibliography': 1,
     '--csl': 1,
     '--citation-abbreviations': 1,
