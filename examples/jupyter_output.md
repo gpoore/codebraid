@@ -154,3 +154,35 @@ $$\int_{-\infty}^{\infty} e^{- x^{2}}\, dx$$
 $$\sqrt{\pi}$$
 :::
 :::
+
+## Customizing output
+
+When working with `rich_output` formats that have a `text/*` mime type,
+such as LaTeX and Markdown, it is possible to display the rendered
+output or show the markup. For example, using
+`show=rich_output:latex:raw` displays the raw (rendered) LaTeX, while
+`show=rich_output:latex:verbatim` displays the LaTeX markup verbatim.
+
+::: {.example}
+::: {.exampleMarkup}
+    ```{.cb.paste copy=sympy1 show=rich_output:latex:raw}
+    ```
+:::
+
+::: {.exampleOutput}
+$$\int_{-\infty}^{\infty} e^{- x^{2}}\, dx$$
+:::
+:::
+
+::: {.example}
+::: {.exampleMarkup}
+    ```{.cb.paste copy=sympy1 show=rich_output:latex:verbatim}
+    ```
+:::
+
+::: {.exampleOutput}
+``` {.latex}
+$$\int_{-\infty}^{\infty} e^{- x^{2}}\, dx$$
+```
+:::
+:::

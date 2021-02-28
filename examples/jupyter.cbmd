@@ -74,3 +74,18 @@ does with code, stdout, and stderr.
 
 ```{.cb.paste copy=sympy1+sympy2 show=rich_output example=true}
 ```
+
+
+## Customizing output
+
+When working with `rich_output` formats that have a `text/*` mime type, such
+as LaTeX and Markdown, it is possible to display the rendered output
+or show the markup.  For example, using `show=rich_output:latex:raw` displays
+the raw (rendered) LaTeX, while `show=rich_output:latex:verbatim` displays the
+LaTeX markup verbatim.
+
+```{.cb.paste copy=sympy1 show=rich_output:latex:raw example=true}
+```
+
+```{.cb.paste copy=sympy1 show=rich_output:latex:verbatim example=true}
+```
