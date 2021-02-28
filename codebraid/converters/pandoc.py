@@ -314,70 +314,94 @@ class PandocCodeChunk(CodeChunk):
             self.pandoc_kvpairs.append(['startFrom', first_number])
         t_code = 'Code' if self.inline else 'CodeBlock'
         t_raw = 'RawInline' if self.inline else 'RawBlock'
+        unformatted_nodes = []
         for output, format in self.options['show'].items():
-            new_nodes = None
             if output in ('markup', 'copied_markup'):
-                new_nodes = [{'t': t_code, 'c': [['', ['markdown'], []], self.layout_output(output, format)]}]
+                unformatted_nodes.append({'t': t_code, 'c': [['', ['markdown'], []], self.layout_output(output, format)]})
             elif output == 'code':
-                new_nodes = [{'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]}]
+                unformatted_nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]})
             elif output == 'repl':
                 if self.repl_lines is None:
                     continue
-                new_nodes = [{'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]}]
+                unformatted_nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]})
             elif output in ('expr', 'stdout', 'stderr'):
                 if format == 'verbatim':
                     if getattr(self, output+'_lines') is not None:
-                        new_nodes = [{'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]}]
+                        unformatted_nodes.append({'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]})
                 elif format == 'verbatim_or_empty':
-                    new_nodes = [{'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]}]
+                    unformatted_nodes.append({'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]})
                 elif format == 'raw':
                     if getattr(self, output+'_lines') is not None:
-                        new_nodes = [{'t': t_raw, 'c': ['markdown', self.layout_output(output, format)]}]
+                        unformatted_nodes.append({'t': t_raw, 'c': ['markdown', self.layout_output(output, format)]})
                 else:
                     raise ValueError
             elif output == 'rich_output':
                 if self.rich_output is None:
                     continue
-                new_nodes = []
                 for ro in self.rich_output:
                     ro_data = ro['data']
                     ro_files = ro['files']
-                    for fmt in format:
+                    for fmt_and_text_display in format:
+                        if ':' in fmt_and_text_display:
+                            fmt, fmt_text_display = fmt_and_text_display.split(':')
+                        else:
+                            fmt = fmt_and_text_display
+                            fmt_text_display = self.options.rich_text_default_display.get(fmt)
                         fmt_mime_type = self.options.mime_map[fmt]
                         if fmt_mime_type not in ro_data:
                             continue
                         if fmt_mime_type in ro_files:
                             image_node = {'t': 'Image', 'c': [['', [], []], [], [ro_files[fmt_mime_type], '']]}
                             if self.inline:
-                                new_nodes.append(image_node)
+                                unformatted_nodes.append(image_node)
                             else:
                                 para_node = {'t': 'Para', 'c': [image_node]}
-                                new_nodes.append(para_node)
+                                unformatted_nodes.append(para_node)
                             break
                         data = ro_data[fmt_mime_type]
-                        if fmt == 'latex':
-                            raw_node = {'t': 'RawInline', 'c': ['tex', data]}
-                            if self.inline:
-                                new_nodes.append(raw_node)
+                        lines = util.splitlines_lf(data)
+                        if fmt in ('latex', 'html', 'markdown'):
+                            if fmt == 'latex':
+                                raw_fmt = 'tex'
                             else:
-                                para_node = {'t': 'Para', 'c': [raw_node]}
-                                new_nodes.append(para_node)
-                            break
-                        if fmt in ('html', 'markdown'):
-                            raw_node = {'t': t_raw, 'c': [fmt, data]}
-                            new_nodes.append(raw_node)
+                                raw_fmt = fmt
+                            if fmt_text_display == 'raw':
+                                unformatted_nodes.append({'t': t_raw, 'c': [raw_fmt, self.layout_output(output, 'raw', lines)]})
+                            elif fmt_text_display == 'verbatim':
+                                if lines:
+                                    unformatted_nodes.append({'t': t_code, 'c': [['', [fmt], []], self.layout_output(output, 'verbatim', lines)]})
+                            elif fmt_text_display == 'verbatim_or_empty':
+                                unformatted_nodes.append({'t': t_code, 'c': [['', [fmt], []], self.layout_output(output, 'verbatim', lines)]})
+                            else:
+                                raise ValueError
                             break
                         if fmt == 'plain':
-                            lines = util.splitlines_lf(data) or None
-                            if lines is not None:
-                                code_node = {'t': t_code, 'c': [['', [], []], self.layout_output(output, 'verbatim', lines)]}
-                                new_nodes.append(code_node)
+                            if fmt_text_display == 'raw':
+                                unformatted_nodes.append({'t': t_raw, 'c': ['markdown', self.layout_output(output, fmt_text_display, lines)]})
+                            elif fmt_text_display == 'verbatim':
+                                if lines:
+                                    unformatted_nodes.append({'t': t_code, 'c': [['', [], []], self.layout_output(output, 'verbatim', lines)]})
+                            elif fmt_text_display == 'verbatim_or_empty':
+                                unformatted_nodes.append({'t': t_code, 'c': [['', [], []], self.layout_output(output, 'verbatim', lines)]})
+                            else:
+                                raise ValueError
                             break
                         raise ValueError
             else:
                 raise ValueError
-            if new_nodes is not None:
-                nodes.extend(new_nodes)
+        if unformatted_nodes:
+            # Prevent adjacent nodes from merging unintentionally when
+            # converted through intermediate Markdown
+            for node, next_node in zip(unformatted_nodes[:-1], unformatted_nodes[1:]):
+                nodes.append(node)
+                if node['t'] == t_raw or next_node['t'] == t_raw:
+                    if self.inline:
+                        nodes.append({'t': 'Str', 'c': ' '})
+                    else:
+                        nodes.append({'t': 'Para', 'c': []})
+                elif self.inline and node['t'] == next_node['t'] == t_code:
+                    nodes.append({'t': 'Str', 'c': ' '})
+            nodes.append(unformatted_nodes[-1])
         self._output_nodes = nodes
         return nodes
 

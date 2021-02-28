@@ -442,6 +442,16 @@ session is in use).
     - `svg` (`image/svg+xml`)
     - `pdf` (`application/pdf`)
 
+  For `rich_output` formats with a `text/*` mime type (`latex`, `html`,
+  `markdown`, `plain`), it is possible to specify whether they are displayed
+  `raw`, `verbatim`, or `verbatim_or_empty`.  For example,
+  `show=rich_output:latex:raw` and `show=rich_output:latex:verbatim`.  `raw`
+  treats `latex` and `html` as raw content with those formats embedded within
+  Markdown.  `raw` treats `markdown` and `plain` as Markdown.  When a display
+  style is not specified, all `rich_output` formats with a `text/*` mime type
+  are displayed `raw` by default, except for `plain` which is displayed
+  `verbatim`.
+
   `markup` displays the Markdown source for the inline code or code block.
   Because the Markdown source is not available in the Pandoc AST but rather
   must be recreated from it, the Markdown source displayed with `markup` may

@@ -2,6 +2,14 @@
 
 ## v0.5.0 (dev)
 
+* `rich_output` formats with a `text/*` mime type can now be displayed `raw`,
+  `verbatim`, or `verbatim_or_empty`.  For example,
+  `show=rich_output:latex:raw` and `show=rich_output:latex:verbatim`.
+* When a code chunk produces multiple outputs, it is now impossible for these
+  to accidentally merge into a single output that does not represent the
+  intended Markdown.  Raw output no longer merges with adjacent output.
+  Adjacent inline code outputs no longer merge into a single, potentially
+  invalid, code output.
 * Most example documents now come with both HTML and Markdown output.  This is
   convenient for seeing how a Markdown-to-Markdown conversion process works.
   It also significantly simplifies Codebraid testing for new releases, which

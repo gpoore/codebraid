@@ -637,6 +637,20 @@ class Options(dict):
                 'svg': 'image/svg+xml',
                 'pdf': 'application/pdf'}
 
+    mime_map_with_text_display = {}
+    rich_text_default_display = {}
+    for k, v in mime_map.items():
+        mime_map_with_text_display[k] = v
+        if v.startswith('text/'):
+            mime_map_with_text_display[k+':raw'] = v
+            mime_map_with_text_display[k+':verbatim'] = v
+            mime_map_with_text_display[k+':verbatim_or_empty'] = v
+            if k == 'plain':
+                rich_text_default_display[k] = 'verbatim'
+            else:
+                rich_text_default_display[k] = 'raw'
+
+
     def _option_show(self, key, value):
         # 'show' may be processed during `finalize_after_copy()` to allow for
         # 'show' and `.is_expr` inheritance.  'hide' checks for 'show'
@@ -685,7 +699,7 @@ class Options(dict):
                         format = self._default_rich_output
                     else:
                         format = format.split('|')
-                        if not all(fmt in self.mime_map for fmt in format):
+                        if not all(fmt in self.mime_map_with_text_display for fmt in format):
                             self.code_chunk.source_warnings.append('Invalid "{0}" sub-value "{1}"'.format(key, output_and_format))
                             continue
                 else:
@@ -936,7 +950,7 @@ class CodeChunk(object):
             self.repl_lines = [line for x in copy_chunks if x.repl_lines is not None for line in x.repl_lines] or None
             self.rich_output = [ro for x in copy_chunks if x.rich_output is not None for ro in x.rich_output] or None
         if self.is_expr:
-            # expr compatibilty has already been checked in `copy_code()`
+            # expr compatibility has already been checked in `copy_code()`
             self.expr_lines = copy_chunks[0].expr_lines
         self.stdout_start_line_number = copy_chunks[0].stdout_start_line_number
         self.stderr_start_line_number = copy_chunks[0].stderr_start_line_number
@@ -951,6 +965,8 @@ class CodeChunk(object):
         default lines (if any) are accessed for the specified output type.
         '''
         if lines is not None:
+            if not lines and output_format == 'verbatim_or_empty':
+                lines = ['\xa0']
             pass
         elif output_type == 'code':
             lines = self.code_lines
