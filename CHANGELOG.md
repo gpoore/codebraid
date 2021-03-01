@@ -1,6 +1,6 @@
 # Change Log
 
-## v0.5.0 (dev)
+## v0.5.0 (2021-02-28)
 
 * The built-in code execution system now uses PATH to locate executables under
   Windows.  Previously PATH was ignored under Windows due to the
@@ -24,7 +24,7 @@
   `code` module.  Added `cb.repl` command.
 * Synchronization of code with source line numbers is now simpler and more
   robust to prevent `StopIteration` errors (#36).
-* Check for compatible Pandoc version now works correctly with Pandoc 2.10.
+* Check for compatible Pandoc version now works correctly with Pandoc 2.10+.
 * Added `live_output` option for the first code chunk in a session.  This
   shows code output (stdout and stderr) live in the terminal during code
   execution (#21).
