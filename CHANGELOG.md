@@ -2,6 +2,9 @@
 
 ## v0.5.0 (dev)
 
+* The built-in code execution system now uses PATH to locate executables under
+  Windows.  Previously PATH was ignored under Windows due to the
+  implementation details of Python's `subprocess.Popen()` (#41).
 * Added support for Pandoc command-line options `-C` and `--citeproc` (#42).
 * `rich_output` formats with a `text/*` mime type can now be displayed `raw`,
   `verbatim`, or `verbatim_or_empty`.  For example,

@@ -17,6 +17,7 @@ import json
 import locale
 import pathlib
 import pkgutil
+import platform
 import queue
 import re
 import subprocess
@@ -642,6 +643,14 @@ class CodeProcessor(object):
         # backslashes will require extra escaping.
         args = shlex.split(cmd)
         failed_proc_stderr = 'COMMAND FAILED (missing program or file):\n  {0}'.format(cmd).encode('utf8')
+        if platform.system() == 'Windows':
+            # Modify args since subprocess.Popen() ignores PATH
+            # * https://bugs.python.org/issue15451
+            # * https://bugs.python.org/issue8557
+            executable = shutil.which(args[0])
+            if executable is None:
+                return FailedProcess(args, stdout=b'', stderr=failed_proc_stderr)
+            args[0] = executable
         if stdin is None:
             stdin_bytes_or_none = None
         else:
@@ -669,6 +678,14 @@ class CodeProcessor(object):
             raise err.CodebraidError('"live_output" is currently not compatible with running a process that requires STDIN')
         args = shlex.split(cmd)
         failed_proc_stderr = 'COMMAND FAILED (missing program or file):\n  {0}'.format(cmd).encode('utf8')
+        if platform.system() == 'Windows':
+            # Modify args since subprocess.Popen() ignores PATH
+            # * https://bugs.python.org/issue15451
+            # * https://bugs.python.org/issue8557
+            executable = shutil.which(args[0])
+            if executable is None:
+                return FailedProcess(args, stdout=b'', stderr=failed_proc_stderr)
+            args[0] = executable
         # Queue of bytes from stdout and stderr, plus string delims
         print_queue = queue.Queue()
         hash_bytes = session.hash[:64].encode('utf8')
