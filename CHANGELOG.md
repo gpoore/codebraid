@@ -1,33 +1,50 @@
 # Change Log
 
+
+## v0.6.0 (dev)
+
+*
+
+
+
 ## v0.5.0 (2021-02-28)
 
 * The built-in code execution system now uses PATH to locate executables under
   Windows.  Previously PATH was ignored under Windows due to the
   implementation details of Python's `subprocess.Popen()` (#41).
+
 * Added support for Pandoc command-line options `-C` and `--citeproc` (#42).
+
 * `rich_output` formats with a `text/*` mime type can now be displayed `raw`,
   `verbatim`, or `verbatim_or_empty`.  For example,
   `show=rich_output:latex:raw` and `show=rich_output:latex:verbatim`.
+
 * When a code chunk produces multiple outputs, it is now impossible for these
   to accidentally merge into a single output that does not represent the
   intended Markdown.  Raw output no longer merges with adjacent output.
   Adjacent inline code outputs no longer merge into a single, potentially
   invalid, code output.
+
 * Most example documents now come with both HTML and Markdown output.  This is
   convenient for seeing how a Markdown-to-Markdown conversion process works.
   It also significantly simplifies Codebraid testing for new releases, which
   uses the example documents.  The HTML output changes whenever Pandoc updates
   its HTML templates.  Markdown output should be much more stable.
+
 * `codebraid` now reads from stdin (#33).
+
 * Added preliminary support for the Python REPL (`python_repl`) via Python's
   `code` module.  Added `cb.repl` command.
+
 * Synchronization of code with source line numbers is now simpler and more
   robust to prevent `StopIteration` errors (#36).
+
 * Check for compatible Pandoc version now works correctly with Pandoc 2.10+.
+
 * Added `live_output` option for the first code chunk in a session.  This
   shows code output (stdout and stderr) live in the terminal during code
   execution (#21).
+
 * "Includes" are now skipped during internal, intermediate file
   transformations, which prevents duplicated "includes" and associated errors
   (#20).  This applies to `header-includes`, `include-before`,
@@ -37,22 +54,31 @@
   and `--toc`/`--table-of-contents`.  This allows Codebraid to be used as a
   preprocessor and saves YAML metadata settings for a subsequent conversion
   from Pandoc Markdown to another format.
+
 * Added option `jupyter_timeout` for the first code chunk in a session (#30).
+
 * Fixed Pandoc 2.8+ compatibility by using `-raw_attribute` in intermediate
   Markdown.  Code output in raw format (interpreted as Markdown) is no longer
   lost when converting to document formats other than Markdown (#26).
+
 * Added support for SageMath (#5).
+
 * All document transformations now use `--preserve-tabs`, so code indentation
   is maintained without change and tabs no longer cause errors in syncing code
   to input line numbers (#18).
+
 * Added support for remaining unsupported Pandoc command-line options,
   including `--defaults` (#14).
+
 * Julia now uses `--project=@.` (#10).
+
 * Documentation now includes details of code execution and how this can result
   in different output compared to interactive sessions (#11).
+
 * AST walking code no longer assumes that all dict nodes represent types and
   have a "t" (type) key.  Dict nodes without a "t" key are now skipped.  This
   fixes a bug with citations of the form `[@cite]` (#12).
+
 
 
 ## v0.4.0 (2019-07-10)
@@ -103,6 +129,7 @@
   converted to boolean values.
 
 * Improved option processing.
+
 
 
 ## v0.3.0 (2019-05-19)
