@@ -90,7 +90,7 @@ per kernel.
 ::: {.exampleMarkup}
     ```{.python .cb.nb session=sympy name=sympy1 jupyter_kernel=python3}
     from sympy import *
-    init_printing()
+    init_printing(use_latex='mathjax')
     x = Symbol('x')
     eqn = E**(-x**2)
     int_eqn = Integral(eqn, (x, -oo, oo))
@@ -101,14 +101,14 @@ per kernel.
 ::: {.exampleOutput}
 ``` {.python .numberLines startFrom="1"}
 from sympy import *
-init_printing()
+init_printing(use_latex='mathjax')
 x = Symbol('x')
 eqn = E**(-x**2)
 int_eqn = Integral(eqn, (x, -oo, oo))
 int_eqn
 ```
 
-$$\int_{-\infty}^{\infty} e^{- x^{2}}\, dx$$
+$\displaystyle \int\limits_{-\infty}^{\infty} e^{- x^{2}}\, dx$
 :::
 :::
 
@@ -124,7 +124,7 @@ $$\int_{-\infty}^{\infty} e^{- x^{2}}\, dx$$
 int_eqn.doit()
 ```
 
-$$\sqrt{\pi}$$
+$\displaystyle \sqrt{\pi}$
 :::
 :::
 
@@ -149,9 +149,9 @@ normally does with code, stdout, and stderr.
 :::
 
 ::: {.exampleOutput}
-$$\int_{-\infty}^{\infty} e^{- x^{2}}\, dx$$
+$\displaystyle \int\limits_{-\infty}^{\infty} e^{- x^{2}}\, dx$
 
-$$\sqrt{\pi}$$
+$\displaystyle \sqrt{\pi}$
 :::
 :::
 
@@ -170,7 +170,7 @@ output or show the markup. For example, using
 :::
 
 ::: {.exampleOutput}
-$$\int_{-\infty}^{\infty} e^{- x^{2}}\, dx$$
+$\displaystyle \int\limits_{-\infty}^{\infty} e^{- x^{2}}\, dx$
 :::
 :::
 
@@ -182,7 +182,7 @@ $$\int_{-\infty}^{\infty} e^{- x^{2}}\, dx$$
 
 ::: {.exampleOutput}
 ``` {.latex}
-$$\int_{-\infty}^{\infty} e^{- x^{2}}\, dx$$
+$\displaystyle \int\limits_{-\infty}^{\infty} e^{- x^{2}}\, dx$
 ```
 :::
 :::

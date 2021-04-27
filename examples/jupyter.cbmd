@@ -47,7 +47,7 @@ single document, and multiple independent sessions are possible per kernel.
 
 ```{.python .cb.nb session=sympy name=sympy1 jupyter_kernel=python3 example=true}
 from sympy import *
-init_printing()
+init_printing(use_latex='mathjax')
 x = Symbol('x')
 eqn = E**(-x**2)
 int_eqn = Integral(eqn, (x, -oo, oo))
