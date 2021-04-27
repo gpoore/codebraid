@@ -67,7 +67,7 @@ that it does not impact other examples.
 :::
 
 ::: {.exampleOutput}
-`ERROR: LoadError: MethodError: no method matching +(::Int64, ::String) Closest candidates are:   +(::Any, ::Any, !Matched::Any, !Matched::Any...) at operators.jl:538   +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at int.jl:86   +(::Integer, !Matched::Integer) at int.jl:918   ... Stacktrace:  [1] top-level scope at <string>:1  [2] include(::Function, ::Module, ::String) at .\Base.jl:380  [3] include(::Module, ::String) at .\Base.jl:368  [4] exec_options(::Base.JLOptions) at .\client.jl:296  [5] _start() at .\client.jl:506 in expression starting at <string>:1`{.stderr}
+`ERROR: LoadError: MethodError: no method matching +(::Int64, ::String) Closest candidates are:   +(::Any, ::Any, !Matched::Any, !Matched::Any...) at operators.jl:560   +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at int.jl:87   +(::Integer, !Matched::Ptr) at pointer.jl:161   ... Stacktrace:  [1] top-level scope    @ ~\AppData\Local\Temp\tmpol_0hr13\source_a2d1d369c7b96958.jl:4 in expression starting at <string>:1`{.stderr}
 :::
 :::
 
@@ -143,9 +143,9 @@ println("Mean: $(mean(rnums))")
 ```
 
 ``` {.stdout}
-Random numbers: [36, 11, 96, 33, 42, 96, 41, 2, 80, 100]
-Median: 41.5
-Mean: 53.7
+Random numbers: [66, 85, 12, 3, 7, 98, 69, 7, 79, 20]
+Median: 43.0
+Mean: 44.6
 ```
 :::
 :::
@@ -179,16 +179,13 @@ var += "a"
 ``` {.stderr}
 ERROR: LoadError: MethodError: no method matching +(::Int64, ::String)
 Closest candidates are:
-  +(::Any, ::Any, !Matched::Any, !Matched::Any...) at operators.jl:538
-  +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at int.jl:86
-  +(::Integer, !Matched::Integer) at int.jl:918
+  +(::Any, ::Any, !Matched::Any, !Matched::Any...) at operators.jl:560
+  +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at int.jl:87
+  +(::Integer, !Matched::Ptr) at pointer.jl:161
   ...
 Stacktrace:
- [1] top-level scope at source.jl:4
- [2] include(::Function, ::Module, ::String) at .\Base.jl:380
- [3] include(::Module, ::String) at .\Base.jl:368
- [4] exec_options(::Base.JLOptions) at .\client.jl:296
- [5] _start() at .\client.jl:506
+ [1] top-level scope
+   @ ~\AppData\Local\Temp\tmp5v0mithp\source_a65f329fe71335e1.jl:7
 in expression starting at source.jl:4
 ```
 :::
