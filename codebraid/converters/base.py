@@ -731,7 +731,8 @@ class CodeChunk(object):
                  command: str,
                  code: Union[str, List[str]],
                  custom_options: dict,
-                 source_name: str, *,
+                 *,
+                 source_name: Optional[str]=None,
                  source_start_line_number: Optional[int]=None,
                  inline: Optional[bool]=None):
         self.__pre_init__()
@@ -1082,14 +1083,14 @@ class Converter(object):
                 raise TypeError
             self.raw_source_paths = paths
             # Names are based on paths BEFORE any expansion
-            self.source_names = [p.as_posix() for p in paths]
+            source_names = [p.as_posix() for p in paths]
             if not all(isinstance(x, bool) for x in (expanduser, expandvars)):
                 raise TypeError
             if expandvars:
                 paths = [pathlib.Path(os.path.expandvars(str(p))) for p in paths]
             if expanduser:
                 paths = [p.expanduser() for p in paths]
-            self.expanded_source_paths = paths
+            self.expanded_source_paths = collections.OrderedDict(zip(source_names, paths))
             source_strings = []
             for p in paths:
                 try:
@@ -1101,7 +1102,7 @@ class Converter(object):
                 if not source_string:
                     source_string = '\n'
                 source_strings.append(source_string)
-            self.source_strings = source_strings
+            self.sources = collections.OrderedDict(zip(source_names, source_strings))
             if self.from_formats is not None:
                 if from_format is None:
                     try:
@@ -1125,11 +1126,12 @@ class Converter(object):
                       strings and all(isinstance(x, str) for x in strings)):
                 raise TypeError
             # Normalize newlines, as if read from file with universal newlines
-            self.source_strings = [io.StringIO(s, newline=None).read() or '\n' for s in strings]
+            source_strings = [io.StringIO(s, newline=None).read() or '\n' for s in strings]
             if len(strings) == 1:
-                self.source_names = ['<string>']
+                source_names = ['<string>']
             else:
-                self.source_names = ['<string({0})>'.format(n+1) for n in range(len(strings))]
+                source_names = ['<string({0})>'.format(n+1) for n in range(len(strings))]
+            self.sources = collections.OrderedDict(zip(source_names, source_strings))
             self.raw_source_paths = None
             self.expanded_source_paths = None
             if from_format is None:
@@ -1139,7 +1141,7 @@ class Converter(object):
             self.from_format = from_format
         else:
             raise TypeError
-        if len(self.source_strings) > 1 and from_format not in self.multi_source_formats:
+        if len(self.sources) > 1 and from_format not in self.multi_source_formats:
             raise TypeError('Multiple sources are not supported for format {0}'.format(from_format))
 
         if not isinstance(no_cache, bool):
@@ -1165,7 +1167,7 @@ class Converter(object):
             cache_key_hasher.update(b'<string>')
         else:
             cache_source_paths = []
-            for p in self.expanded_source_paths:
+            for p in self.expanded_source_paths.values():
                 try:
                     p_final = pathlib.Path('~') / p.absolute().relative_to(pathlib.Path.home())
                 except ValueError:

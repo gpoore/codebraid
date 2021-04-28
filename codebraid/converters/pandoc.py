@@ -9,7 +9,6 @@
 
 
 import collections
-import io
 import json
 import os
 import pathlib
@@ -19,11 +18,55 @@ import subprocess
 import sys
 import tempfile
 import textwrap
-from typing import Dict, List, Optional, Sequence, Union
-import warnings
+from typing import List, Optional, Sequence, Tuple, Union
 from .base import CodeChunk, Converter, Include
 from .. import err
 from .. import util
+
+
+# Pandoc node types mapped to integers representing the layout of node
+# contents (if any).
+# https://github.com/jgm/pandocfilters/blob/master/pandocfilters.py
+pandoc_block_nodes = {
+    'Plain': 1,
+    'Para': 1,
+    'CodeBlock': 2,
+    'RawBlock': 2,
+    'BlockQuote': 1,
+    'OrderedList': 2,
+    'BulletList': 1,
+    'DefinitionList': 1,
+    'Header': 3,
+    'HorizontalRule': 0,
+    'Table': 5,
+    'Div': 2,
+    'Null': 0,
+}
+pandoc_inline_nodes = {
+    'Str': 1,
+    'Emph': 1,
+    'Strong': 1,
+    'Strikeout': 1,
+    'Superscript': 1,
+    'Subscript': 1,
+    'SmallCaps': 1,
+    'Quoted': 2,
+    'Cite': 2,
+    'Code': 2,
+    'Space': 0,
+    'LineBreak': 0,
+    'Math': 2,
+    'RawInline': 2,
+    'Link': 3,
+    'Image': 3,
+    'Note': 1,
+    'SoftBreak': 0,
+    'Span': 2,
+}
+pandoc_nodes = {**pandoc_block_nodes, **pandoc_inline_nodes}
+pandoc_code_nodes = {k: v for k, v in pandoc_nodes.items() if k.startswith('Code')}
+pandoc_raw_nodes = {k: v for k, v in pandoc_nodes.items() if k.startswith('Raw')}
+pandoc_code_raw_nodes = {**pandoc_code_nodes, **pandoc_raw_nodes}
 
 
 
@@ -203,14 +246,15 @@ class PandocCodeChunk(CodeChunk):
     '''
     def __init__(self,
                  node: dict,
+                 parent_node: dict,
                  parent_node_list: list,
                  parent_node_list_index: int,
-                 source_name: str,
-                 source_start_line_number: int,
-                 inline_parent_node: Optional[dict]=None):
+                 source_name: Optional[str]=None,
+                 source_start_line_number: Optional[int]=None):
         super().__pre_init__()
 
         self.node = node
+        self.parent_node = parent_node
         self.parent_node_list = parent_node_list
         self.parent_node_list_index = parent_node_list_index
 
@@ -234,14 +278,12 @@ class PandocCodeChunk(CodeChunk):
         line_anchors = options.pop('lineAnchors', None)
 
         # Process options
-        super().__init__(codebraid_command, code, options, source_name,
+        super().__init__(codebraid_command, code, options, source_name=source_name,
                          source_start_line_number=source_start_line_number, inline=inline)
 
         # Work with processed options -- now use `self.options`
-        if inline:
-            self.inline_parent_node = inline_parent_node
-            if (self.options['example'] and (inline_parent_node is None or
-                    'codebraid_pseudonode' in inline_parent_node or len(parent_node_list) > 1)):
+        if inline and self.options['example']:
+            if parent_node['t'] not in ('Plain', 'Para') or 'codebraid_pseudonode' in parent_node or len(parent_node_list) > 1:
                 self.source_errors.insert(0, 'Option "example" is only allowed for inline code that is in a paragraph by itself')
                 self.options['example'] = False
         pandoc_id = node_id
@@ -488,7 +530,7 @@ class PandocCodeChunk(CodeChunk):
             # An inline node can't be replaced with a div directly.  Instead,
             # its block-level parent node is redefined.  The validity of this
             # operation is checked during initialization.
-            parent_para_plain_node = self.inline_parent_node
+            parent_para_plain_node = self.parent_node
             parent_para_plain_node['t'] = 'Div'
             parent_para_plain_node['c'] = example_div_node['c']
         else:
@@ -498,8 +540,8 @@ class PandocCodeChunk(CodeChunk):
 
 
 
-def _get_walk_closure(enumerate=enumerate, isinstance=isinstance):
-    def walk_node_list(node_list):
+def _get_walk_closure(enumerate=enumerate, isinstance=isinstance, list=list, dict=dict):
+    def walk_node_list(node_list, parent_node, type_filter=None, skip_note_contents=False, in_note=False):
         '''
         Walk all AST nodes in a list, recursively descending to walk all child
         nodes as well.  The walk function is written so that it is only ever
@@ -512,62 +554,46 @@ def _get_walk_closure(enumerate=enumerate, isinstance=isinstance):
         nodes, which are marked so that they can be identified later if
         necessary.  This simplifies processing.
 
-        Returns nodes plus their parent lists with indices.
+        Yields a tuple containing a node, its parent node, parent list,
+        parent list index, and a boolean indicating whether the node is inside
+        a note.
+
+        If `type_filter` is provided, it must be an object like a `set()` that
+        supports membership checks via `in`.  Only nodes with types in
+        `type_filter` will be yielded.
+
+        If `skip_notes` is true, recursion skips nodes inside notes.
         '''
         for index, obj in enumerate(node_list):
-            if isinstance(obj, list):
-                yield from walk_node_list(obj)
-            elif isinstance(obj, dict):
+            if isinstance(obj, dict):
                 try:
                     node_type = obj['t']
                 except KeyError:
                     continue
-                yield (obj, node_list, index)
-                obj_contents = obj.get('c', None)
-                if isinstance(obj_contents, list):
-                    if node_type != 'DefinitionList':
-                        yield from walk_node_list(obj_contents)
-                    else:
-                        for elem in obj_contents:
-                            term, definition = elem
-                            yield ({'t': 'Plain', 'c': term, 'codebraid_pseudonode': True}, elem, 0)
-                            yield from walk_node_list(term)
-                            yield from walk_node_list(definition)
+                if type_filter is None or node_type in type_filter:
+                    yield (obj, parent_node, node_list, index, in_note)
+                if 'c' in obj:
+                    obj_contents = obj['c']
+                    if isinstance(obj_contents, list):
+                        if node_type == 'Note':
+                            if skip_note_contents:
+                                continue
+                            in_note = True
+                            yield from walk_node_list(obj_contents, obj, type_filter, skip_note_contents, in_note)
+                        elif node_type != 'DefinitionList':
+                            yield from walk_node_list(obj_contents, obj, type_filter, skip_note_contents, in_note)
+                        else:
+                            for elem in obj_contents:
+                                term, definition = elem
+                                pseudonode = {'t': 'Plain', 'c': term, 'codebraid_pseudonode': True}
+                                if type_filter is None or 'Plain' in type_filter:
+                                    yield (pseudonode, obj, elem, 0, in_note)
+                                yield from walk_node_list(term, pseudonode, type_filter, skip_note_contents, in_note)
+                                yield from walk_node_list(definition, obj, type_filter, skip_note_contents, in_note)
+            elif isinstance(obj, list):
+                yield from walk_node_list(obj, parent_node, type_filter, skip_note_contents, in_note)
     return walk_node_list
 walk_node_list = _get_walk_closure()
-
-
-def _get_walk_less_note_contents_closure(enumerate=enumerate, isinstance=isinstance):
-    def walk_node_list_less_note_contents(node_list):
-        '''
-        Like `walk_node_list()`, except that it will return a `Note` node but
-        not iterate through it.  It can be useful to process `Note` contents
-        separately since they are typically located in another part of the
-        document and may contain block nodes.
-        '''
-        for index, obj in enumerate(node_list):
-            if isinstance(obj, list):
-                yield from walk_node_list_less_note_contents(obj)
-            elif isinstance(obj, dict):
-                try:
-                    node_type = obj['t']
-                except KeyError:
-                    continue
-                yield (obj, node_list, index)
-                if node_type == 'Note':
-                    continue
-                obj_contents = obj.get('c', None)
-                if isinstance(obj_contents, list):
-                    if node_type != 'DefinitionList':
-                        yield from walk_node_list_less_note_contents(obj_contents)
-                    else:
-                        for elem in obj_contents:
-                            term, definition = elem
-                            yield ({'t': 'Plain', 'c': term, 'codebraid_pseudonode': True}, elem, 0)
-                            yield from walk_node_list_less_note_contents(term)
-                            yield from walk_node_list_less_note_contents(definition)
-    return walk_node_list_less_note_contents
-walk_node_list_less_note_contents = _get_walk_less_note_contents_closure()
 
 
 
@@ -641,19 +667,19 @@ class PandocConverter(Converter):
             self.cross_source_sessions = False
         self.pandoc_file_scope = pandoc_file_scope
 
-        if self.from_format == 'markdown' and not pandoc_file_scope and len(self.source_strings) > 1:
+        if self.from_format == 'markdown' and not pandoc_file_scope and len(self.sources) > 1:
             # If multiple files are being passed to Pandoc for concatenated
             # processing, ensure sufficient whitespace to prevent elements in
             # different files from merging, and insert a comment to prevent
             # indented elements from merging.  This means that the original
             # sources cannot be passed to Pandoc directly.
-            for n, source_string in enumerate(self.source_strings):
+            for source_name, source_string in self.sources.items():
                 if source_string[-1:] == '\n':
                     source_string += '\n<!--codebraid.eof-->\n\n'
                 else:
                     source_string += '\n\n<!--codebraid.eof-->\n\n'
-                self.source_strings[n] = source_string
-            self.concat_source_string = ''.join(self.source_strings)
+                self.sources[source_name] = source_string
+            self.concat_source_string = ''.join(self.sources.values())
 
         self.from_format_pandoc_extensions = from_format_pandoc_extensions
 
@@ -790,21 +816,13 @@ class PandocConverter(Converter):
 
 
     _walk_node_list = staticmethod(walk_node_list)
-    _walk_node_list_less_note_contents = staticmethod(walk_node_list_less_note_contents)
 
-    def _walk_ast(self, ast):
+    def _walk_ast(self, ast, type_filter=None, skip_note_contents=False):
         '''
         Walk all nodes in AST.
         '''
         ast_root_node_list = ast['blocks']
-        yield from self._walk_node_list(ast_root_node_list)
-
-    def _walk_ast_less_note_contents(self, ast):
-        '''
-        Walk all nodes in AST, except those in Notes.
-        '''
-        ast_root_node_list = ast['blocks']
-        yield from self._walk_node_list_less_note_contents(ast_root_node_list)
+        yield from self._walk_node_list(ast_root_node_list, ast, type_filter=type_filter, skip_note_contents=skip_note_contents)
 
 
     @staticmethod
@@ -895,9 +913,74 @@ class PandocConverter(Converter):
         node['c'] = [raw_format, '\x02CodebraidTrace({0})\x03'.format(trace) + node['c'][1]]
 
 
+    @staticmethod
+    def _find_cb_command(
+            text: str,
+            *,
+            max_command_len=max(len(x) for x in CodeChunk.commands),
+            commands_set=CodeChunk.commands,
+            before_attr_chars=set('{ \t\n'),
+            after_attr_chars=set('} \t\n')
+        ) -> List[Tuple[int, int, bool, Optional[str]]]:
+        '''
+        Find all occurrences of `.cb.` in a string, which may indicate the
+        presence of Codebraid code.  Try to extract a command `.cb.<command>`
+        for each occurrence, and if a valid command is not found use None.
+        Check the characters immediately before/after `.cb.<command>` to
+        determine whether this may be part of code attributes.
+
+        Return a list of tuples.  Each tuple contains data about an occurrence
+        of `.cb.`:
+            (<index>, <line_number>, <maybe_codebraid_attr>, <command>)
+        '''
+        results = []
+        line_num = 1
+        start_index = 0
+        while True:
+            maybe_start_cb_command_index = text.find('.cb.', start_index)
+            if maybe_start_cb_command_index == -1:
+                break
+            line_num += text.count('\n', start_index, maybe_start_cb_command_index)
+            maybe_end_cb_command_index = maybe_start_cb_command_index + 4
+            for _ in range(max_command_len + 1):
+                if text[maybe_end_cb_command_index:maybe_end_cb_command_index+1] in after_attr_chars:
+                    break
+                maybe_end_cb_command_index += 1
+            else:
+                maybe_end_cb_command_index = -1
+            if maybe_end_cb_command_index == -1:
+                command = None
+            else:
+                command = text[maybe_start_cb_command_index+4:maybe_end_cb_command_index]
+                if command not in commands_set:
+                    command = None
+            if command is None:
+                start_index = maybe_start_cb_command_index + 4
+            else:
+                start_index = maybe_end_cb_command_index
+            if maybe_start_cb_command_index < 4 or text[maybe_start_cb_command_index-1] not in before_attr_chars:
+                # For Codebraid attr, `.cb.<command>` must always have at
+                # least 4 characters in front of it, either something like
+                # "`x`{.cb.command}" for inline or "```{.cb.command}" for
+                # block.  There must always be a "{" or whitespace in front of
+                # `.cb.<command>`.
+                maybe_codebraid_attr = False
+            elif command is not None and text[maybe_end_cb_command_index:maybe_end_cb_command_index+1] not in after_attr_chars:
+                # For Codebraid attr with a valid Codebraid command,
+                # `.cb.<command>` must be followed by whitespace or a "}".
+                maybe_codebraid_attr = False
+            else:
+                # It would be possible to introduce additional checks here to
+                # handle the case of invalid commands that match Pandoc attr
+                # syntax, but that would probably introduce significant
+                # complexity for marginal benefit.
+                maybe_codebraid_attr = True
+            results.append((maybe_start_cb_command_index, line_num, maybe_codebraid_attr, command))
+        return results
+
+
     def _load_and_process_initial_ast(self, *,
-                                      source_string, single_source_name=None,
-                                      any=any, int=int, len=len, next=next):
+                                      source_string, single_source_name=None):
         '''
         Convert source string into a Pandoc AST and perform a number of
         operations on the AST.
@@ -911,15 +994,6 @@ class PandocConverter(Converter):
             These special code nodes are converted back into raw nodes in the
             final AST before the final format conversion.
         '''
-        # Currently, a brute-force approach is used to determine line numbers:
-        # walk the AST, and then search the source each time a Str node,
-        # etc. is encountered, starting at the end of the last string that was
-        # located.  This isn't guaranteed to give correct results in all
-        # cases, since not all AST information like attributes is used in
-        # searching, but it will usually give exact results.  Since syncing is
-        # a usability feature, an occasional small loss of precision isn't
-        # critical.
-
         # Convert source string to AST with Pandoc.
         # Order of extensions is important: earlier override later.
         from_format_pandoc_extensions = ''.join(['-latex_macros',
@@ -950,177 +1024,146 @@ class PandocConverter(Converter):
         self._asts[single_source_name] = ast
 
 
-        # Iterator for source lines and line numbers that skips invalid lines
-        if self.pandoc_file_scope or len(self.source_strings) == 1:
-            source_string_lines = util.splitlines_lf(source_string) or ['']
-            source_name_line_and_number_iter = ((single_source_name, line, n+1)
-                                                for (n, line) in enumerate(source_string_lines))
+        # Locate all code nodes to find Codebraid code nodes.  Also locate all
+        # raw nodes so that they can be "frozen" to avoid changes during
+        # intermediate AST manipulations.
+        code_raw_node_tuples = list(self._walk_ast(ast, type_filter=pandoc_code_raw_nodes))
+        # Create code chunks.  Determine if any are in notes, in which case
+        # the order of appearance in the source may be different from that in
+        # the AST.
+        code_chunks_in_notes = False
+        codebraid_node_set = set()
+        for node_tuple in code_raw_node_tuples:
+            node, parent_node, parent_node_list, parent_node_list_index, in_note = node_tuple
+            node_type = node['t']
+            if node_type.startswith('Code'):
+                if any(c.startswith('cb.') for c in node['c'][0][1]):
+                    if in_note:
+                        code_chunks_in_notes = True
+                    code_chunk = PandocCodeChunk(node, parent_node, parent_node_list, parent_node_list_index)
+                    self.code_chunks.append(code_chunk)
+                    codebraid_node_set.add(id(node))
+        # Locate all occurrences of `.cb.` in source(s), to provide
+        # traceback information for source errors
+        if single_source_name is not None:
+            sources_cb = [(single_source_name, cb_i) for cb_i in self._find_cb_command(source_string)]
+            source_names_stack = [single_source_name]
         else:
-            def make_source_name_line_and_number_iter():
-                for src_name, src_string in zip(self.source_names, self.source_strings):
-                    src_string_lines = util.splitlines_lf(src_string) or ['']
-                    for n, line in enumerate(src_string_lines):
-                        yield (src_name, line, n+1)
-            source_name_line_and_number_iter = make_source_name_line_and_number_iter()
-
-
-        # Walk AST to associate line numbers with AST nodes
-        para_plain_source_name_node_line_number = self._para_plain_source_name_node_line_number
-        source_name, line, line_number = next(source_name_line_and_number_iter)
-        line_index = 0
-        block_node_types = self._block_node_types
+            sources_cb = [(src_name, cb_i) for (src_name, src_string) in self.sources.items() for cb_i in self._find_cb_command(src_string)]
+            source_names_stack = [k for k in self.sources]
+        sources_cb.reverse()
+        source_names_stack.reverse()
+        # Process code and raw nodes:  Attach location info to code nodes and
+        # "freeze" raw nodes.  If necessary, also search raw node contents to
+        # eliminate false positives for code node location.
         if self._io_map:
-            freeze_raw_node = self._freeze_raw_node_io_map
+            raise NotImplementedError
         else:
             freeze_raw_node = self._freeze_raw_node
-        ignorable_inline_node_types = set(['Emph', 'Strong', 'Strikeout', 'Superscript', 'Subscript', 'SmallCaps',
-                                           'Quoted', 'Cite', 'Space', 'LineBreak', 'Math', 'Link', 'Image',
-                                           'SoftBreak', 'Span'])
-        for node_tuple in self._walk_ast_less_note_contents(ast):
-            node, parent_node_list, parent_node_list_index = node_tuple
-            node_type = node['t']
-            if node_type in ignorable_inline_node_types:
-                pass
-            elif node_type == 'Str':
-                node_contents = node['c']
-                for char in node_contents:
-                    if line[line_index:line_index+1] == char:
-                        line_index += 1
-                    else:
-                        line_index = line.find(char, line_index)
-                        if line_index >= 0:
-                            line_index += 1
-                        else:
-                            source_name, line, line_number = next(source_name_line_and_number_iter)
-                            line_index = line.find(char)
-                            if line_index < 0:
-                                while line_index < 0:
-                                    source_name, line, line_number = next(source_name_line_and_number_iter)
-                                    line_index = line.find(char)
-                            line_index += 1
-                if para_plain_node is not None:
-                    para_plain_source_name_node_line_number.append((source_name, para_plain_node, line_number))
-                    para_plain_node = None
-            elif node_type in ('Para', 'Plain'):
-                para_plain_node = node
-            elif node_type in ('Code', 'RawInline'):
-                if node_type == 'Code' or node['c'][0].lower() != 'html':
-                    # Long HTML comments can produce situations in which
-                    # searching fails.  This is likely related to the HTML
-                    # RawBlock issue.
-                    node_contents = node['c'][1]
-                    last_line_index = line_index
-                    line_index = line.find(node_contents, line_index)
-                    if line_index >= 0:
-                        line_index += len(node_contents)
-                    else:
-                        line_index = last_line_index
-                        for node_contents_elem in node_contents.replace('\n', ' ').split(' '):
-                            line_index = line.find(node_contents_elem, line_index)
-                            if line_index >= 0:
-                                line_index += len(node_contents_elem)
-                            else:
-                                source_name, line, line_number = next(source_name_line_and_number_iter)
-                                line_index = line.find(node_contents_elem)
-                                if line_index < 0:
-                                    while line_index < 0:
-                                        source_name, line, line_number = next(source_name_line_and_number_iter)
-                                        line_index = line.find(node_contents_elem)
-                                line_index += len(node_contents_elem)
-                if node_type == 'Code':
-                    if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb.*' in classes
-                        code_chunk = PandocCodeChunk(node, parent_node_list, parent_node_list_index,
-                                                     source_name, line_number, inline_parent_node=para_plain_node)
-                        self.code_chunks.append(code_chunk)
+        if len(sources_cb) == len(self.code_chunks):
+            # All `.cb.` in source(s) are active Codebraid code chunks, but
+            # may be out of order due to notes.
+            skipped = []
+            for chunk in self.code_chunks:
+                src_cb_i = sources_cb.pop()
+                src_name, (_, src_line_number, _, src_command) = src_cb_i
+                if chunk.command != src_command:
+                    while chunk.command != src_command:
+                        skipped.append(src_cb_i)
+                        src_cb_i = sources_cb.pop()
+                        src_name, (_, src_line_number, _, src_command) = src_cb_i
+                chunk.source_name = src_name
+                if chunk.inline:
+                    chunk.source_start_line_number = src_line_number
                 else:
-                    freeze_raw_node(node, source_name, line_number)
-                if para_plain_node is not None:
-                    para_plain_source_name_node_line_number.append((source_name, para_plain_node, line_number))
-                    para_plain_node = None
-            elif node_type == 'CodeBlock':
-                node_contents_lines = util.splitlines_lf(node['c'][1])
-                for node_contents_line in node_contents_lines:
-                    if node_contents_line not in line:
-                        # Move forward a line at a time until match
-                        source_name, line, line_number = next(source_name_line_and_number_iter)
-                        if node_contents_line not in line:
-                            while node_contents_line not in line:
-                                source_name, line, line_number = next(source_name_line_and_number_iter)
-                    # Once there's a match, move forward one line per loop
-                    source_name, line, line_number = next(source_name_line_and_number_iter)
-                line_index = 0
-                if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb.*' in classes
-                    code_chunk = PandocCodeChunk(node, parent_node_list, parent_node_list_index,
-                                                 source_name, line_number - len(node_contents_lines))
-                    self.code_chunks.append(code_chunk)
-                para_plain_node = None
-            elif node_type == 'RawBlock':
-                # Since some RawBlocks can be inline in the sense that their
-                # content does not begin on a new line (especially HTML, LaTeX
-                # to a lesser extent), use `.find()` rather than `in` to
-                # guarantee results.  The `len(node_contents_line) or 1`
-                # guarantees that multiple empty `node_contents_line` won't
-                # keep matching the same `line`.
-                node_format, node_contents = node['c']
-                node_format = node_format.lower()
-                if node_format == 'html':
-                    if node_contents == '<!--codebraid.eof-->':
+                    chunk.source_start_line_number = src_line_number + 1
+                if skipped:
+                    while skipped:
+                        sources_cb.append(skipped.pop())
+            for node_tuple in code_raw_node_tuples:
+                node, parent_node, parent_node_list, parent_node_list_index, in_note = node_tuple
+                node_type = node['t']
+                if node_type.startswith('Raw'):
+                    if single_source_name is None:
+                        node_format, node_contents = node['c']
+                        node_format = node_format.lower()
+                        if node_format == 'html' and node_contents == '<!--codebraid.eof-->':
+                            node['t'] = 'Null'
+                            del node['c']
+                            continue
+                    freeze_raw_node(node, '', 0)
+        else:
+            # Some `.cb.` in source(s) are not active Codebraid code chunks.
+            # They are false positives or commented-out Codebraid code chunks.
+            # If notes are present, nodes may be out of order.
+            code_chunk_iter = iter(self.code_chunks)
+            skipped = []
+            for node_tuple in code_raw_node_tuples:
+                node, parent_node, parent_node_list, parent_node_list_index, in_note = node_tuple
+                node_type = node['t']
+                if single_source_name is None and node_type.startswith('Raw'):
+                    node_format, node_contents = node['c']
+                    node_format = node_format.lower()
+                    if node_format == 'html' and node_contents == '<!--codebraid.eof-->':
                         node['t'] = 'Null'
                         del node['c']
+                        current_source_name = source_names_stack.pop()
+                        while sources_cb and sources_cb[-1][0] == current_source_name:
+                            sources_cb.pop()
+                        continue
+                node_cb = self._find_cb_command(node['c'][1])
+                if node_cb and not node_type.endswith('Block'):
+                    # Inline:  code comes before attr
+                    for _, _, node_maybe_codebraid, node_command in node_cb:
+                        src_cb_i = sources_cb.pop()
+                        _, (_, _, _, src_command) = src_cb_i
+                        # Can't compare `maybe_codebraid` because Pandoc
+                        # strips leading/trailing whitespace from inline code
+                        if node_command != src_command:
+                            while node_command != src_command:
+                                skipped.append(src_cb_i)
+                                src_cb_i = sources_cb.pop()
+                                _, (_, _, _, src_command) = src_cb_i
+                    if skipped:
+                        while skipped:
+                            sources_cb.append(skipped.pop())
+                if id(node) in codebraid_node_set:
+                    chunk = next(code_chunk_iter)
+                    src_cb_i = sources_cb.pop()
+                    src_name, (_, src_line_number, src_maybe_codebraid, src_command) = src_cb_i
+                    if chunk.command != src_command or not src_maybe_codebraid:
+                        while chunk.command != src_command or not src_maybe_codebraid:
+                            skipped.append(src_cb_i)
+                            src_cb_i = sources_cb.pop()
+                            src_name, (_, src_line_number, src_maybe_codebraid, src_command) = src_cb_i
+                    chunk.source_name = src_name
+                    if chunk.inline:
+                        chunk.source_start_line_number = src_line_number
                     else:
-                        freeze_raw_node(node, source_name, line_number)
-                else:
-                    # While this almost always works for HTML, it does fail in
-                    # at least some cases because the node contents do not
-                    # necessarily correspond to the verbatim content of the
-                    # document.  For example, try the invalid HTML
-                    # `<hr/></hr/>`; the first tag becomes `<hr />` with
-                    # an inserted space.
-                    # https://github.com/jgm/pandoc/issues/5305
-                    node_contents_lines = util.splitlines_lf(node_contents)
-                    for node_contents_line in node_contents_lines:
-                        line_index = line.find(node_contents_line)
-                        if line_index >= 0:
-                            line_index += len(node_contents_line) or 1
-                        else:
-                            source_name, line, line_number = next(source_name_line_and_number_iter)
-                            line_index = line.find(node_contents_line)
-                            if line_index < 0:
-                                while line_index < 0:
-                                    source_name, line, line_number = next(source_name_line_and_number_iter)
-                                    line_index = line.find(node_contents_line)
-                            line_index += len(node_contents_line) or 1
-                    freeze_raw_node(node, source_name, line_number - len(node_contents_lines) + 1)
-                para_plain_node = None
-            elif node_type == 'Note':
-                note_para_plain_node = None
-                for note_node_tuple in self._walk_node_list(node['c']):
-                    note_node, note_parent_node_list, note_parent_node_list_index = note_node_tuple
-                    note_node_type = node['t']
-                    if note_node_type in ('Para', 'Plain'):
-                        note_para_plain_node = note_node
-                    elif note_node_type in ('Code', 'CodeBlock'):
-                        if any(c == 'cb' or c.startswith('cb.') for c in node['c'][0][1]):  # 'cb.*' in classes
-                            if note_node_type == 'Code':
-                                code_chunk = PandocCodeChunk(note_node, note_parent_node_list, note_parent_node_list_index,
-                                                            source_name, line_number, note_para_plain_node)
-                            else:
-                                code_chunk = PandocCodeChunk(note_node, note_parent_node_list, note_parent_node_list_index,
-                                                            source_name, line_number)
-                            self.code_chunks.append(code_chunk)
-                        note_para_plain_node = None
-                    elif note_node_type in ('RawInline', 'RawBlock'):
-                        freeze_raw_node(note_node, source_name, line_number)
-                        note_para_plain_node = None
-                    else:
-                        note_para_plain_node = None
-            elif node_type in block_node_types:
-                para_plain_node = None
+                        chunk.source_start_line_number = src_line_number + 1
+                    if skipped:
+                        while skipped:
+                            sources_cb.append(skipped.pop())
+                if node_cb and node_type.endswith('Block'):
+                    # Block:  code comes after attr
+                    for _, _, node_maybe_codebraid, node_command in node_cb:
+                        src_cb_i = sources_cb.pop()
+                        _, (_, _, src_maybe_codebraid, src_command) = src_cb_i
+                        if node_command != src_command or node_maybe_codebraid != src_maybe_codebraid:
+                            while node_command != src_command or node_maybe_codebraid != src_maybe_codebraid:
+                                skipped.append(src_cb_i)
+                                src_cb_i = sources_cb.pop()
+                                _, (_, _, src_maybe_codebraid, src_command) = src_cb_i
+                    if skipped:
+                        while skipped:
+                            sources_cb.append(skipped.pop())
+                if node_type.startswith('Raw'):
+                    freeze_raw_node(node, '', 0)
 
 
     def _extract_code_chunks(self):
-        if self.pandoc_file_scope or len(self.source_strings) == 1:
-            for source_string, source_name in zip(self.source_strings, self.source_names):
+        if self.pandoc_file_scope or len(self.sources) == 1:
+            for source_name, source_string in self.sources.items():
                 self._load_and_process_initial_ast(source_string=source_string, single_source_name=source_name)
         else:
             self._load_and_process_initial_ast(source_string=self.concat_source_string)
@@ -1161,7 +1204,7 @@ class PandocConverter(Converter):
                 sys.stderr.buffer.write(stderr_bytes)
             processed_markup[source_name] = markup_bytes
 
-        if not self.pandoc_file_scope or len(self.source_strings) == 1:
+        if not self.pandoc_file_scope or len(self.sources) == 1:
             for markup_bytes in processed_markup.values():
                 final_ast_bytes, stderr_bytes = self._run_pandoc(input=markup_bytes,
                                                                  from_format='markdown',
@@ -1197,7 +1240,7 @@ class PandocConverter(Converter):
         if not self._io_map:
             thaw_raw_node = self._thaw_raw_node
             for node_tuple in self._walk_ast(final_ast):
-                node, parent_node_list, parent_node_list_index = node_tuple
+                node, parent_node, parent_node_list, parent_node_list_index, in_note = node_tuple
                 node_type = node['t']
                 if node_type in ('Code', 'CodeBlock') and 'codebraid--temp' in node['c'][0][1]:
                     thaw_raw_node(node)
