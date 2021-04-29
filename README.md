@@ -328,7 +328,8 @@ session is in use).
   The default is 60.
 
 * `live_output`={`true`, `false`} — Show code output (stdout and stderr) live
-  in the terminal during code execution.  Output still appears in the document
+  in the terminal during code execution.  For Jupyter kernels, also show
+  errors and a summary of rich output.  Output still appears in the document
   as normal.
 
   All output is written to stderr, so stdout only contains the document when
@@ -336,14 +337,16 @@ session is in use).
   the start of each session and the start of each code chunk.  The delimiters
   for the start of each code chunk include source names and line numbers.
 
-  The output for a code chunk may be delayed until all code in the chunk has
-  finished executing, unless code output is line buffered or code manually
-  flushes stdout and stderr.  For example, with Python you may want to use
-  print functions like `print("text", flush=True)`.  Another option is to use
-  Python in line-buffered mode by setting `executable="python -u"` or
+  With Codebraid's built-in code execution system, the output for a code chunk
+  may be delayed until all code in the chunk has finished executing, unless
+  code output is line buffered or code manually flushes stdout and stderr.
+  For example, with Python you may want to use print functions like
+  `print("text", flush=True)`.  Another option is to use Python in
+  line-buffered mode by setting `executable="python -u"` or
   `executable="python3 -u"` in the first code chunk of a session.
 
-  This option currently has no effect for Jupyter kernels.
+  With Jupyter kernels, the output for a code chunk will be delayed until all
+  code in the chunk has finished executing.
 
 
 #### Execution

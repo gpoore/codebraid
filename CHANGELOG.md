@@ -7,6 +7,7 @@
   eliminates sync failure in the form of `StopIteration` errors (#36, #38,
   #44).  Synchronization will now be faster and will not raise errors, but
   may also be less accurate occasionally.
+* Option `live_output` is now compatible with Jupyter kernels (#21).
 
 
 

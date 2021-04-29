@@ -1357,6 +1357,24 @@ class CodeProcessor(object):
             chunk_runtime_source_error_dict[0].append('Jupyter kernel "{0}" timed out during startup:\n"{1}"'.format(kernel_name, e))
             return
 
+        live_output = session.code_chunks[0].options['first_chunk_options'].get('live_output', False)
+        delim_border_n_chars = 60
+        delim_text = 'run: {lang}, session {session}\n'
+        delim_text = delim_text.format(lang=session.lang,
+                                       session='"{0}"'.format(session.name) if session.name is not None else '<default>')
+        chunk_delim_text = '''\
+            run: {lang}, session {session}, chunk {{chunk}}/{total_chunks}
+            "{{source}}", line {{line}}: {{stream}}
+            '''
+        chunk_delim_text = textwrap.dedent(chunk_delim_text)
+        chunk_delim_text = chunk_delim_text.format(lang=session.lang,
+                                                    session='"{0}"'.format(session.name) if session.name is not None else '<default>',
+                                                    total_chunks=len(session.code_chunks))
+        chunk_start_delim = '\n' + '='*delim_border_n_chars + '\n' + chunk_delim_text + '-'*delim_border_n_chars + '\n'
+        stage_start_delim = '\n' + '#'*delim_border_n_chars + '\n' + delim_text + '#'*delim_border_n_chars + '\n'
+        if live_output:
+            print(stage_start_delim, end='', file=sys.stderr, flush=True)
+
         try:
             errors = False
             incomplete_cc_stack = []
@@ -1409,17 +1427,48 @@ class CodeProcessor(object):
                                 ro_path.write_bytes(base64.b64decode(data))
                                 rich_output_files[mime_type] = ro_path.as_posix()
                         chunk_rich_output_dict[cc.session_output_index].append(rich_output)
+                        if live_output:
+                            delim = chunk_start_delim.format(source=cc.source_name,
+                                                             line=cc.source_start_line_number,
+                                                             chunk=cc.session_index+1,
+                                                             stream='rich output')
+                            print(delim, end='', file=sys.stderr, flush=True)
+                            print('<rich output in format(s) {0}>\n'.format(', '.join(k for k in msg_content['data'])), end='', file=sys.stderr, flush=True)
+                            for f in rich_output_files.values():
+                                print('<created file "{0}">\n'.format(f), end='', file=sys.stderr, flush=True)
                         continue
                     if msg_type == 'status' and msg_content['execution_state'] == 'idle':
                         break
                     if msg_type == 'error':
-                        chunk_stderr_dict[cc.session_output_index].extend(util.splitlines_lf(re.sub('\x1b.*?m', '', '\n'.join(msg_content['traceback']))))
+                        msg = re.sub('\x1b.*?m', '', '\n'.join(msg_content['traceback']))
+                        chunk_stderr_dict[cc.session_output_index].extend(util.splitlines_lf(msg))
+                        if live_output:
+                            delim = chunk_start_delim.format(source=cc.source_name,
+                                                             line=cc.source_start_line_number,
+                                                             chunk=cc.session_index+1,
+                                                             stream=msg_type)
+                            print(delim, end='', file=sys.stderr, flush=True)
+                            print(msg, end='', file=sys.stderr, flush=True)
                         continue
                     if msg_type == 'stream':
                         if msg_content['name'] == 'stdout':
                             chunk_stdout_dict[cc.session_output_index].extend(util.splitlines_lf(msg_content['text']))
+                            if live_output:
+                                delim = chunk_start_delim.format(source=cc.source_name,
+                                                                 line=cc.source_start_line_number,
+                                                                 chunk=cc.session_index+1,
+                                                                 stream=msg_content['name'])
+                                print(delim, end='', file=sys.stderr, flush=True)
+                                print(msg_content['text'], end='', file=sys.stderr, flush=True)
                         elif msg_content['name'] == 'stderr':
                             chunk_stderr_dict[cc.session_output_index].extend(util.splitlines_lf(msg_content['text']))
+                            if live_output:
+                                delim = chunk_start_delim.format(source=cc.source_name,
+                                                                 line=cc.source_start_line_number,
+                                                                 chunk=cc.session_index+1,
+                                                                 stream=msg_content['name'])
+                                print(delim, end='', file=sys.stderr, flush=True)
+                                print(msg_content['text'], end='', file=sys.stderr, flush=True)
                         continue
         finally:
             jupyter_client.stop_channels()
