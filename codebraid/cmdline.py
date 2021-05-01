@@ -36,12 +36,12 @@ def main():
             finally:
                 sys.stdout = original_stdout
             try:
-                before, after = help_text.split('FILE', 1)
+                before, after = help_text.split('[FILE', 1)
             except ValueError:
                 print(help_text)
             else:
                 indent = before.rsplit('\n', 1)[1]
-                help_text = before + '[<PANDOC OPTIONS>]\n' + indent + 'FILE' + after
+                help_text = before + '[<PANDOC OPTIONS>]\n' + indent + '[FILE' + after
                 help_text += '  [<PANDOC OPTIONS>]\n'
                 help_text += indent + 'See output of "pandoc --help"\n'
                 print(help_text)
@@ -72,6 +72,11 @@ def main():
                                     '(a cache directory may still be created for use with temporary files)')
     parser_pandoc.add_argument('--cache-dir',
                                help='Location for caching code output (default is "_codebraid" in document directory)')
+    parser_pandoc.add_argument('--live-output', action='store_true',
+                               help='Show code output (stdout and stderr) live in the terminal during code execution. '
+                                    'For Jupyter kernels, also show  errors and a summary of rich output. '
+                                    'Output still appears in the document as normal. '
+                                    'Individual sessions can override this by setting live_output=false in the document.')
     parser_pandoc.add_argument('files', nargs='*', metavar='FILE',
                                help="Files (multiple files are allowed for formats supported by Pandoc)")
     for opts_or_long_opt, narg in PANDOC_OPTIONS.items():
@@ -143,12 +148,18 @@ def pandoc(args):
     else:
         paths = args.files
         strings = None
+
+    session_defaults = {}
+    if args.live_output:
+        session_defaults['live_output'] = args.live_output
+
     converter = converters.PandocConverter(paths=paths,
                                            strings=strings,
                                            from_format=args.from_format,
                                            pandoc_file_scope=args.pandoc_file_scope,
                                            no_cache=args.no_cache,
-                                           cache_path=args.cache_dir)
+                                           cache_path=args.cache_dir,
+                                           session_defaults=session_defaults)
 
     converter.code_braid()
 

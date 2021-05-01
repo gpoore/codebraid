@@ -131,7 +131,9 @@ output.
 ### More about key features
 
 *Easy debugging* — By default, stderr is shown automatically in the document
-whenever there is an error, right next to the code that caused it.
+whenever there is an error, right next to the code that caused it.  It is also
+possible to monitor code output in real time during execution via
+`--live-output`.
 
 *Simple language support* — Codebraid supports Jupyter kernels.  It also has a
 built-in system for executing code.  Adding support for a new language with
@@ -196,6 +198,16 @@ are desired in a final output format like HTML or PDF, not in a Pandoc
 Markdown file.  In the rare cases where "includes" and a table of contents are
 needed in Markdown documents, this can be accomplished by piping the output of
 `codebraid` through `pandoc`.
+
+
+## Additional non-Pandoc command-line options
+
+* `--live-output` — Show code output (stdout and stderr) live in the
+  terminal during code execution.  For Jupyter kernels, also show  errors and
+  a summary of rich output.  Output still appears in the document as normal.
+
+  Individual sessions can override this by setting `live_output=false` in the
+  document.
 
 
 ## Caching
@@ -330,7 +342,12 @@ session is in use).
 * `live_output`={`true`, `false`} — Show code output (stdout and stderr) live
   in the terminal during code execution.  For Jupyter kernels, also show
   errors and a summary of rich output.  Output still appears in the document
-  as normal.
+  as normal.  Showing output can also be enabled via the command-line option
+  `--live-output`.
+
+  When `live_output=false` is set for a session, this setting takes precedence
+  over the command-line option `--live-output`, and output will not be shown
+  for that session.
 
   All output is written to stderr, so stdout only contains the document when
   `--output` is not specified.  Output is interspersed with delimiters marking

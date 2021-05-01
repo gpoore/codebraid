@@ -18,7 +18,7 @@ import pathlib
 import re
 import sys
 import textwrap
-import typing; from typing import List, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Union
 import zipfile
 from .. import codeprocessors
 from .. import err
@@ -1062,12 +1062,14 @@ class Converter(object):
                  expanduser: bool=False,
                  expandvars: bool=False,
                  from_format: Optional[str]=None,
+                 session_defaults: Optional[Dict[str, Union[bool, str]]]=None,
                  synctex: bool=False):
         if not all(isinstance(x, bool) for x in (cross_source_sessions, expanduser, expandvars)):
             raise TypeError
         self.cross_source_sessions = cross_source_sessions
         self.expanduser = expanduser
         self.expandvars = expandvars
+        self.session_defaults = session_defaults
 
         if paths is not None and strings is None:
             if isinstance(paths, str):
@@ -1211,7 +1213,8 @@ class Converter(object):
                                           no_cache=self.no_cache,
                                           cache_path=self.cache_path,
                                           cache_key=self.cache_key,
-                                          cache_source_paths=self.cache_source_paths)
+                                          cache_source_paths=self.cache_source_paths,
+                                          session_defaults=self.session_defaults)
         cp.process()
 
     def _postprocess_code_chunks(self):

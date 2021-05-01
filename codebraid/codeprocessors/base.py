@@ -27,6 +27,7 @@ import sys
 import threading
 import tempfile
 import textwrap
+from typing import Dict, Optional, Union
 import time
 import zipfile
 from .. import err
@@ -130,7 +131,7 @@ class Session(object):
     '''
     Code chunks comprising a session.
     '''
-    def __init__(self, session_key):
+    def __init__(self, session_key, *, session_defaults: Optional[Dict[str, Union[bool, str]]]):
         self.code_processor = session_key[0]
         self.lang = session_key[1]
         self.name = session_key[2]
@@ -146,6 +147,7 @@ class Session(object):
         self.executable = None
         self.jupyter_kernel = None
         self.jupyter_timeout = None
+        self.live_output = False
 
         self.code_options = None
         self.code_chunks = []
@@ -168,6 +170,13 @@ class Session(object):
         self.post_run_errors = False
         self.post_run_error_lines = None
 
+        if session_defaults is not None:
+            for k, v in session_defaults.items():
+                if hasattr(self, k):
+                    setattr(self, k, v)
+                else:
+                    raise AttributeError
+
 
     def append(self, code_chunk):
         '''
@@ -189,6 +198,9 @@ class Session(object):
                 else:
                     self.executable = code_chunk.options['first_chunk_options'].get('executable')
                     self.repl = self.lang_def.repl
+            live_output = code_chunk.options['first_chunk_options'].get('live_output')
+            if live_output is not None:
+                self.live_output = live_output
         elif code_chunk.options['first_chunk_options']:
             invalid_options = ', '.join('"{0}"'.format(k) for k in code_chunk.options['first_chunk_options'])
             del code_chunk.options['first_chunk_options']
@@ -307,7 +319,7 @@ class CodeProcessor(object):
     from files for inclusion, or a combination of the two.
     '''
     def __init__(self, *, code_chunks, code_options, cross_source_sessions,
-                 no_cache, cache_path, cache_key, cache_source_paths):
+                 no_cache, cache_path, cache_key, cache_source_paths, session_defaults):
         self.code_chunks = code_chunks
         self.code_options = code_options
         self.cross_source_sessions = cross_source_sessions
@@ -319,6 +331,7 @@ class CodeProcessor(object):
             self.cache_source_paths_as_strings = None
         else:
             self.cache_source_paths_as_strings = [p.as_posix() for p in cache_source_paths]
+        self.session_defaults = session_defaults
 
         self.cache_key_path = cache_path / cache_key
         self.cache_index_path = cache_path / cache_key / '{0}_index.zip'.format(cache_key)
@@ -575,7 +588,7 @@ class CodeProcessor(object):
 
 
     def _create_sessions(self):
-        sessions = util.KeyDefaultDict(Session)
+        sessions = util.KeyDefaultDict(lambda x: Session(x, session_defaults=self.session_defaults))
         for cc in self.code_chunks:
             if cc.execute:
                 sessions[cc.key].append(cc)
@@ -965,8 +978,7 @@ class CodeProcessor(object):
                 'hash': session.hash[:64],
             }
 
-            live_output = session.code_chunks[0].options['first_chunk_options'].get('live_output', False)
-            if live_output:
+            if session.live_output:
                 subproc = self._subproc_live_output
             else:
                 subproc = self._subproc_default
@@ -1357,7 +1369,6 @@ class CodeProcessor(object):
             chunk_runtime_source_error_dict[0].append('Jupyter kernel "{0}" timed out during startup:\n"{1}"'.format(kernel_name, e))
             return
 
-        live_output = session.code_chunks[0].options['first_chunk_options'].get('live_output', False)
         delim_border_n_chars = 60
         delim_text = 'run: {lang}, session {session}\n'
         delim_text = delim_text.format(lang=session.lang,
@@ -1372,7 +1383,7 @@ class CodeProcessor(object):
                                                     total_chunks=len(session.code_chunks))
         chunk_start_delim = '\n' + '='*delim_border_n_chars + '\n' + chunk_delim_text + '-'*delim_border_n_chars + '\n'
         stage_start_delim = '\n' + '#'*delim_border_n_chars + '\n' + delim_text + '#'*delim_border_n_chars + '\n'
-        if live_output:
+        if session.live_output:
             print(stage_start_delim, end='', file=sys.stderr, flush=True)
 
         try:
@@ -1427,7 +1438,7 @@ class CodeProcessor(object):
                                 ro_path.write_bytes(base64.b64decode(data))
                                 rich_output_files[mime_type] = ro_path.as_posix()
                         chunk_rich_output_dict[cc.session_output_index].append(rich_output)
-                        if live_output:
+                        if session.live_output:
                             delim = chunk_start_delim.format(source=cc.source_name,
                                                              line=cc.source_start_line_number,
                                                              chunk=cc.session_index+1,
@@ -1442,7 +1453,7 @@ class CodeProcessor(object):
                     if msg_type == 'error':
                         msg = re.sub('\x1b.*?m', '', '\n'.join(msg_content['traceback']))
                         chunk_stderr_dict[cc.session_output_index].extend(util.splitlines_lf(msg))
-                        if live_output:
+                        if session.live_output:
                             delim = chunk_start_delim.format(source=cc.source_name,
                                                              line=cc.source_start_line_number,
                                                              chunk=cc.session_index+1,
@@ -1453,7 +1464,7 @@ class CodeProcessor(object):
                     if msg_type == 'stream':
                         if msg_content['name'] == 'stdout':
                             chunk_stdout_dict[cc.session_output_index].extend(util.splitlines_lf(msg_content['text']))
-                            if live_output:
+                            if session.live_output:
                                 delim = chunk_start_delim.format(source=cc.source_name,
                                                                  line=cc.source_start_line_number,
                                                                  chunk=cc.session_index+1,
@@ -1462,7 +1473,7 @@ class CodeProcessor(object):
                                 print(msg_content['text'], end='', file=sys.stderr, flush=True)
                         elif msg_content['name'] == 'stderr':
                             chunk_stderr_dict[cc.session_output_index].extend(util.splitlines_lf(msg_content['text']))
-                            if live_output:
+                            if session.live_output:
                                 delim = chunk_start_delim.format(source=cc.source_name,
                                                                  line=cc.source_start_line_number,
                                                                  chunk=cc.session_index+1,
