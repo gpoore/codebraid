@@ -3,6 +3,10 @@
 
 ## v0.6.0 (dev)
 
+* Python 3.6 is now the minimum supported version; 3.5 is no longer supported.
+
+* Updated installation requirements: `bespon` version 0.6.
+
 * Synchronization of code with source line numbers uses a new algorithm that
   eliminates sync failure in the form of `StopIteration` errors (#36, #38,
   #44).  Synchronization will now be faster and will not raise errors, but
