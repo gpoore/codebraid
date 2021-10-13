@@ -21,25 +21,25 @@ Geoffrey M. Poore, *Proceedings of the 18th Python in Science Conference,* 2019,
 View example HTML output, or see the Markdown source or raw HTML (the Python
 and Rust examples demonstrate more advanced features at the end):
 
-  * [Python example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/python.html)
+  * [Python example](https://htmlpreview.github.io/?https://github.com/gpoore/codebraid/blob/master/examples/python.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/python.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/python.html)]
-  * [Jupyter example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/jupyter.html)
+  * [Jupyter example](https://htmlpreview.github.io/?https://github.com/gpoore/codebraid/blob/master/examples/jupyter.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/jupyter.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/jupyter.html)]
-  * [Rust example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/rust.html)
+  * [Rust example](https://htmlpreview.github.io/?https://github.com/gpoore/codebraid/blob/master/examples/rust.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/rust.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/rust.html)]
-  * [Julia example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/julia.html)
+  * [Julia example](https://htmlpreview.github.io/?https://github.com/gpoore/codebraid/blob/master/examples/julia.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/julia.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/julia.html)]
-  * [R example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/R.html)
+  * [R example](https://htmlpreview.github.io/?https://github.com/gpoore/codebraid/blob/master/examples/R.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/R.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/R.html)]
-  * [Bash example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/bash.html)
+  * [Bash example](https://htmlpreview.github.io/?https://github.com/gpoore/codebraid/blob/master/examples/bash.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/bash.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/bash.html)]
-  * [JavaScript example](https://htmlpreview.github.com/?https://github.com/gpoore/codebraid/blob/master/examples/javascript.html)
+  * [JavaScript example](https://htmlpreview.github.io/?https://github.com/gpoore/codebraid/blob/master/examples/javascript.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/javascript.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/javascript.html)]
 
