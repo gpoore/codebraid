@@ -8,7 +8,7 @@ another format.  `codebraid` supports almost all of `pandoc`'s options and
 passes them to `pandoc` internally.
 
 Codebraid provides two options for executing code.  It includes a built-in
-code execution system that currently supports **Python 3.6+**, **Julia**,
+code execution system that currently supports **Python 3.7+**, **Julia**,
 **Rust**, **R**, **Bash**, **JavaScript**, and **SageMath**.  Code can also be
 executed using **Jupyter kernels**, with support for rich output like plots.
 
@@ -165,8 +165,8 @@ Manual installation:  `python3 setup.py install` or `python setup.py install`
 
 **Requirements:**
 
-  * [Pandoc](http://pandoc.org/) 2.4+ (2.7.2+ recommended)
-  * Python 3.6+ with `setuptools`, and [`bespon`](https://bespon.org) 0.6
+  * [Pandoc](http://pandoc.org/) 2.4+ (2.7.2+ recommended).
+  * Python 3.7+ with `setuptools`, and [`bespon`](https://bespon.org) 0.6
     (`bespon` installation is typically managed by `pip`/`setup.py`)
 
 

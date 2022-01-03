@@ -3,7 +3,7 @@
 
 ## v0.6.0 (dev)
 
-* Python 3.6 is now the minimum supported version; 3.5 is no longer supported.
+* Python 3.7 is now the minimum supported version.
 
 * Updated installation requirements: `bespon` version 0.6.
 
