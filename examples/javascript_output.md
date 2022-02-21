@@ -9,12 +9,12 @@ title: Codebraid with JavaScript
 Inline code with `.cb.run` gives raw stdout. While the language can be
 specified with `.javascript`, `.js` works as well.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `console.log(1 + 2);`{.js .cb.run}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 3
 :::
 :::
@@ -26,22 +26,22 @@ raw output into the document, where it is interpreted as Markdown.
 Inline code with `.cb.nb` (`nb` is short for `notebook`) is similar,
 except output is shown verbatim.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `` `\$2^8 = ${2**8}\$` ``{.js .cb.expr}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 $2^8 = 256$
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `4*16`{.js .cb.nb}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 `64`{.expr}
 :::
 :::
@@ -52,13 +52,14 @@ In the event of an error, inline code automatically shows stderr by
 default. This code is executed in its own session, `inline_error`, so
 that it does not impact other examples.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `console.logs(1 + 2);`{.js .cb.run session=inline_error}
 :::
 
-::: {.exampleOutput}
-`<string>:1 console.logs(1 + 2);         ^  TypeError: console.logs is not a function     at Object.<anonymous> (<string>:1:9)     at Module._compile (node:internal/modules/cjs/loader:1108:14)     at Object.Module._extensions..js (node:internal/modules/cjs/loader:1137:10)     at Module.load (node:internal/modules/cjs/loader:973:32)     at Function.Module._load (node:internal/modules/cjs/loader:813:14)     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:76:12)     at node:internal/main/run_main_module:17:47`{.stderr}
+::: exampleOutput
+`<string>:1 console.logs(1 + 2);         ^  TypeError: console.logs is not a function     at Object.<anonymous> (<string>:1:9)     at Module._compile (node:internal/modules/cjs/loader:1101:14)     at Object.Module._extensions..js (node:internal/modules/cjs/loader:1153:10)     at Module.load (node:internal/modules/cjs/loader:981:32)     at Function.Module._load (node:internal/modules/cjs/loader:822:12)     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:81:12)     at node:internal/main/run_main_module:17:47`{.stderr
+.error}
 :::
 :::
 
@@ -69,22 +70,22 @@ that it does not impact other examples.
 Code blocks with `.cb.run` give raw stdout. There is continuity between
 code blocks so long as they are in the same session; variables persist.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.js .cb.run}
     message = "Hello from *JavaScript!*";
     ```
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.js .cb.run}
     console.log(message);
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 Hello from *JavaScript!*
 :::
 :::
@@ -93,8 +94,8 @@ Hello from *JavaScript!*
 
 Code blocks with `.cb.nb` show the code and also the verbatim stdout.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.js .cb.nb session=notebook}
     function pows_of_two(start, end) {
         n = 2;
@@ -110,7 +111,7 @@ Code blocks with `.cb.nb` show the code and also the verbatim stdout.
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.js .numberLines startFrom="1"}
 function pows_of_two(start, end) {
     n = 2;
@@ -125,7 +126,7 @@ pows_of_two(1, 9);
 pows_of_two(1, 15);
 ```
 
-``` {.stdout}
+``` stdout
 2, 4, 8, 16, 32, 64, 128, 256, 512
 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768
 ```
@@ -136,30 +137,31 @@ pows_of_two(1, 15);
 
 Code blocks show stderr automatically by default.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.js .cb.nb session=block_error}
     x = 1 + ;
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.js .numberLines startFrom="1"}
 x = 1 + ;
 ```
 
-``` {.stderr}
+``` {.stderr .error}
 source.js:1
 x = 1 + ;
         ^
 
 SyntaxError: Unexpected token ';'
-    at wrapSafe (node:internal/modules/cjs/loader:1024:16)
-    at Module._compile (node:internal/modules/cjs/loader:1072:27)
-    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1137:10)
-    at Module.load (node:internal/modules/cjs/loader:973:32)
-    at Function.Module._load (node:internal/modules/cjs/loader:813:14)
-    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:76:12)
+    at Object.compileFunction (node:vm:352:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1031:15)
+    at Module._compile (node:internal/modules/cjs/loader:1065:27)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1153:10)
+    at Module.load (node:internal/modules/cjs/loader:981:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:822:12)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:81:12)
     at node:internal/main/run_main_module:17:47
 ```
 :::

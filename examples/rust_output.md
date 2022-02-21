@@ -12,7 +12,7 @@ about `main()`?
 By default, all executed code is inserted into a `main()` template like
 this:
 
-``` {.rust}
+``` rust
 #![allow(unused)]
 fn main() {
     use std::fmt::Write as FmtWrite;
@@ -32,12 +32,12 @@ is executed. For those situations, see [Advanced features](#advanced).
 
 Inline code with `.cb.run` gives raw stdout.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `println!("{}", 1 + 2);`{.rust .cb.run}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 3
 :::
 :::
@@ -52,22 +52,22 @@ expressions, a trailing semicolon must not be used. This is only
 compatible with expressions that return Rust types implementing the
 `Display` trait.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `format!("*{}*", (1..1000).sum::<i32>())`{.rust .cb.expr}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 *499500*
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `(1..1000).map(|x| x*x).sum::<i32>()`{.rust .cb.nb}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 `332833500`{.expr}
 :::
 :::
@@ -77,12 +77,12 @@ If you need to work with an expression that returns a type without the
 or `"{:#?}"` for pretty-print) to convert to a string manually. Since
 the string implements `Display`, everything works:
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `format!("{:?}", ())`{.rust .cb.expr}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ()
 :::
 :::
@@ -93,13 +93,14 @@ In the event of a compilation error, inline code automatically shows
 stderr by default. This code is compiled in its own session,
 `inline_error`, so that it does not impact other examples.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `1 + "a";`{.rust .cb.run session=inline_error}
 :::
 
-::: {.exampleOutput}
-`` error[E0277]: cannot add `&str` to `{integer}`  --> <string>:1:3   | 1 | 1 + "a";   |   ^ no implementation for `{integer} + &str`   |   = help: the trait `Add<&str>` is not implemented for `{integer}`  error: aborting due to previous error  For more information about this error, try `rustc --explain E0277`. ``{.stderr}
+::: exampleOutput
+`` error[E0277]: cannot add `&str` to `{integer}`  --> <string>:1:7   | 1 |     1 + "a";   |       ^ no implementation for `{integer} + &str`   |   = help: the trait `Add<&str>` is not implemented for `{integer}`  error: aborting due to previous error  For more information about this error, try `rustc --explain E0277`. ``{.stderr
+.error}
 :::
 :::
 
@@ -109,13 +110,14 @@ A message is also displayed for errors in the Markdown source. This
 usually includes the name of the document source and the approximate
 line number.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `println!("{}", 1 + 2);`{.rus .cb.run session=inline_source_error}
 :::
 
-::: {.exampleOutput}
-`SOURCE ERROR in "rust.cbmd" near line 73: Language definition for "rus" does not exist, or is not indexed`{.sourceError}
+::: exampleOutput
+`SYS CONFIG ERROR in "rust.cbmd" near line 73: Language definition for "rus" does not exist`{.error
+.sysConfigError}
 :::
 :::
 
@@ -126,22 +128,22 @@ line number.
 Code blocks with `.cb.run` give raw stdout. There is continuity between
 code blocks so long as they are in the same session; variables persist.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.run session=hello}
     let x = "Hello from *Rust!*";
     ```
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.run session=hello}
     println!("{}", x);
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 Hello from *Rust!*
 :::
 :::
@@ -150,8 +152,8 @@ Hello from *Rust!*
 
 Code blocks with `.cb.nb` show the code and also the verbatim stdout.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.nb session=loop}
     fn pows_of_two(start: u32, end: u32) {
         let n: i32 = 2;
@@ -169,7 +171,7 @@ Code blocks with `.cb.nb` show the code and also the verbatim stdout.
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.rust .numberLines startFrom="1"}
 fn pows_of_two(start: u32, end: u32) {
     let n: i32 = 2;
@@ -186,7 +188,7 @@ pows_of_two(1, 9);
 pows_of_two(1, 17);
 ```
 
-``` {.stdout}
+``` stdout
 2, 4, 8, 16, 32, 64, 128, 256
 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536
 ```
@@ -202,15 +204,15 @@ code blocks.
 The first code block in this session is valid, so no compilation error
 is shown.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.nb session=block_error}
     let number = 123;
     let letter = "a";
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.rust .numberLines startFrom="1"}
 let number = 123;
 let letter = "a";
@@ -225,26 +227,26 @@ default, Codebraid inserts Rust code into an implicit `main()` function,
 so the line numbers of what is compiled typically do not correspond to
 those of the code entered by the user.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.nb session=block_error}
     number += 1;
     number += letter;
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.rust .numberLines startFrom="3"}
 number += 1;
 number += letter;
 ```
 
-``` {.stderr}
+``` {.stderr .error}
 error[E0277]: cannot add-assign `&str` to `{integer}`
-  --> source.rs:4:8
+  --> source.rs:4:12
    |
- 4 | number += letter;
-   |        ^^ no implementation for `{integer} += &str`
+ 4 |     number += letter;
+   |            ^^ no implementation for `{integer} += &str`
    |
    = help: the trait `AddAssign<&str>` is not implemented for `{integer}`
 
@@ -261,17 +263,19 @@ A message is also displayed for errors in the Markdown source. This
 usually includes the name of the document source and the approximate
 line number.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.ruuun session=block_source_error}
     println!("{}", 1 + 2);
     ```
 :::
 
-::: {.exampleOutput}
-``` {.sourceError}
+::: exampleOutput
+``` {.error .sourceError}
 SOURCE ERROR in "rust.cbmd" near line 151:
 Unknown or unsupported Codebraid command "cb.ruuun"
+
+SOURCE ERROR in "rust.cbmd" near line 151:
 Missing valid Codebraid command
 ```
 :::
@@ -283,19 +287,19 @@ By default, stdout and stderr are only shown if they are non-empty. In
 some situations, it may be useful to represent empty output visually as
 confirmation that there indeed was none.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.run show=code+stdout+stderr:verbatim_or_empty}
     let x = 1 + 2;
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.rust .numberLines startFrom="1"}
 let x = 1 + 2;
 ```
 
-``` {.stderr}
+``` stderr
  
 ```
 :::
@@ -303,14 +307,14 @@ let x = 1 + 2;
 
 It is also possible to selectively hide output from a code chunk.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.nb hide=stdout}
     println!("{}", x);
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.rust .numberLines startFrom="2"}
 println!("{}", x);
 ```
@@ -343,8 +347,8 @@ single, self-contained code block. This is useful when the code is short
 enough that splitting it up into separate chunks, each with its
 associated stdout, is not necessary.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.nb outside_main=true session=no_main_template_single_chunk}
     fn main() {
         use std::fmt::Write as FmtWrite;
@@ -354,7 +358,7 @@ associated stdout, is not necessary.
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.rust .numberLines startFrom="1"}
 fn main() {
     use std::fmt::Write as FmtWrite;
@@ -363,7 +367,7 @@ fn main() {
 }
 ```
 
-``` {.stdout}
+``` stdout
 Hello from Rust!
 ```
 :::
@@ -373,8 +377,8 @@ Here is the same example, but broken up into multiple code chunks so
 that the stdout is more closely associated with the code that produced
 it.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.nb outside_main=true session=no_main_template}
     fn main() {
         use std::fmt::Write as FmtWrite;
@@ -382,7 +386,7 @@ it.
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.rust .numberLines startFrom="1"}
 fn main() {
     use std::fmt::Write as FmtWrite;
@@ -391,32 +395,32 @@ fn main() {
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.nb session=no_main_template}
         println!("Hello from Rust!");
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.rust .numberLines startFrom="4"}
     println!("Hello from Rust!");
 ```
 
-``` {.stdout}
+``` stdout
 Hello from Rust!
 ```
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.nb outside_main=true session=no_main_template}
     }
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.rust .numberLines startFrom="5"}
 }
 ```
@@ -431,8 +435,8 @@ multiple chunks (with the exception of code chunks with
 `outside_main=True`). The code chunk keyword `complete` allows code
 chunks that do not contain a complete unit of code.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.nb session=split complete=false}
     fn pows_of_two(start: u32, end: u32) {
         let n: i32 = 2;
@@ -440,7 +444,7 @@ chunks that do not contain a complete unit of code.
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.rust .numberLines startFrom="1"}
 fn pows_of_two(start: u32, end: u32) {
     let n: i32 = 2;
@@ -449,8 +453,8 @@ fn pows_of_two(start: u32, end: u32) {
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.rust .cb.nb session=split}
             if x == end - 1 {
                 println!("{}", n.pow(x));
@@ -464,7 +468,7 @@ fn pows_of_two(start: u32, end: u32) {
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.rust .numberLines startFrom="4"}
         if x == end - 1 {
             println!("{}", n.pow(x));
@@ -477,7 +481,7 @@ fn pows_of_two(start: u32, end: u32) {
 pows_of_two(1, 9);
 ```
 
-``` {.stdout}
+``` stdout
 2, 4, 8, 16, 32, 64, 128, 256
 ```
 :::

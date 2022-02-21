@@ -8,12 +8,12 @@ title: Codebraid with Julia
 
 Inline code with `.cb.run` gives raw stdout.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `println(1 + 2)`{.julia .cb.run}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 3
 :::
 :::
@@ -25,32 +25,32 @@ raw output into the document, where it is interpreted as Markdown.
 Inline code with `.cb.nb` (`nb` is short for `notebook`) is similar,
 except output is shown verbatim.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `"\$\\sin(30^\\circ) = $(sind(30))\$"`{.julia .cb.expr}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 $\sin(30^\circ) = 0.5$
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `"\$e^{\\pi/4} = $(exp(pi/4))\$"`{.julia .cb.expr}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 $e^{\pi/4} = 2.1932800507380152$
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `"\$e^{\\pi/4} = $(exp(pi/4))\$"`{.julia .cb.nb}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 `$e^{\pi/4} = 2.1932800507380152$`{.expr}
 :::
 :::
@@ -61,13 +61,14 @@ In the event of an error, inline code automatically shows stderr by
 default. This code is executed in its own session, `inline_error`, so
 that it does not impact other examples.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `1 + "a"`{.julia .cb.run session=inline_error}
 :::
 
-::: {.exampleOutput}
-`ERROR: LoadError: MethodError: no method matching +(::Int64, ::String) Closest candidates are:   +(::Any, ::Any, !Matched::Any, !Matched::Any...) at operators.jl:560   +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at int.jl:87   +(::Integer, !Matched::Ptr) at pointer.jl:161   ... Stacktrace:  [1] top-level scope    @ ~\AppData\Local\Temp\tmpol_0hr13\source_a2d1d369c7b96958.jl:4 in expression starting at <string>:1`{.stderr}
+::: exampleOutput
+`ERROR: LoadError: MethodError: no method matching +(::Int64, ::String) Closest candidates are:   +(::Any, ::Any, !Matched::Any, !Matched::Any...) at ~\AppData\Local\Programs\Julia\share\julia\base\operators.jl:655   +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at ~\AppData\Local\Programs\Julia\share\julia\base\int.jl:87   +(::Integer, !Matched::Ptr) at ~\AppData\Local\Programs\Julia\share\julia\base\pointer.jl:161   ... Stacktrace:  [1] top-level scope    @ <string>:1 in expression starting at <string>:1`{.stderr
+.error}
 :::
 :::
 
@@ -77,13 +78,14 @@ A message is also displayed for errors in the Markdown source. This
 usually includes the name of the document source and the approximate
 line number.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `println(1 + 2)`{.jlia .cb.run session=inline_source_error}
 :::
 
-::: {.exampleOutput}
-`SOURCE ERROR in "julia.cbmd" near line 45: Language definition for "jlia" does not exist, or is not indexed`{.sourceError}
+::: exampleOutput
+`SYS CONFIG ERROR in "julia.cbmd" near line 45: Language definition for "jlia" does not exist`{.error
+.sysConfigError}
 :::
 :::
 
@@ -94,22 +96,22 @@ line number.
 Code blocks with `.cb.run` give raw stdout. There is continuity between
 code blocks so long as they are in the same session; variables persist.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.julia .cb.run session=hello}
     x = "Hello from *Julia!*"
     ```
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.julia .cb.run session=hello}
     println(x)
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 Hello from *Julia!*
 :::
 :::
@@ -118,8 +120,8 @@ Hello from *Julia!*
 
 Code blocks with `.cb.nb` show the code and also the verbatim stdout.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.julia .cb.nb session=random}
     using Random
     using Statistics
@@ -131,7 +133,7 @@ Code blocks with `.cb.nb` show the code and also the verbatim stdout.
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.julia .numberLines startFrom="1"}
 using Random
 using Statistics
@@ -142,10 +144,10 @@ println("Median: $(median(rnums))")
 println("Mean: $(mean(rnums))")
 ```
 
-``` {.stdout}
-Random numbers: [66, 85, 12, 3, 7, 98, 69, 7, 79, 20]
-Median: 43.0
-Mean: 44.6
+``` stdout
+Random numbers: [8, 35, 70, 63, 92, 20, 78, 79, 68, 17]
+Median: 65.5
+Mean: 53.0
 ```
 :::
 :::
@@ -154,8 +156,8 @@ Mean: 44.6
 
 Code blocks automatically show stderr by default.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.julia .cb.nb .line_numbers session=block_error}
     var = 123
     println(var)
@@ -164,7 +166,7 @@ Code blocks automatically show stderr by default.
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.julia .numberLines startFrom="1"}
 var = 123
 println(var)
@@ -172,20 +174,20 @@ flush(stdout)
 var += "a"
 ```
 
-``` {.stdout}
+``` stdout
 123
 ```
 
-``` {.stderr}
+``` {.stderr .error}
 ERROR: LoadError: MethodError: no method matching +(::Int64, ::String)
 Closest candidates are:
-  +(::Any, ::Any, !Matched::Any, !Matched::Any...) at operators.jl:560
-  +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at int.jl:87
-  +(::Integer, !Matched::Ptr) at pointer.jl:161
+  +(::Any, ::Any, !Matched::Any, !Matched::Any...) at ~\AppData\Local\Programs\Julia\share\julia\base\operators.jl:655
+  +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at ~\AppData\Local\Programs\Julia\share\julia\base\int.jl:87
+  +(::Integer, !Matched::Ptr) at ~\AppData\Local\Programs\Julia\share\julia\base\pointer.jl:161
   ...
 Stacktrace:
  [1] top-level scope
-   @ ~\AppData\Local\Temp\tmp5v0mithp\source_a65f329fe71335e1.jl:7
+   @ source.jl:4
 in expression starting at source.jl:4
 ```
 :::
@@ -197,17 +199,19 @@ A message is also displayed for errors in the Markdown source. This
 usually includes the name of the document source and the approximate
 line number.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.julia .cb.ruuun session=block_source_error}
     println(1 + 2)
     ```
 :::
 
-::: {.exampleOutput}
-``` {.sourceError}
+::: exampleOutput
+``` {.error .sourceError}
 SOURCE ERROR in "julia.cbmd" near line 101:
 Unknown or unsupported Codebraid command "cb.ruuun"
+
+SOURCE ERROR in "julia.cbmd" near line 101:
 Missing valid Codebraid command
 ```
 :::
@@ -219,19 +223,19 @@ By default, stdout and stderr are only shown if they are non-empty. In
 some situations, it may be useful to represent empty output visually as
 confirmation that there indeed was none.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.julia .cb.run show=code+stdout+stderr:verbatim_or_empty}
     x = 1 + 2
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.julia .numberLines startFrom="1"}
 x = 1 + 2
 ```
 
-``` {.stderr}
+``` stderr
  
 ```
 :::
@@ -239,14 +243,14 @@ x = 1 + 2
 
 It is also possible to selectively hide output from a code chunk.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.julia .cb.nb hide=stdout}
     println(x)
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.julia .numberLines startFrom="2"}
 println(x)
 ```

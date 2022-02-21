@@ -16,12 +16,12 @@ with default names. Saving plots requires explicit graphics commands.
 
 Inline code with `.cb.run` gives raw stdout.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `cat(1 + 2)`{.R .cb.run}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 3
 :::
 :::
@@ -34,22 +34,22 @@ Inline code with `.cb.nb` (`nb` is short for `notebook`) is similar,
 except output is shown verbatim. Expressions are converted to strings
 via `toString()`.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `paste("$2^8 = ", 2^8, "$", sep="")`{.R .cb.expr}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 $2^8 = 256$
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `(x <- 1:20)[x %% 3 == 0]`{.R .cb.nb}
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 `3, 6, 9, 12, 15, 18`{.expr}
 :::
 :::
@@ -60,13 +60,14 @@ In the event of an error, inline code automatically shows stderr by
 default. This code is executed in its own session, `inline_error`, so
 that it does not impact other examples.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `1 + "a"`{.R .cb.run session=inline_error}
 :::
 
-::: {.exampleOutput}
-`Error in 1 + "a" : non-numeric argument to binary operator Execution halted`{.stderr}
+::: exampleOutput
+`Error in 1 + "a" : non-numeric argument to binary operator Execution halted`{.stderr
+.error}
 :::
 :::
 
@@ -76,13 +77,14 @@ A message is also displayed for errors in the Markdown source. This
 usually includes the name of the document source and the approximate
 line number.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     `cat(1 + 2)`{.R .cb.rn session=inline_source_error}
 :::
 
-::: {.exampleOutput}
-`SOURCE ERROR in "R.cbmd" near line 52: Unknown or unsupported Codebraid command "cb.rn" Missing valid Codebraid command`{.sourceError}
+::: exampleOutput
+`SOURCE ERROR in "R.cbmd" near line 52: Unknown or unsupported Codebraid command "cb.rn"  SOURCE ERROR in "R.cbmd" near line 52: Missing valid Codebraid command`{.error
+.sourceError}
 :::
 :::
 
@@ -93,22 +95,22 @@ line number.
 Code blocks with `.cb.run` give raw stdout. There is continuity between
 code blocks so long as they are in the same session; variables persist.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.R .cb.run session=hello}
     x <- "Hello from *R!*"
     ```
 :::
 :::
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.R .cb.run session=hello}
     cat(x)
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 Hello from *R!*
 :::
 :::
@@ -117,8 +119,8 @@ Hello from *R!*
 
 Code blocks with `.cb.nb` show the code and also the verbatim stdout.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.R .cb.nb session=random}
     set.seed(1)
     random_ints <- floor(runif(10, min=0, max=101))
@@ -127,7 +129,7 @@ Code blocks with `.cb.nb` show the code and also the verbatim stdout.
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.R .numberLines startFrom="1"}
 set.seed(1)
 random_ints <- floor(runif(10, min=0, max=101))
@@ -135,7 +137,7 @@ cat("Random integers: ", random_ints, "\n\n")
 summary(random_ints)
 ```
 
-``` {.stdout}
+``` stdout
 Random integers:  26 37 57 91 20 90 95 66 63 6 
 
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
@@ -154,8 +156,8 @@ Note that this example uses the `show` keyword argument for the code
 block so that the output is interpreted as raw Markdown rather than
 displayed verbatim (the default for `.cb.nb`).
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.R .cb.nb session=plot show=code+stdout:raw+stderr}
     png("plot.png", width=500, height=350, bg="transparent")
     x <- seq(0, 6, 0.01)
@@ -169,7 +171,7 @@ displayed verbatim (the default for `.cb.nb`).
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.R .numberLines startFrom="1"}
 png("plot.png", width=500, height=350, bg="transparent")
 x <- seq(0, 6, 0.01)
@@ -190,8 +192,8 @@ cat(markdown)
 
 Code blocks show stderr automatically by default.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.R .cb.nb session=block_error}
     var <- 123
     cat(var)
@@ -200,7 +202,7 @@ Code blocks show stderr automatically by default.
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.R .numberLines startFrom="1"}
 var <- 123
 cat(var)
@@ -208,11 +210,11 @@ flush(stdout())
 var <- var + "a"
 ```
 
-``` {.stdout}
+``` stdout
 123
 ```
 
-``` {.stderr}
+``` {.stderr .error}
 Error in var + "a" : non-numeric argument to binary operator
 Execution halted
 ```
@@ -225,17 +227,19 @@ A message is also displayed for errors in the Markdown source. This
 usually includes the name of the document source and the approximate
 line number.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.R .cb.ruuun session=block_source_error}
     cat(1 + 2)
     ```
 :::
 
-::: {.exampleOutput}
-``` {.sourceError}
+::: exampleOutput
+``` {.error .sourceError}
 SOURCE ERROR in "R.cbmd" near line 124:
 Unknown or unsupported Codebraid command "cb.ruuun"
+
+SOURCE ERROR in "R.cbmd" near line 124:
 Missing valid Codebraid command
 ```
 :::
@@ -247,19 +251,19 @@ By default, stdout and stderr are only shown if they are non-empty. In
 some situations, it may be useful to represent empty output visually as
 confirmation that there indeed was none.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.R .cb.run show=code+stdout+stderr:verbatim_or_empty}
     x <- 1 + 2
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.R .numberLines startFrom="1"}
 x <- 1 + 2
 ```
 
-``` {.stderr}
+``` stderr
  
 ```
 :::
@@ -267,14 +271,14 @@ x <- 1 + 2
 
 It is also possible to selectively hide output from a code chunk.
 
-::: {.example}
-::: {.exampleMarkup}
+::: example
+::: exampleMarkup
     ```{.R .cb.nb hide=stdout}
     cat(x)
     ```
 :::
 
-::: {.exampleOutput}
+::: exampleOutput
 ``` {.R .numberLines startFrom="2"}
 cat(x)
 ```
