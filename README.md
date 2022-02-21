@@ -49,12 +49,12 @@ and Rust examples demonstrate more advanced features at the end):
 Markdown source `test.md`:
 
 ``````markdown
-```{.python .cb.run}
+```{.python .cb-run}
 var = 'Hello from Python!'
 var += ' $2^8 = {}$'.format(2**8)
 ```
 
-```{.python .cb.run}
+```{.python .cb-run}
 print(var)
 ```
 ``````
@@ -165,7 +165,7 @@ Manual installation:  `python3 setup.py install` or `python setup.py install`
 
 **Requirements:**
 
-  * [Pandoc](http://pandoc.org/) 2.4+ (2.7.2+ recommended).
+  * [Pandoc](http://pandoc.org/) 2.4+ (2.17.1.1+ recommended for `commonmark_x`).
   * Python 3.7+ with `setuptools`, and [`bespon`](https://bespon.org) 0.6
     (`bespon` installation is typically managed by `pip`/`setup.py`)
 
@@ -173,16 +173,19 @@ Manual installation:  `python3 setup.py install` or `python setup.py install`
 
 ## Converting a document
 
-Simply run `codebraid pandoc <normal pandoc options>`.  Note that
-`--overwrite` is required to overwrite existing files.  If you are using a
-defaults file, `--from`, `--to`, and `--output` must be given explicitly and
-cannot be inherited from the defaults file.  If you are using a defaults file
-and converting to a standalone Pandoc Markdown document, `--standalone` should
-be given explicitly rather than being inherited from the defaults file.
+Simply run `codebraid pandoc <normal pandoc options>`.  Codebraid currently
+supports Pandoc Markdown (`--from markdown`) and CommonMark with Pandoc
+extensions (`--from commonmark_x`) as input formats.
+
+Note that `--overwrite` is required to overwrite existing files.  If you are
+using a defaults file, `--from`, `--to`, and `--output` must be given
+explicitly and cannot be inherited from the defaults file.  If you are using a
+defaults file and converting to a standalone Pandoc Markdown document,
+`--standalone` should be given explicitly rather than being inherited from the
+defaults file.
 
 `codebraid` should typically be run in the same directory as the document, so
-that the default working directory for code is the document directory.  Future
-releases will allow customization of the working directory.
+that the default working directory for code is the document directory.
 
 If you are converting from Pandoc Markdown to Pandoc Markdown with
 `--standalone` (basically using `codebraid` to preprocess Markdown documents),
@@ -202,9 +205,9 @@ needed in Markdown documents, this can be accomplished by piping the output of
 
 ## Additional non-Pandoc command-line options
 
-* `--live-output` — Show code output (stdout and stderr) live in the
-  terminal during code execution.  For Jupyter kernels, also show  errors and
-  a summary of rich output.  Output still appears in the document as normal.
+* `--live-output` — Show code output (stdout and stderr) live in the terminal
+  during code execution.  For Jupyter kernels, also show  errors and a summary
+  of rich output.  Output still appears in the document as normal.
 
   Individual sessions can override this by setting `live_output=false` in the
   document.
@@ -243,7 +246,7 @@ situations.
 Code is made executable by adding a Codebraid class to its
 [Pandoc attributes](http://pandoc.org/MANUAL.html#fenced-code-blocks).
 For example, `` `code`{.python} `` becomes
-`` `code`{.python .cb.run} ``.
+`` `code`{.python .cb-run} ``.
 
 When code is executed, the output will depend on whether the built-in code
 execution system or a Jupyter kernel is used.
@@ -261,34 +264,41 @@ simply entering a variable returns a string representation without explicit
 printing, and plotting opens a separate image window or displays an image
 inline.  Such output is absent in Codebraid unless it is also produced when
 code is executed as a script rather than in an interactive session.  The
-`.cb.expr` command is provided for when an inline string representation of a
+`.cb-expr` command is provided for when an inline string representation of a
 variable is desired.
 
 An option for interactive-style code execution with the built-in system is
 planned for a future release.  In the meantime, many interactive-style
-features are available between the `.cb.expr` command and Jupyter kernels.
+features are available between the `.cb-expr` command and Jupyter kernels.
 
 When code is executed with a Jupyter kernel, the default output will be
 equivalent to executing it in a Jupyter notebook.  Rich output such plots,
 images, and LaTeX math will be displayed automatically by default.  This can
 be customized by using the `show` and `hide` options.
 
-* `.cb.code` — Insert code verbatim, but do not run it.  This is primarily
+All classes for making code executable are listed below.  These all have the
+form `.cb-<command>`.  Classes with the form `.cb.<command>` (period rather
+than hyphen) are supported for Pandoc Markdown (`--from markdown`), but not
+for `commonmark_x` since it has a more restricted class syntax.  The forms
+shown below (`.cb-<command>`) should be preferred for compatibility across
+Markdown variants supported by Pandoc.
+
+* `.cb-code` — Insert code verbatim, but do not run it.  This is primarily
   useful when combined with other features like naming and then copying code
   chunks.
 
-* `.cb.expr` — Evaluate an expression and interpret the result as Markdown.
+* `.cb-expr` — Evaluate an expression and interpret the result as Markdown.
   Only works with inline code.  This is not currently compatible with Jupyter
   kernels.
 
-* `.cb.nb` — Execute code in notebook mode.  For inline code, this is
-  equivalent to `.cb.expr` with verbatim output unless a Jupyter kernel is
+* `.cb-nb` — Execute code in notebook mode.  For inline code, this is
+  equivalent to `.cb-expr` with verbatim output unless a Jupyter kernel is
   used, in which case rich output like plots or LaTeX will be displayed.  For
   code blocks, this inserts the code verbatim, followed by any printed output
   (stdout) verbatim.  If stderr exists, it is also inserted verbatim.  When a
   Jupyter kernel is used, rich output like plots or LaTeX is also displayed.
 
-* `.cb.paste` — Insert code and/or output copied from one or more named code
+* `.cb-paste` — Insert code and/or output copied from one or more named code
   chunks.  The `copy` keyword is used to specify chunks to be copied.  This
   does not execute any code.  Unless `show` is specified, display options are
   inherited from the first copied code chunk.
@@ -298,12 +308,12 @@ be customized by using the `show` and `hide` options.
   any omitted chunks.  This ensures that what is displayed is always
   consistent with what was executed.
 
-  If content is copied from another `cb.paste` code chunk, only a single code
+  If content is copied from another `cb-paste` code chunk, only a single code
   chunk can be copied.  This reduces the indirection that is possible when
   displaying the output of code that has been executed.  This restriction may
   be removed in the future.
 
-* `.cb.run` — Run code and interpret any printed content (stdout) as Markdown.
+* `.cb-run` — Run code and interpret any printed content (stdout) as Markdown.
   Also insert stderr verbatim if it exists.  When a Jupyter kernel is used,
   rich output like plots or LaTeX is also displayed.
 
@@ -399,8 +409,9 @@ session is in use).
 
 * `session`={identifier-style string} — By default, all code for a given
   language is executed in a single, shared session so that data and variables
-  persist between code chunks.  This allows code to be separated into multiple
-  independent sessions.  Session names must be Python-style identifiers.
+  persist between code chunks.  This option allows code to be separated into
+  multiple independent sessions.  Session names must be Python-style
+  identifiers.
 
 #### Display
 
@@ -411,7 +422,7 @@ session is in use).
 * `hide`={`markup`, `copied_markup`, `code`, `stdout`, `stderr`, `expr`,
   `rich_output`, `all`} — Hide some or all of the elements that are displayed
   by default.  Elements can be combined.  For example, `hide=stdout+stderr`.
-  Note that `expr` only applies to `.cb.expr` or `.cb.nb` with inline code
+  Note that `expr` only applies to `.cb-expr` or `.cb-nb` with inline code
   using Codebraid's built-in code execution system, since only these evaluate
   an expression.  `rich_output` is currently only relevant for Jupyter
   kernels.
@@ -429,7 +440,7 @@ session is in use).
 
 * `show`={`markup`, `copied_markup`, `code`, `stdout`, `stderr`, `expr`,
   `rich_output`, `none`} — Override the elements that are displayed by
-  default.  `expr` only applies to `.cb.expr` and to `.cb.nb` with inline code
+  default.  `expr` only applies to `.cb-expr` and to `.cb-nb` with inline code
   using Codebraid's built-in code execution system, since only these evaluate
   an expression.  Elements can be combined.  For example, `show=code+stdout`.
 
@@ -489,10 +500,10 @@ session is in use).
 #### Copying
 
 * `copy`={chunk name(s)} — Copy one or more named code chunks.  When `copy` is
-  used with a command like `.cb.run` that executes code, only the code is
+  used with a command like `.cb-run` that executes code, only the code is
   copied, and it is executed as if it had been entered directly.  When `copy`
-  is used with `.cb.code`, only the code is copied and nothing is executed.
-  When `copy` is used with `.cb.paste`, both code and output are copied, and
+  is used with `.cb-code`, only the code is copied and nothing is executed.
+  When `copy` is used with `.cb-paste`, both code and output are copied, and
   nothing is executed.  Multiple code chunks may be copied; for example,
   `copy=name1+name2`.  In that case, the code from all chunks is concatenated,
   as is any output that is copied.  Because `copy` brings in code from other
@@ -509,10 +520,10 @@ session is in use).
   `~<user>/` is expanded to the user's home directory under all operating
   systems, including under Windows with both slashes and backslashes.
 
-  When `include_file` is used with a command like `.cb.run` that executes
+  When `include_file` is used with a command like `.cb-run` that executes
   code, the file is included and executed as part of the current session just
   as if the file contents had been entered directly.  When `include_file` is
-  used with `.cb.code`, the file is included and displayed just as if it had
+  used with `.cb-code`, the file is included and displayed just as if it had
   been entered directly.  Because `include_file` brings in code from another
   file, the actual content of a code block or inline code using `include_file`
   is discarded.  As a result, this must be empty, or a space or underscore can
