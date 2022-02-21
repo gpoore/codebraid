@@ -13,7 +13,7 @@ kernel.
 
 Plots are included automatically.
 
-```{.python .cb.nb jupyter_kernel=python3 example=true}
+```{.python .cb-nb jupyter_kernel=python3 example=true}
 %matplotlib inline
 import matplotlib.pyplot as plt
 import numpy as np
@@ -30,7 +30,7 @@ plt.grid()
 If there are errors or warnings, they are shown as well.  Copying this code
 into a Jupyter notebook yields the same output.
 
-```{.python .cb.nb example=true}
+```{.python .cb-nb example=true}
 plt.plot(x, np.sin(x)/x, label=r'$\sin(x)/x$')
 plt.plot(x, np.cos(np.sin(x)), label=r'$\cos(\sin(x))$')
 plt.xticks(x_tick_values, x_tick_labels)
@@ -45,7 +45,7 @@ SymPy equations are displayed as well.  This example runs in a separate
 session from the plots above.  Multiple Jupyter kernels can be used within a
 single document, and multiple independent sessions are possible per kernel.
 
-```{.python .cb.nb session=sympy name=sympy1 jupyter_kernel=python3 example=true}
+```{.python .cb-nb session=sympy name=sympy1 jupyter_kernel=python3 example=true}
 from sympy import *
 init_printing(use_latex='mathjax')
 x = Symbol('x')
@@ -54,7 +54,7 @@ int_eqn = Integral(eqn, (x, -oo, oo))
 int_eqn
 ```
 
-```{.python .cb.nb session=sympy name=sympy2 example=true}
+```{.python .cb-nb session=sympy name=sympy2 example=true}
 int_eqn.doit()
 ```
 
@@ -69,10 +69,10 @@ rendering math in HTML, such as `--mathjax`.  For this document, Pandoc was
 used with `--webtex` to convert LaTeX into PNG during the document build
 process.
 
-`cb.paste` works with rich output like plots and LaTeX, just like it normally
+`cb-paste` works with rich output like plots and LaTeX, just like it normally
 does with code, stdout, and stderr.
 
-```{.cb.paste copy=sympy1+sympy2 show=rich_output example=true}
+```{.cb-paste copy=sympy1+sympy2 show=rich_output example=true}
 ```
 
 
@@ -84,8 +84,8 @@ or show the markup.  For example, using `show=rich_output:latex:raw` displays
 the raw (rendered) LaTeX, while `show=rich_output:latex:verbatim` displays the
 LaTeX markup verbatim.
 
-```{.cb.paste copy=sympy1 show=rich_output:latex:raw example=true}
+```{.cb-paste copy=sympy1 show=rich_output:latex:raw example=true}
 ```
 
-```{.cb.paste copy=sympy1 show=rich_output:latex:verbatim example=true}
+```{.cb-paste copy=sympy1 show=rich_output:latex:verbatim example=true}
 ```

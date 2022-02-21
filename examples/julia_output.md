@@ -6,11 +6,11 @@ title: Codebraid with Julia
 
 ### Run
 
-Inline code with `.cb.run` gives raw stdout.
+Inline code with `.cb-run` gives raw stdout.
 
 ::: example
 ::: exampleMarkup
-    `println(1 + 2)`{.julia .cb.run}
+    `println(1 + 2)`{.julia .cb-run}
 :::
 
 ::: exampleOutput
@@ -20,14 +20,14 @@ Inline code with `.cb.run` gives raw stdout.
 
 ### Expression and inline notebook
 
-Inline code with `.cb.expr` evaluates an expression and then inserts the
+Inline code with `.cb-expr` evaluates an expression and then inserts the
 raw output into the document, where it is interpreted as Markdown.
-Inline code with `.cb.nb` (`nb` is short for `notebook`) is similar,
+Inline code with `.cb-nb` (`nb` is short for `notebook`) is similar,
 except output is shown verbatim.
 
 ::: example
 ::: exampleMarkup
-    `"\$\\sin(30^\\circ) = $(sind(30))\$"`{.julia .cb.expr}
+    `"\$\\sin(30^\\circ) = $(sind(30))\$"`{.julia .cb-expr}
 :::
 
 ::: exampleOutput
@@ -37,7 +37,7 @@ $\sin(30^\circ) = 0.5$
 
 ::: example
 ::: exampleMarkup
-    `"\$e^{\\pi/4} = $(exp(pi/4))\$"`{.julia .cb.expr}
+    `"\$e^{\\pi/4} = $(exp(pi/4))\$"`{.julia .cb-expr}
 :::
 
 ::: exampleOutput
@@ -47,7 +47,7 @@ $e^{\pi/4} = 2.1932800507380152$
 
 ::: example
 ::: exampleMarkup
-    `"\$e^{\\pi/4} = $(exp(pi/4))\$"`{.julia .cb.nb}
+    `"\$e^{\\pi/4} = $(exp(pi/4))\$"`{.julia .cb-nb}
 :::
 
 ::: exampleOutput
@@ -63,7 +63,7 @@ that it does not impact other examples.
 
 ::: example
 ::: exampleMarkup
-    `1 + "a"`{.julia .cb.run session=inline_error}
+    `1 + "a"`{.julia .cb-run session=inline_error}
 :::
 
 ::: exampleOutput
@@ -80,7 +80,7 @@ line number.
 
 ::: example
 ::: exampleMarkup
-    `println(1 + 2)`{.jlia .cb.run session=inline_source_error}
+    `println(1 + 2)`{.jlia .cb-run session=inline_source_error}
 :::
 
 ::: exampleOutput
@@ -93,12 +93,12 @@ line number.
 
 ### Run
 
-Code blocks with `.cb.run` give raw stdout. There is continuity between
+Code blocks with `.cb-run` give raw stdout. There is continuity between
 code blocks so long as they are in the same session; variables persist.
 
 ::: example
 ::: exampleMarkup
-    ```{.julia .cb.run session=hello}
+    ```{.julia .cb-run session=hello}
     x = "Hello from *Julia!*"
     ```
 :::
@@ -106,7 +106,7 @@ code blocks so long as they are in the same session; variables persist.
 
 ::: example
 ::: exampleMarkup
-    ```{.julia .cb.run session=hello}
+    ```{.julia .cb-run session=hello}
     println(x)
     ```
 :::
@@ -118,11 +118,11 @@ Hello from *Julia!*
 
 ### Notebook
 
-Code blocks with `.cb.nb` show the code and also the verbatim stdout.
+Code blocks with `.cb-nb` show the code and also the verbatim stdout.
 
 ::: example
 ::: exampleMarkup
-    ```{.julia .cb.nb session=random}
+    ```{.julia .cb-nb session=random}
     using Random
     using Statistics
     Random.seed!(1)
@@ -158,7 +158,7 @@ Code blocks automatically show stderr by default.
 
 ::: example
 ::: exampleMarkup
-    ```{.julia .cb.nb .line_numbers session=block_error}
+    ```{.julia .cb-nb .line_numbers session=block_error}
     var = 123
     println(var)
     flush(stdout)
@@ -201,7 +201,7 @@ line number.
 
 ::: example
 ::: exampleMarkup
-    ```{.julia .cb.ruuun session=block_source_error}
+    ```{.julia .cb-ruuun session=block_source_error}
     println(1 + 2)
     ```
 :::
@@ -209,7 +209,7 @@ line number.
 ::: exampleOutput
 ``` {.error .sourceError}
 SOURCE ERROR in "julia.cbmd" near line 101:
-Unknown or unsupported Codebraid command "cb.ruuun"
+Unknown or unsupported Codebraid command "cb-ruuun"
 
 SOURCE ERROR in "julia.cbmd" near line 101:
 Missing valid Codebraid command
@@ -225,7 +225,7 @@ confirmation that there indeed was none.
 
 ::: example
 ::: exampleMarkup
-    ```{.julia .cb.run show=code+stdout+stderr:verbatim_or_empty}
+    ```{.julia .cb-run show=code+stdout+stderr:verbatim_or_empty}
     x = 1 + 2
     ```
 :::
@@ -245,7 +245,7 @@ It is also possible to selectively hide output from a code chunk.
 
 ::: example
 ::: exampleMarkup
-    ```{.julia .cb.nb hide=stdout}
+    ```{.julia .cb-nb hide=stdout}
     println(x)
     ```
 :::

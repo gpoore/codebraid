@@ -138,14 +138,14 @@ code.stderr {
     border-width: 1px;
     border-color: pink;
 }
-pre.sourceError:before{
-    content: "Source error";
+pre.error:before{
+    content: "Error";
     display: block;
     height: 2em;
     font-weight: bold;
     font-size: 120%;
 }
-pre.sourceError {
+pre.error {
     color: red;
     padding: 0.5em;
     background-color: lavenderblush;
@@ -155,7 +155,7 @@ pre.sourceError {
     border-radius: 0.2em;
     padding-left: 0.5em;
 }
-code.sourceError {
+code.error {
     color: red;
     background-color: lavenderblush;
     border-style: solid;

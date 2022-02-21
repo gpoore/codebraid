@@ -17,21 +17,21 @@ Saving plots requires explicit graphics commands.
 
 ### Run
 
-Inline code with `.cb.run` gives raw stdout.
+Inline code with `.cb-run` gives raw stdout.
 
-`cat(1 + 2)`{.R .cb.run example=true}
+`cat(1 + 2)`{.R .cb-run example=true}
 
 
 ### Expression and inline notebook
 
-Inline code with `.cb.expr` evaluates an expression and then inserts the raw
+Inline code with `.cb-expr` evaluates an expression and then inserts the raw
 output into the document, where it is interpreted as Markdown.  Inline code
-with `.cb.nb` (`nb` is short for `notebook`) is similar, except output is
+with `.cb-nb` (`nb` is short for `notebook`) is similar, except output is
 shown verbatim.  Expressions are converted to strings via `toString()`.
 
-`paste("$2^8 = ", 2^8, "$", sep="")`{.R .cb.expr example=true}
+`paste("$2^8 = ", 2^8, "$", sep="")`{.R .cb-expr example=true}
 
-`(x <- 1:20)[x %% 3 == 0]`{.R .cb.nb example=true}
+`(x <- 1:20)[x %% 3 == 0]`{.R .cb-nb example=true}
 
 
 
@@ -41,7 +41,7 @@ In the event of an error, inline code automatically shows stderr by default.
 This code is executed in its own session, `inline_error`, so that it does
 not impact other examples.
 
-`1 + "a"`{.R .cb.run session=inline_error example=true}
+`1 + "a"`{.R .cb-run session=inline_error example=true}
 
 
 ### Source errors
@@ -49,7 +49,7 @@ not impact other examples.
 A message is also displayed for errors in the Markdown source.  This usually
 includes the name of the document source and the approximate line number.
 
-`cat(1 + 2)`{.R .cb.rn session=inline_source_error example=true}
+`cat(1 + 2)`{.R .cb-rn session=inline_source_error example=true}
 
 
 
@@ -58,23 +58,23 @@ includes the name of the document source and the approximate line number.
 
 ### Run
 
-Code blocks with `.cb.run` give raw stdout.  There is continuity between code
+Code blocks with `.cb-run` give raw stdout.  There is continuity between code
 blocks so long as they are in the same session; variables persist.
 
-```{.R .cb.run session=hello example=true}
+```{.R .cb-run session=hello example=true}
 x <- "Hello from *R!*"
 ```
 
-```{.R .cb.run session=hello example=true}
+```{.R .cb-run session=hello example=true}
 cat(x)
 ```
 
 
 ### Notebook
 
-Code blocks with `.cb.nb` show the code and also the verbatim stdout.
+Code blocks with `.cb-nb` show the code and also the verbatim stdout.
 
-```{.R .cb.nb session=random example=true}
+```{.R .cb-nb session=random example=true}
 set.seed(1)
 random_ints <- floor(runif(10, min=0, max=101))
 cat("Random integers: ", random_ints, "\n\n")
@@ -88,9 +88,9 @@ straightforward.  (Plots *are* included automatically when using the
 
 Note that this example uses the `show` keyword argument for the code block
 so that the output is interpreted as raw Markdown rather than displayed
-verbatim (the default for `.cb.nb`).
+verbatim (the default for `.cb-nb`).
 
-```{.R .cb.nb session=plot show=code+stdout:raw+stderr example=true}
+```{.R .cb-nb session=plot show=code+stdout:raw+stderr example=true}
 png("plot.png", width=500, height=350, bg="transparent")
 x <- seq(0, 6, 0.01)
 y <- sin(x)
@@ -107,7 +107,7 @@ cat(markdown)
 
 Code blocks show stderr automatically by default.
 
-```{.R .cb.nb session=block_error example=true}
+```{.R .cb-nb session=block_error example=true}
 var <- 123
 cat(var)
 flush(stdout())
@@ -120,7 +120,7 @@ var <- var + "a"
 A message is also displayed for errors in the Markdown source.  This usually
 includes the name of the document source and the approximate line number.
 
-```{.R .cb.ruuun session=block_source_error example=true}
+```{.R .cb-ruuun session=block_source_error example=true}
 cat(1 + 2)
 ```
 
@@ -132,13 +132,13 @@ By default, stdout and stderr are only shown if they are non-empty.  In some
 situations, it may be useful to represent empty output visually as
 confirmation that there indeed was none.
 
-```{.R .cb.run show=code+stdout+stderr:verbatim_or_empty example=true}
+```{.R .cb-run show=code+stdout+stderr:verbatim_or_empty example=true}
 x <- 1 + 2
 ```
 
 It is also possible to selectively hide output from a code chunk.
 
-```{.R .cb.nb hide=stdout example=true}
+```{.R .cb-nb hide=stdout example=true}
 cat(x)
 ```
 

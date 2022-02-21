@@ -13,7 +13,7 @@ Plots are included automatically.
 
 ::: example
 ::: exampleMarkup
-    ```{.python .cb.nb jupyter_kernel=python3}
+    ```{.python .cb-nb jupyter_kernel=python3}
     %matplotlib inline
     import matplotlib.pyplot as plt
     import numpy as np
@@ -52,7 +52,7 @@ code into a Jupyter notebook yields the same output.
 
 ::: example
 ::: exampleMarkup
-    ```{.python .cb.nb}
+    ```{.python .cb-nb}
     plt.plot(x, np.sin(x)/x, label=r'$\sin(x)/x$')
     plt.plot(x, np.cos(np.sin(x)), label=r'$\cos(\sin(x))$')
     plt.xticks(x_tick_values, x_tick_labels)
@@ -71,7 +71,7 @@ plt.grid()
 ```
 
 ``` stderr
-~\AppData\Local\Temp/ipykernel_24420/293500280.py:1: RuntimeWarning: invalid value encountered in true_divide
+~\AppData\Local\Temp/ipykernel_21764/293500280.py:1: RuntimeWarning: invalid value encountered in true_divide
   plt.plot(x, np.sin(x)/x, label=r'$\sin(x)/x$')
 ```
 
@@ -88,7 +88,7 @@ per kernel.
 
 ::: example
 ::: exampleMarkup
-    ```{.python .cb.nb session=sympy name=sympy1 jupyter_kernel=python3}
+    ```{.python .cb-nb session=sympy name=sympy1 jupyter_kernel=python3}
     from sympy import *
     init_printing(use_latex='mathjax')
     x = Symbol('x')
@@ -114,7 +114,7 @@ $\displaystyle \int\limits_{-\infty}^{\infty} e^{- x^{2}}\, dx$
 
 ::: example
 ::: exampleMarkup
-    ```{.python .cb.nb session=sympy name=sympy2}
+    ```{.python .cb-nb session=sympy name=sympy2}
     int_eqn.doit()
     ```
 :::
@@ -139,12 +139,12 @@ run with one of the flags for rendering math in HTML, such as
 `--mathjax`. For this document, Pandoc was used with `--webtex` to
 convert LaTeX into PNG during the document build process.
 
-`cb.paste` works with rich output like plots and LaTeX, just like it
+`cb-paste` works with rich output like plots and LaTeX, just like it
 normally does with code, stdout, and stderr.
 
 ::: example
 ::: exampleMarkup
-    ```{.cb.paste copy=sympy1+sympy2 show=rich_output}
+    ```{.cb-paste copy=sympy1+sympy2 show=rich_output}
     ```
 :::
 
@@ -165,7 +165,7 @@ output or show the markup. For example, using
 
 ::: example
 ::: exampleMarkup
-    ```{.cb.paste copy=sympy1 show=rich_output:latex:raw}
+    ```{.cb-paste copy=sympy1 show=rich_output:latex:raw}
     ```
 :::
 
@@ -176,7 +176,7 @@ $\displaystyle \int\limits_{-\infty}^{\infty} e^{- x^{2}}\, dx$
 
 ::: example
 ::: exampleMarkup
-    ```{.cb.paste copy=sympy1 show=rich_output:latex:verbatim}
+    ```{.cb-paste copy=sympy1 show=rich_output:latex:verbatim}
     ```
 :::
 

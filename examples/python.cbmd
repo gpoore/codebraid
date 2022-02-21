@@ -8,21 +8,21 @@ title: "Codebraid with Python"
 
 ### Run
 
-Inline code with `.cb.run` gives raw stdout.
+Inline code with `.cb-run` gives raw stdout.
 
-`print(1 + 2)`{.python .cb.run example=true}
+`print(1 + 2)`{.python .cb-run example=true}
 
 
 ### Expression and inline notebook
 
-Inline code with `.cb.expr` evaluates an expression and then inserts the raw
+Inline code with `.cb-expr` evaluates an expression and then inserts the raw
 output into the document, where it is interpreted as Markdown.  Inline code
-with `.cb.nb` (`nb` is short for `notebook`) is similar, except output is
+with `.cb-nb` (`nb` is short for `notebook`) is similar, except output is
 shown verbatim.
 
-`"...".join(["*emphasis*", "**strong**", "~~strikeout~~"])`{.python .cb.expr example=true}
+`"...".join(["*emphasis*", "**strong**", "~~strikeout~~"])`{.python .cb-expr example=true}
 
-`"$2^8 = {}$".format(2**8)`{.python .cb.nb example=true}
+`"$2^8 = {}$".format(2**8)`{.python .cb-nb example=true}
 
 
 ### Stderr
@@ -31,7 +31,7 @@ In the event of an error, inline code automatically shows stderr by default.
 This code is executed in its own session, `inline_error`, so that it does
 not impact other examples.
 
-`1 + "a"`{.python .cb.run session=inline_error example=true}
+`1 + "a"`{.python .cb-run session=inline_error example=true}
 
 
 ### Source errors
@@ -39,21 +39,21 @@ not impact other examples.
 A message is also displayed for errors in the Markdown source.  This usually
 includes the name of the document source and the approximate line number.
 
-`print(1 + 2)`{.pythn .cb.run session=inline_source_error example=true}
+`print(1 + 2)`{.pythn .cb-run session=inline_source_error example=true}
 
 
 ### Code
 
-Inline code with `.cb.code` simply displays the code.  Nothing is executed.
+Inline code with `.cb-code` simply displays the code.  Nothing is executed.
 
-`print("Hello from Python!")`{.python .cb.code example=true}
+`print("Hello from Python!")`{.python .cb-code example=true}
 
 The output is identical to that of
 ```
 `print("Hello from Python!")`{.python}
 ```
-so `.cb.code` is only really useful when it is combined with other Codebraid
-features.  For example, it is possible to give code with `.cb.code` a `name`,
+so `.cb-code` is only really useful when it is combined with other Codebraid
+features.  For example, it is possible to give code with `.cb-code` a `name`,
 and then copy it by `name` into a separate location where it is executed.  See
 [Copying code and output](#copying).
 
@@ -64,23 +64,23 @@ and then copy it by `name` into a separate location where it is executed.  See
 
 ### Run
 
-Code blocks with `.cb.run` give raw stdout.  There is continuity between code
+Code blocks with `.cb-run` give raw stdout.  There is continuity between code
 blocks so long as they are in the same session; variables persist.
 
-```{.python .cb.run session=hello example=true}
+```{.python .cb-run session=hello example=true}
 x = 'Hello from *Python!*'
 ```
 
-```{.python .cb.run session=hello example=true}
+```{.python .cb-run session=hello example=true}
 print(x)
 ```
 
 
 ### Notebook
 
-Code blocks with `.cb.nb` show the code and also the verbatim stdout.
+Code blocks with `.cb-nb` show the code and also the verbatim stdout.
 
-```{.python .cb.nb session=random example=true}
+```{.python .cb-nb session=random example=true}
 import random
 random.seed(2)
 rnums = [random.randrange(100) for n in range(10)]
@@ -96,9 +96,9 @@ straightforward.  (Plots *are* included automatically when using the
 
 Note that this example uses the `show` keyword argument for the code block
 so that the output is interpreted as raw Markdown rather than displayed
-verbatim (the default for `.cb.nb`).
+verbatim (the default for `.cb-nb`).
 
-```{.python .cb.nb session=plot show=code+stdout:raw+stderr example=true}
+```{.python .cb-nb session=plot show=code+stdout:raw+stderr example=true}
 import numpy as np
 import matplotlib.pyplot as plt
 x = np.linspace(0, 6, 600)
@@ -119,7 +119,7 @@ print(markdown)
 
 Code blocks show stderr automatically by default.
 
-```{.python .cb.nb session=block_error example=true}
+```{.python .cb-nb session=block_error example=true}
 var = 123
 print(var, flush=True)
 var += "a"
@@ -131,23 +131,23 @@ var += "a"
 A message is also displayed for errors in the Markdown source.  This usually
 includes the name of the document source and the approximate line number.
 
-```{.python .cb.ruuun session=block_source_error example=true}
+```{.python .cb-ruuun session=block_source_error example=true}
 print(1 + 2)
 ```
 
 
 ### Code
 
-Code blocks with `.cb.code` simply display the code.  Nothing is executed.
+Code blocks with `.cb-code` simply display the code.  Nothing is executed.
 
-```{.python .cb.code example=true}
+```{.python .cb-code example=true}
 print("Hello from Python!")
 ```
 
 The output is essentially identical to that of a normal code block; the only
 differences are some default display options, like line numbering.  Thus
-`.cb.code` is primarily useful when it is combined with other Codebraid
-features.  For example, it is possible to give code with `.cb.code` a `name`,
+`.cb-code` is primarily useful when it is combined with other Codebraid
+features.  For example, it is possible to give code with `.cb-code` a `name`,
 and then copy it by `name` into a separate location where it is executed.  See
 [Copying code and output](#copying).
 
@@ -159,13 +159,13 @@ By default, stdout and stderr are only shown if they are non-empty.  In some
 situations, it may be useful to represent empty output visually as
 confirmation that there indeed was none.
 
-```{.python .cb.run show=code+stdout+stderr:verbatim_or_empty example=true}
+```{.python .cb-run show=code+stdout+stderr:verbatim_or_empty example=true}
 x = 1 + 2
 ```
 
 It is also possible to selectively hide output from a code chunk.
 
-```{.python .cb.nb hide=stdout example=true}
+```{.python .cb-nb hide=stdout example=true}
 print(x)
 ```
 
@@ -181,10 +181,10 @@ print(x)
 Code chunks can be named using the `name` keyword, which takes an
 identifier-style name.  Then the `copy` keyword can be used in other code
 chunks to copy a named chunk or a combination of named chunks.  When `copy` is
-used with `cb.run`, `cb.expr`, or `cb.nb`, the code is copied and then
+used with `cb-run`, `cb-expr`, or `cb-nb`, the code is copied and then
 executed as if it had been entered directly.  When `copy` is used with
-`cb.code`, the code is copied and displayed, but nothing is executed.  When
-`copy` is used with the special command `cb.paste`, both the code and output
+`cb-code`, the code is copied and displayed, but nothing is executed.  When
+`copy` is used with the special command `cb-paste`, both the code and output
 are copied but nothing is executed.  This is useful in executing code and then
 showing snippets of the code and/or output in different parts of a document.
 
@@ -195,13 +195,13 @@ itself be copied.
 
 The next two code chunks are named.
 
-```{.python .cb.run name=part1 session=copy_source example=true}
+```{.python .cb-run name=part1 session=copy_source example=true}
 import random
 random.seed(2)
 rnums = [random.randrange(100) for n in range(10)]
 ```
 
-```{.python .cb.run name=part2 session=copy_source example=true}
+```{.python .cb-run name=part2 session=copy_source example=true}
 print("Random numbers: {}".format(rnums))
 ```
 
@@ -210,21 +210,21 @@ combined.  Because the content for this code block is copied from other code
 chunks, the code block itself should be empty, or may alternately contain a
 space or underscore as a placeholder.
 
-```{.python .cb.paste copy=part1+part2 show=code+stdout example=true}
+```{.python .cb-paste copy=part1+part2 show=code+stdout example=true}
 ```
 
 It would also be possible to copy and re-execute the code.
 
-```{.python .cb.run copy=part1+part2 session=copied show=code+stdout:raw example=true}
+```{.python .cb-run copy=part1+part2 session=copied show=code+stdout:raw example=true}
 ```
 
 Another option is to display code, and then copy and execute it later.
 
-```{.python .cb.code name=hello example=true}
+```{.python .cb-code name=hello example=true}
 print("Hello from Python!")
 ```
 
-```{.python .cb.nb copy=hello example=true}
+```{.python .cb-nb copy=hello example=true}
 ```
 
 ### Including external files
@@ -238,10 +238,10 @@ possible to include part of a file that matches a regular expression with
 is included based on starting or ending literal strings or regular expressions
 can be found in the documentation.
 
-```{.html .cb.code include_file=python.html include_regex="<header.*?/header>" example=true}
+```{.html .cb-code include_file=python.html include_regex="<header.*?/header>" example=true}
 ```
 
-When `include_file` is used with `cb.code`, the included code is simply
-displayed.  When `include_file` is used with `cb.run` or another command that
+When `include_file` is used with `cb-code`, the included code is simply
+displayed.  When `include_file` is used with `cb-run` or another command that
 executes code, the included code is executed just as if it had been entered
 directly.

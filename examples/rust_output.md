@@ -30,11 +30,11 @@ is executed. For those situations, see [Advanced features](#advanced).
 
 ### Run
 
-Inline code with `.cb.run` gives raw stdout.
+Inline code with `.cb-run` gives raw stdout.
 
 ::: example
 ::: exampleMarkup
-    `println!("{}", 1 + 2);`{.rust .cb.run}
+    `println!("{}", 1 + 2);`{.rust .cb-run}
 :::
 
 ::: exampleOutput
@@ -44,9 +44,9 @@ Inline code with `.cb.run` gives raw stdout.
 
 ### Expression and inline notebook
 
-Inline code with `.cb.expr` evaluates an expression and then inserts the
+Inline code with `.cb-expr` evaluates an expression and then inserts the
 raw output into the document, where it is interpreted as Markdown.
-Inline code with `.cb.nb` (`nb` is short for `notebook`) is similar,
+Inline code with `.cb-nb` (`nb` is short for `notebook`) is similar,
 except output is shown verbatim. Notice that since these are
 expressions, a trailing semicolon must not be used. This is only
 compatible with expressions that return Rust types implementing the
@@ -54,7 +54,7 @@ compatible with expressions that return Rust types implementing the
 
 ::: example
 ::: exampleMarkup
-    `format!("*{}*", (1..1000).sum::<i32>())`{.rust .cb.expr}
+    `format!("*{}*", (1..1000).sum::<i32>())`{.rust .cb-expr}
 :::
 
 ::: exampleOutput
@@ -64,7 +64,7 @@ compatible with expressions that return Rust types implementing the
 
 ::: example
 ::: exampleMarkup
-    `(1..1000).map(|x| x*x).sum::<i32>()`{.rust .cb.nb}
+    `(1..1000).map(|x| x*x).sum::<i32>()`{.rust .cb-nb}
 :::
 
 ::: exampleOutput
@@ -79,7 +79,7 @@ the string implements `Display`, everything works:
 
 ::: example
 ::: exampleMarkup
-    `format!("{:?}", ())`{.rust .cb.expr}
+    `format!("{:?}", ())`{.rust .cb-expr}
 :::
 
 ::: exampleOutput
@@ -95,7 +95,7 @@ stderr by default. This code is compiled in its own session,
 
 ::: example
 ::: exampleMarkup
-    `1 + "a";`{.rust .cb.run session=inline_error}
+    `1 + "a";`{.rust .cb-run session=inline_error}
 :::
 
 ::: exampleOutput
@@ -112,7 +112,7 @@ line number.
 
 ::: example
 ::: exampleMarkup
-    `println!("{}", 1 + 2);`{.rus .cb.run session=inline_source_error}
+    `println!("{}", 1 + 2);`{.rus .cb-run session=inline_source_error}
 :::
 
 ::: exampleOutput
@@ -125,12 +125,12 @@ line number.
 
 ### Run
 
-Code blocks with `.cb.run` give raw stdout. There is continuity between
+Code blocks with `.cb-run` give raw stdout. There is continuity between
 code blocks so long as they are in the same session; variables persist.
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.run session=hello}
+    ```{.rust .cb-run session=hello}
     let x = "Hello from *Rust!*";
     ```
 :::
@@ -138,7 +138,7 @@ code blocks so long as they are in the same session; variables persist.
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.run session=hello}
+    ```{.rust .cb-run session=hello}
     println!("{}", x);
     ```
 :::
@@ -150,11 +150,11 @@ Hello from *Rust!*
 
 ### Notebook
 
-Code blocks with `.cb.nb` show the code and also the verbatim stdout.
+Code blocks with `.cb-nb` show the code and also the verbatim stdout.
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.nb session=loop}
+    ```{.rust .cb-nb session=loop}
     fn pows_of_two(start: u32, end: u32) {
         let n: i32 = 2;
         for x in start..end {
@@ -206,7 +206,7 @@ is shown.
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.nb session=block_error}
+    ```{.rust .cb-nb session=block_error}
     let number = 123;
     let letter = "a";
     ```
@@ -229,7 +229,7 @@ those of the code entered by the user.
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.nb session=block_error}
+    ```{.rust .cb-nb session=block_error}
     number += 1;
     number += letter;
     ```
@@ -265,7 +265,7 @@ line number.
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.ruuun session=block_source_error}
+    ```{.rust .cb-ruuun session=block_source_error}
     println!("{}", 1 + 2);
     ```
 :::
@@ -273,7 +273,7 @@ line number.
 ::: exampleOutput
 ``` {.error .sourceError}
 SOURCE ERROR in "rust.cbmd" near line 151:
-Unknown or unsupported Codebraid command "cb.ruuun"
+Unknown or unsupported Codebraid command "cb-ruuun"
 
 SOURCE ERROR in "rust.cbmd" near line 151:
 Missing valid Codebraid command
@@ -289,7 +289,7 @@ confirmation that there indeed was none.
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.run show=code+stdout+stderr:verbatim_or_empty}
+    ```{.rust .cb-run show=code+stdout+stderr:verbatim_or_empty}
     let x = 1 + 2;
     ```
 :::
@@ -309,7 +309,7 @@ It is also possible to selectively hide output from a code chunk.
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.nb hide=stdout}
+    ```{.rust .cb-nb hide=stdout}
     println!("{}", x);
     ```
 :::
@@ -349,7 +349,7 @@ associated stdout, is not necessary.
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.nb outside_main=true session=no_main_template_single_chunk}
+    ```{.rust .cb-nb outside_main=true session=no_main_template_single_chunk}
     fn main() {
         use std::fmt::Write as FmtWrite;
         use std::io::Write as IoWrite;
@@ -379,7 +379,7 @@ it.
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.nb outside_main=true session=no_main_template}
+    ```{.rust .cb-nb outside_main=true session=no_main_template}
     fn main() {
         use std::fmt::Write as FmtWrite;
         use std::io::Write as IoWrite;
@@ -397,7 +397,7 @@ fn main() {
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.nb session=no_main_template}
+    ```{.rust .cb-nb session=no_main_template}
         println!("Hello from Rust!");
     ```
 :::
@@ -415,7 +415,7 @@ Hello from Rust!
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.nb outside_main=true session=no_main_template}
+    ```{.rust .cb-nb outside_main=true session=no_main_template}
     }
     ```
 :::
@@ -437,7 +437,7 @@ chunks that do not contain a complete unit of code.
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.nb session=split complete=false}
+    ```{.rust .cb-nb session=split complete=false}
     fn pows_of_two(start: u32, end: u32) {
         let n: i32 = 2;
         for x in start..end {
@@ -455,7 +455,7 @@ fn pows_of_two(start: u32, end: u32) {
 
 ::: example
 ::: exampleMarkup
-    ```{.rust .cb.nb session=split}
+    ```{.rust .cb-nb session=split}
             if x == end - 1 {
                 println!("{}", n.pow(x));
             }

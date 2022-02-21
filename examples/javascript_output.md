@@ -6,12 +6,12 @@ title: Codebraid with JavaScript
 
 ### Run
 
-Inline code with `.cb.run` gives raw stdout. While the language can be
+Inline code with `.cb-run` gives raw stdout. While the language can be
 specified with `.javascript`, `.js` works as well.
 
 ::: example
 ::: exampleMarkup
-    `console.log(1 + 2);`{.js .cb.run}
+    `console.log(1 + 2);`{.js .cb-run}
 :::
 
 ::: exampleOutput
@@ -21,14 +21,14 @@ specified with `.javascript`, `.js` works as well.
 
 ### Expression and inline notebook
 
-Inline code with `.cb.expr` evaluates an expression and then inserts the
+Inline code with `.cb-expr` evaluates an expression and then inserts the
 raw output into the document, where it is interpreted as Markdown.
-Inline code with `.cb.nb` (`nb` is short for `notebook`) is similar,
+Inline code with `.cb-nb` (`nb` is short for `notebook`) is similar,
 except output is shown verbatim.
 
 ::: example
 ::: exampleMarkup
-    `` `\$2^8 = ${2**8}\$` ``{.js .cb.expr}
+    `` `\$2^8 = ${2**8}\$` ``{.js .cb-expr}
 :::
 
 ::: exampleOutput
@@ -38,7 +38,7 @@ $2^8 = 256$
 
 ::: example
 ::: exampleMarkup
-    `4*16`{.js .cb.nb}
+    `4*16`{.js .cb-nb}
 :::
 
 ::: exampleOutput
@@ -54,7 +54,7 @@ that it does not impact other examples.
 
 ::: example
 ::: exampleMarkup
-    `console.logs(1 + 2);`{.js .cb.run session=inline_error}
+    `console.logs(1 + 2);`{.js .cb-run session=inline_error}
 :::
 
 ::: exampleOutput
@@ -67,12 +67,12 @@ that it does not impact other examples.
 
 ### Run
 
-Code blocks with `.cb.run` give raw stdout. There is continuity between
+Code blocks with `.cb-run` give raw stdout. There is continuity between
 code blocks so long as they are in the same session; variables persist.
 
 ::: example
 ::: exampleMarkup
-    ```{.js .cb.run}
+    ```{.js .cb-run}
     message = "Hello from *JavaScript!*";
     ```
 :::
@@ -80,7 +80,7 @@ code blocks so long as they are in the same session; variables persist.
 
 ::: example
 ::: exampleMarkup
-    ```{.js .cb.run}
+    ```{.js .cb-run}
     console.log(message);
     ```
 :::
@@ -92,11 +92,11 @@ Hello from *JavaScript!*
 
 ### Notebook
 
-Code blocks with `.cb.nb` show the code and also the verbatim stdout.
+Code blocks with `.cb-nb` show the code and also the verbatim stdout.
 
 ::: example
 ::: exampleMarkup
-    ```{.js .cb.nb session=notebook}
+    ```{.js .cb-nb session=notebook}
     function pows_of_two(start, end) {
         n = 2;
         x = start;
@@ -139,7 +139,7 @@ Code blocks show stderr automatically by default.
 
 ::: example
 ::: exampleMarkup
-    ```{.js .cb.nb session=block_error}
+    ```{.js .cb-nb session=block_error}
     x = 1 + ;
     ```
 :::
