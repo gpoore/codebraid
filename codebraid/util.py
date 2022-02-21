@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2019, Geoffrey M. Poore
+# Copyright (c) 2019-2022, Geoffrey M. Poore
 # All rights reserved.
 #
 # Licensed under the BSD 3-Clause License:
@@ -8,8 +8,12 @@
 #
 
 
+from __future__ import annotations
+
+
 import collections
 import random
+from typing import Any, Callable
 
 
 
@@ -19,6 +23,7 @@ class KeyDefaultDict(collections.defaultdict):
     Default dict that passes missing keys to the factory function, rather than
     calling the factory function with no arguments.
     '''
+    default_factory: Callable[[Any], Any]
     def __missing__(self, key):
         if self.default_factory is None:
             raise KeyError(key)

@@ -40,7 +40,7 @@
 #     optional encoding for stdout and stderr of post_run_command
 #     defaults to best guess, with \xNN escapes of invalid bytes
 #
-# source_template =
+# run_template =
 #     optional string, default '{code}'
 #     must contain field {code}
 #

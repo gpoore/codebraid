@@ -3,7 +3,7 @@ extension = R
 
 executable = Rscript
 
-source_template =
+run_template =
     |```
     library(methods)
     pdf(file=NULL)
@@ -13,18 +13,23 @@ source_template =
 
 chunk_wrapper =
     |```
-    write("\n{stdout_delim}", stdout())
+    write("\n{stdout_start_delim}", stdout())
     flush(stdout())
-    write("\n{stderr_delim}", stderr())
+    write("\n{stderr_start_delim}", stderr())
     {code}
+    write("\n{stdout_end_delim}", stdout())
+    flush(stdout())
+    write("\n{stderr_end_delim}", stderr())
     |```/
 
 inline_expression_formatter =
     |```
     codebraid_temp_{temp_suffix} = toString({code})
-    write("\n{stdout_delim}", stdout())
-    write("\n{stderr_delim}", stderr())
+    write("\n{expr_start_delim}", stdout())
+    write("\n{expr_start_delim}", stderr())
     write(codebraid_temp_{temp_suffix}, stdout())
+    write("\n{expr_end_delim}", stdout())
+    write("\n{expr_end_delim}", stderr())
     |```/
 
 error_patterns = ['error', 'Error']

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2019, Geoffrey M. Poore
+# Copyright (c) 2019-2022, Geoffrey M. Poore
 # All rights reserved.
 #
 # Licensed under the BSD 3-Clause License:
@@ -8,9 +8,13 @@
 #
 
 
+from __future__ import annotations
+
+
 import argparse
 import codecs
 import io
+import pathlib
 import sys
 from . import converters
 from .version import __version__ as version
@@ -134,6 +138,8 @@ def pandoc(args):
                 for v_i in v:
                     other_pandoc_args.append(k)
                     other_pandoc_args.append(v_i)
+            elif k in ('--katex', '--mathjax', '--webtex') and not isinstance(v, bool):
+                other_pandoc_args.append(f'{k}={v}')
             else:
                 other_pandoc_args.append(k)
                 if not isinstance(v, bool):
@@ -149,27 +155,50 @@ def pandoc(args):
         paths = args.files
         strings = None
 
+    code_defaults = {}
     session_defaults = {}
     if args.live_output:
         session_defaults['live_output'] = args.live_output
 
-    converter = converters.PandocConverter(paths=paths,
-                                           strings=strings,
-                                           from_format=args.from_format,
-                                           pandoc_file_scope=args.pandoc_file_scope,
-                                           no_cache=args.no_cache,
-                                           cache_path=args.cache_dir,
-                                           session_defaults=session_defaults)
-
-    converter.code_braid()
+    preview = False
+    other_pandoc_args_at_load = None
+    for n, arg in enumerate(other_pandoc_args):
+        if n > 0 and 'pandoc-sourcepos-sync' in arg and other_pandoc_args[n-1] in ('-L', '--lua-filter'):
+            other_pandoc_args_at_load = other_pandoc_args[n-1:n+1]
+            other_pandoc_args = other_pandoc_args[:n-1] + other_pandoc_args[n+1:]
+            preview = True
+            break
 
     if args.output in (None, '-'):
         output_path = None
     else:
-        output_path = args.output
-    converter.convert(to_format=args.to_format, standalone=args.standalone,
-                      output_path=output_path, overwrite=args.overwrite,
-                      other_pandoc_args=other_pandoc_args)
+        output_path = pathlib.Path(args.output).expanduser()
+        if not args.overwrite and output_path.is_file():
+            # There is also a check for this in `converter.convert()`, but should
+            # fail early.
+            sys.exit(f'File "{args.output}" already exists (to replace it, add option "--overwrite")')
+    with converters.PandocConverter(
+        paths=paths,
+        strings=strings,
+        from_format=args.from_format,
+        pandoc_file_scope=args.pandoc_file_scope,
+        no_cache=args.no_cache,
+        cache_path=args.cache_dir,
+        code_defaults=code_defaults,
+        session_defaults=session_defaults,
+        other_pandoc_args_at_load=other_pandoc_args_at_load,
+    ) as converter:
+        converter.convert(
+            to_format=args.to_format,
+            standalone=args.standalone,
+            output_path=output_path,
+            overwrite=args.overwrite,
+            other_pandoc_args=other_pandoc_args
+        )
+        exit_code = converter.exit_code
+
+    sys.exit(exit_code)
+
 
 PANDOC_OPTIONS  = {
     '--data-dir': 1,

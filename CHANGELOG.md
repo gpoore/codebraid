@@ -5,17 +5,79 @@
 
 * Python 3.7 is now the minimum supported version.
 
-* Updated installation requirements: `bespon` version 0.6.
+* Added support for Codebraid Preview extension for VS Code, which provides an
+  HTML preview with scroll sync and document export (#37).  As part of this,
+  added support for Pandoc's `commonmark_x` as an input format.
+  `commonmark_x` is CommonMark Markdown plus Pandoc extensions that give it
+  most of the capabilities of Pandoc Markdown.  `commonmark_x` does not
+  support the full Pandoc Markdown syntax for classes, so it requires
+  Codebraid commands in the form `.cb-<command>` instead of `.cb.<command>`
+  (for example, `.cb-run` instead of `.cb.run`).  `.cb-<command>` is now
+  supported for Pandoc Markdown as well and should be preferred going forward
+  for maximum compatibility across Pandoc variants of Markdown.
+  `.cb.<command>` continues to be supported for Pandoc Markdown.
+
+* Added fine-grained progress tracking and display of progress.  When
+  `codebraid` runs in a terminal, there is now a color-coded summary of errors
+  and warnings plus a progress bar.  In a terminal, `live_output` now displays
+  color-coded output from executed code in real time, including a summary of
+  rich output.  `live_output` now displays a summary of errors and warnings
+  for all output loaded from cache.
+
+  `live_output` is now compatible with Jupyter kernels (#21).
+
+  Added command-line option `--live-output`.  This changes the default
+  `live_output` value for all sessions to `true` (#21).
+
+* Completely reimplemented error and warning handling to support new
+  `live_output` features and to provide better display of errors and stderr
+  within documents.  All errors and warnings related to code execution are now
+  cached.
+
+  At the end of document build, `codebraid` now exits with a non-zero exit
+  code if there are errors in the document (#24).  This is triggered by using
+  invalid settings or by executing code that causes errors.  It is also
+  triggered by loading cached output from code that caused errors when it was
+  originally executed (error state is cached).  An exit code of 64 indicates
+  an error serious enough to prevent or interrupt code execution.  An exit
+  code of 65 indicates an error that does not affect code execution, such as
+  invalid settings related to displaying code output.  An exit code of 1 still
+  indicates that `codebraid` itself exited unexpectedly and failed to complete
+  document build.
+
+* Reimplemented built-in code execution system and Jupyter kernel support as
+  async.  This makes possible new progress tracking and `live_output`
+  features.
+
+  The built-in code execution system now provides more robust error handling
+  and error synchronization.
+
+  Jupyter kernels now require `jupyter_client` >= 6.1.0 for async
+  functionality.  Version 6.1.12 or 7.1+ is recommended.  The new async
+  Jupyter support should resolve errors with `jupyter_client` > 6.1.12 (#46).
+
+* When setting `jupyter_kernel` for a session, lowercased kernel display names
+  and kernel language names are now used as aliases in finding the correct
+  kernel.  Aliases are used only when they have a single possible
+  interpretation given the kernels installed.  For example, `python` can be
+  used to select the `python3` kernel if no `python2` kernel is installed.
+
+* Pandoc command-line options `--katex`, `--mathjax`, and `--webtex` now work
+  correctly with an optional URL.  For example, for `--katex` Pandoc allows
+  `--katex[=URL]`.
+
+* Caching is now more robust to crashes or program interruption.  The output
+  for each session is now cached immediately after execution, rather than waiting until all sessions have finished.
 
 * Synchronization of code with source line numbers uses a new algorithm that
   eliminates sync failure in the form of `StopIteration` errors (#36, #38,
   #44).  Synchronization will now be faster and will not raise errors, but
   may also be less accurate occasionally.
 
-* Option `live_output` is now compatible with Jupyter kernels (#21).
+* In stderr output, the user home directory is now sanitized to `~`.  This is
+  also done in error messages from Jupyter kernels.
 
-* Added command-line option `--live-output`.  This changes the default
-  `live_output` value for all sessions to `true` (#21).
+* Updated installation requirements: `bespon` version 0.6.
 
 
 

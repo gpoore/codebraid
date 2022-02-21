@@ -9,21 +9,23 @@ compile_commands = '{executable} --crate-type bin -o {source_without_extension}.
 run_encoding = 'utf8'
 run_command = '{source_without_extension}.exe'
 
-source_template =
+run_template =
     |```
     #![allow(unused)]
     fn main() {{
-    use std::fmt::Write as FmtWrite;
-    use std::io::Write as IoWrite;
-    {code}
+        use std::fmt::Write as FmtWrite;
+        use std::io::Write as IoWrite;
+        {code}
     }}
     |```/
 
 chunk_wrapper =
     |```
-    println!("\n{stdout_delim}");
-    writeln!(std::io::stderr(), "\n{stderr_delim}").expect("Could not write to stderr");
+    println!("\n{stdout_start_delim}");
+    writeln!(std::io::stderr(), "\n{stderr_start_delim}").expect("Could not write to stderr");
     {code}
+    println!("\n{stdout_end_delim}");
+    writeln!(std::io::stderr(), "\n{stderr_end_delim}").expect("Could not write to stderr");
     |```/
 
 inline_expression_formatter =
@@ -32,13 +34,15 @@ inline_expression_formatter =
         let codebraid_temp_{temp_suffix} = {{
             {code}
         }};
-        println!("\n{stdout_delim}");
-        writeln!(std::io::stderr(), "\n{stderr_delim}").expect("Could not write to stderr");
+        println!("\n{expr_start_delim}");
+        writeln!(std::io::stderr(), "\n{expr_start_delim}").expect("Could not write to stderr");
         println!("{{}}", codebraid_temp_{temp_suffix});
+        println!("\n{expr_end_delim}");
+        writeln!(std::io::stderr(), "\n{expr_end_delim}").expect("Could not write to stderr");
     }}
     |```/
 
 error_patterns = 'error:'
 warning_patterns = 'warning:'
-line_number_patterns = ':{number}'
+line_number_patterns = '.rs:{number}'
 line_number_regex = `^\s*(\d+)\s*\|`

@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2018-2019, Geoffrey M. Poore
+# Copyright (c) 2018-2022, Geoffrey M. Poore
 # All rights reserved.
 #
 # Licensed under the BSD 3-Clause License:
 # http://opensource.org/licenses/BSD-3-Clause
 #
+
+
+from __future__ import annotations
 
 
 import collections
@@ -19,9 +22,11 @@ import sys
 import tempfile
 import textwrap
 from typing import List, Optional, Sequence, Tuple, Union
-from .base import CodeChunk, Converter, Include
+from ..code_chunks import CodeChunk, Include
 from .. import err
+from .. import message
 from .. import util
+from .base import Converter
 
 
 # Pandoc node types mapped to integers representing the layout of node
@@ -80,44 +85,46 @@ class PandocError(err.CodebraidError):
 def _get_class_processors():
     '''
     Create dict mapping Pandoc classes to processing functions.
-
-    Duplicate or invalid options related to presentation result in warnings,
-    while duplicate or invalid options related to code execution result in
-    errors.
     '''
     def class_lang_or_unknown(code_chunk, options, class_index, class_name):
         if 'lang' in options:
-            if class_name.startswith('cb.'):
-                code_chunk.source_errors.append('Unknown or unsupported Codebraid command "{0}"'.format(class_name))
+            if class_name.startswith('cb.') or class_name.startswith('cb-'):
+                code_chunk.errors.append(message.SourceError('Unknown or unsupported Codebraid command "{0}"'.format(class_name)))
             else:
-                code_chunk.source_errors.append('Unknown non-Codebraid class')
+                code_chunk.errors.append(message.SourceError('Unknown non-Codebraid class'))
         elif class_index > 0:
-            if class_name.startswith('cb.'):
-                code_chunk.source_errors.append('Unknown or unsupported Codebraid command "{0}"'.format(class_name))
+            if class_name.startswith('cb.') or class_name.startswith('cb-'):
+                code_chunk.errors.append(message.SourceError('Unknown or unsupported Codebraid command "{0}"'.format(class_name)))
             else:
-                code_chunk.source_errors.append('The language/format "{0}" must be the first class for code chunk'.format(class_name))
+                code_chunk.errors.append(message.SourceError('The language/format "{0}" must be the first class for code chunk'.format(class_name)))
         else:
             options['lang'] = class_name
 
     def class_codebraid_command(code_chunk, options, class_index, class_name):
         if 'codebraid_command' in options:
-            code_chunk.source_errors.append('Only one Codebraid command can be applied per code chunk')
+            code_chunk.errors.append(message.SourceError('Only one Codebraid command can be applied per code chunk'))
         else:
-            options['codebraid_command'] = class_name.split('.', 1)[1]
+            if '.' in class_name:
+                options['codebraid_command'] = class_name.split('.', 1)[1]
+            elif '-' in class_name:
+                options['codebraid_command'] = class_name.split('-', 1)[1]
+            else:
+                raise ValueError
 
     def class_line_anchors(code_chunk, options, class_index, class_name):
         if 'line_anchors' in options:
-            code_chunk.source_warnings.append('Duplicate line anchor class for code chunk')
+            code_chunk.errors.append(message.CanExecSourceError('Duplicate line anchor class for code chunk'))
         else:
             options['line_anchors'] = True
 
     def class_line_numbers(code_chunk, options, class_index, class_name):
         if 'line_numbers' in options:
-            code_chunk.source_warnings.append('Duplicate line numbering class for code chunk')
+            code_chunk.errors.append(message.CanExecSourceError('Duplicate line numbering class for code chunk'))
         else:
             options['line_numbers'] = True
 
-    codebraid_commands = {'cb.{}'.format(k): class_codebraid_command for k in CodeChunk.commands}
+    codebraid_commands = {f'cb.{k}': class_codebraid_command for k in CodeChunk.commands}
+    codebraid_commands.update({f'cb-{k}': class_codebraid_command for k in CodeChunk.commands})
     line_anchors = {k: class_line_anchors for k in ('lineAnchors', 'line-anchors', 'line_anchors')}
     line_numbers = {k: class_line_numbers for k in ('line_numbers', 'numberLines', 'number-lines', 'number_lines')}
     return collections.defaultdict(lambda: class_lang_or_unknown,
@@ -141,34 +148,34 @@ def _get_keyval_processors():
 
     def keyval_generic(code_chunk, options, key, value):
         if key in options:
-            code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
+            code_chunk.errors.append(message.SourceError('Duplicate "{0}" attribute for code chunk'.format(key)))
         elif key in namespace_keywords:
-            code_chunk.source_errors.append('Invalid key "{0}" for code chunk'.format(key))
+            code_chunk.errors.append(message.SourceError('Invalid key "{0}" for code chunk'.format(key)))
         else:
             options[key] = value
 
     def keyval_bool(code_chunk, options, key, value):
         if key in options:
-            code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
+            code_chunk.errors.append(message.SourceError('Duplicate "{0}" attribute for code chunk'.format(key)))
         elif value not in ('true', 'false'):
-            code_chunk.source_errors.append('Attribute "{0}" must be true or false for code chunk'.format(key))
+            code_chunk.errors.append(message.SourceError('Attribute "{0}" must be true or false for code chunk'.format(key)))
         else:
             options[key] = value == 'true'
 
     def keyval_int(code_chunk, options, key, value):
         if key in options:
-            code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
+            code_chunk.errors.append(message.SourceError('Duplicate "{0}" attribute for code chunk'.format(key)))
         else:
             try:
                 value = int(value)
             except (ValueError, TypeError):
-                code_chunk.source_errors.append('Attribute "{0}" must be integer for code chunk'.format(key))
+                code_chunk.errors.append(message.SourceError('Attribute "{0}" must be integer for code chunk'.format(key)))
             else:
                 options[key] = value
 
     def keyval_first_number(code_chunk, options, key, value):
         if 'first_number' in options:
-            code_chunk.source_warnings.append('Duplicate first line number attribute for code chunk')
+            code_chunk.errors.append(message.CanExecSourceError('Duplicate first line number attribute for code chunk'))
         else:
             try:
                 value = int(value)
@@ -178,17 +185,17 @@ def _get_keyval_processors():
 
     def keyval_line_anchors(code_chunk, options, key, value):
         if 'line_anchors' in options:
-            code_chunk.source_warnings.append('Duplicate line anchor attribute for code chunk')
+            code_chunk.errors.append(message.CanExecSourceError('Duplicate line anchor attribute for code chunk'))
         elif value not in ('true', 'false'):
-            code_chunk.source_warnings.append('Attribute "{0}" must be true or false for code chunk'.format(key))
+            code_chunk.errors.append(message.CanExecSourceError('Attribute "{0}" must be true or false for code chunk'.format(key)))
         else:
             options['line_anchors'] = value == 'true'
 
     def keyval_line_numbers(code_chunk, options, key, value):
         if 'line_numbers' in options:
-            code_chunk.source_warnings.append('Duplicate line numbering attribute for code chunk')
+            code_chunk.errors.append(message.CanExecSourceError('Duplicate line numbering attribute for code chunk'))
         elif value not in ('true', 'false'):
-            code_chunk.source_warnings.append('Attribute "{0}" must be true or false for code chunk'.format(key))
+            code_chunk.errors.append(message.CanExecSourceError('Attribute "{0}" must be true or false for code chunk'.format(key)))
         else:
             options['line_numbers'] = value == 'true'
 
@@ -203,7 +210,7 @@ def _get_keyval_processors():
             sub_options = {}
             options[namespace] = sub_options
         if sub_key in sub_options:
-            code_chunk.source_errors.append('Duplicate "{0}" attribute for code chunk'.format(key))
+            code_chunk.errors.append(message.SourceError('Duplicate "{0}" attribute for code chunk'.format(key)))
         else:
             sub_options[sub_key] = value
 
@@ -249,8 +256,8 @@ class PandocCodeChunk(CodeChunk):
                  parent_node: dict,
                  parent_node_list: list,
                  parent_node_list_index: int,
-                 source_name: Optional[str]=None,
-                 source_start_line_number: Optional[int]=None):
+                 origin_name: Optional[str]=None,
+                 origin_start_line_number: Optional[int]=None):
         super().__pre_init__()
 
         self.node = node
@@ -259,18 +266,31 @@ class PandocCodeChunk(CodeChunk):
         self.parent_node_list_index = parent_node_list_index
 
         node_id, node_classes, node_kvpairs = node['c'][0]
-        self.node_id = node_id
+        self.node_id = node_id if not node_id.startswith('codebraid-sourcepos') else ''
         self.node_classes = node_classes
         self.node_kvpairs = node_kvpairs
+        self.node_sourcepos_id = node_id
+        self.node_sourcepos_classes = []
+        self.node_sourcepos_kvpairs = []
         code = node['c'][1]
         options = {}
 
         # Preprocess options
         inline = node['t'] == 'Code'
         for n, c in enumerate(node_classes):
+            if c.startswith('codebraid-sourcepos'):
+                self.node_sourcepos_classes.append(c)
+                continue
             self._class_processors[c](self, options, n, c)
+        if self.node_sourcepos_classes:
+            self.node_classes = [c for c in self.node_classes if not c.startswith('codebraid-sourcepos')]
         for k, v in node_kvpairs:
+            if k.startswith('codebraid-sourcepos'):
+                self.node_sourcepos_kvpairs.append([k, v])
+                continue
             self._kv_processors[k](self, options, k, v)
+        if self.node_sourcepos_kvpairs:
+            self.node_kvpairs = [[k, v] for (k, v) in self.node_kvpairs if not k.startswith('codebraid-sourcepos')]
         # All processed data from classes and key-value pairs is stored in
         # `options`, but only some of these are valid Codebraid options.
         # Remove those that are not and store in temp variables.
@@ -278,15 +298,15 @@ class PandocCodeChunk(CodeChunk):
         line_anchors = options.pop('lineAnchors', None)
 
         # Process options
-        super().__init__(codebraid_command, code, options, source_name=source_name,
-                         source_start_line_number=source_start_line_number, inline=inline)
+        super().__init__(codebraid_command, code, options, origin_name=origin_name,
+                         origin_start_line_number=origin_start_line_number, inline=inline)
 
         # Work with processed options -- now use `self.options`
         if inline and self.options['example']:
             if parent_node['t'] not in ('Plain', 'Para') or 'codebraid_pseudonode' in parent_node or len(parent_node_list) > 1:
                 self.source_errors.insert(0, 'Option "example" is only allowed for inline code that is in a paragraph by itself')
                 self.options['example'] = False
-        pandoc_id = node_id
+        pandoc_id = ''  # Could use node_id, but then must check duplication
         pandoc_classes = []
         pandoc_kvpairs = []
         lang = options.get('lang', None)
@@ -334,16 +354,42 @@ class PandocCodeChunk(CodeChunk):
         if self._output_nodes is not None:
             return self._output_nodes
         nodes = []
-        if self.source_errors:
-            if self.runtime_source_error:
-                message = 'RUNTIME SOURCE ERROR in "{0}" near line {1}:'.format(self.source_name, self.source_start_line_number)
-            else:
-                message = 'SOURCE ERROR in "{0}" near line {1}:'.format(self.source_name, self.source_start_line_number)
+        if self.index == 0 and self.execute and self.session is not None and self.session.errors:
+            msgs_list = []
+            error_class_list = ['error']
+            for error in self.session.errors:
+                if error.is_refed:
+                    continue
+                if msgs_list:
+                    msgs_list.append('')
+                msgs_list.append(f'{error.display_name.upper()} in "{self.origin_name}" near line {self.origin_start_line_number}:')
+                msgs_list.extend(error.message)
+                error_class = error.type[0].lower() + error.type[1:]
+                if error_class not in error_class_list:
+                    error_class_list.append(error_class)
+            if msgs_list:
+                if self.inline:
+                    nodes.append({'t': 'Code', 'c': [['', error_class_list, []], ' '.join(msgs_list)]})
+                else:
+                    nodes.append({'t': 'CodeBlock', 'c': [['', error_class_list, []], '\n'.join(msgs_list)]})
+                return nodes
+        if self.errors.has_non_stderr:
+            msgs_list = []
+            error_class_list = ['error']
+            for error in self.errors:
+                if error.is_stderr:
+                    continue
+                if msgs_list:
+                    msgs_list.append('')
+                msgs_list.append(f'{error.display_name.upper()} in "{self.origin_name}" near line {self.origin_start_line_number}:')
+                msgs_list.extend(error.message)
+                error_class = error.type[0].lower() + error.type[1:]
+                if error_class not in error_class_list:
+                    error_class_list.append(error_class)
             if self.inline:
-                nodes.append({'t': 'Code', 'c': [['', ['sourceError'], []], '{0} {1}'.format(message, ' '.join(self.source_errors))]})
+                nodes.append({'t': 'Code', 'c': [['', error_class_list, []], ' '.join(msgs_list)]})
             else:
-                nodes.append({'t': 'CodeBlock', 'c': [['', ['sourceError'], []], '{0}\n{1}'.format(message, '\n'.join(self.source_errors))]})
-            self._output_nodes = nodes
+                nodes.append({'t': 'CodeBlock', 'c': [['', error_class_list, []], '\n'.join(msgs_list)]})
             return nodes
         if not self.inline and self.options['code_line_numbers']:
             # Line numbers can't be precalculated since they are determined by
@@ -363,22 +409,38 @@ class PandocCodeChunk(CodeChunk):
             elif output == 'code':
                 unformatted_nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]})
             elif output == 'repl':
-                if self.repl_lines is None:
+                if not self.repl_lines:
                     continue
                 unformatted_nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]})
             elif output in ('expr', 'stdout', 'stderr'):
+                if output == 'stderr' and self.errors.has_stderr:
+                    stderr_output_lines = self.stderr_lines.copy()
+                    for error in self.errors:
+                        if error.is_ref and error.message:
+                            stderr_output_lines.extend(error.message)
+                    if format == 'verbatim':
+                        if stderr_output_lines:
+                            unformatted_nodes.append({'t': t_code, 'c': [['', ['stderr', 'error'], []], self.layout_output(output, format, stderr_output_lines)]})
+                    elif format == 'verbatim_or_empty':
+                        unformatted_nodes.append({'t': t_code, 'c': [['', ['stderr', 'error'], []], self.layout_output(output, format, stderr_output_lines)]})
+                    elif format == 'raw':
+                        if getattr(self, output+'_lines'):
+                            unformatted_nodes.append({'t': t_raw, 'c': ['markdown', self.layout_output(output, format, stderr_output_lines)]})
+                    else:
+                        raise ValueError
+                    continue
                 if format == 'verbatim':
-                    if getattr(self, output+'_lines') is not None:
+                    if getattr(self, output+'_lines'):
                         unformatted_nodes.append({'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]})
                 elif format == 'verbatim_or_empty':
                     unformatted_nodes.append({'t': t_code, 'c': [['', [output], []], self.layout_output(output, format)]})
                 elif format == 'raw':
-                    if getattr(self, output+'_lines') is not None:
+                    if getattr(self, output+'_lines'):
                         unformatted_nodes.append({'t': t_raw, 'c': ['markdown', self.layout_output(output, format)]})
                 else:
                     raise ValueError
             elif output == 'rich_output':
-                if self.rich_output is None:
+                if not self.rich_output:
                     continue
                 for ro in self.rich_output:
                     ro_data = ro['data']
@@ -393,7 +455,7 @@ class PandocCodeChunk(CodeChunk):
                         if fmt_mime_type not in ro_data:
                             continue
                         if fmt_mime_type in ro_files:
-                            image_node = {'t': 'Image', 'c': [['', [], []], [], [ro_files[fmt_mime_type], '']]}
+                            image_node = {'t': 'Image', 'c': [['', ['richOutput'], []], [], [ro_files[fmt_mime_type], '']]}
                             if self.inline:
                                 unformatted_nodes.append(image_node)
                             else:
@@ -482,7 +544,7 @@ class PandocCodeChunk(CodeChunk):
                 if not self._unquoted_kv_value_re.match(v):
                     v = '"{0}"'.format(v.replace('\\', '\\\\').replace('"', '\\"'))
                 attr_list.append('{0}={1}'.format(k, v))
-        if self.placeholder_code_lines is not None:
+        if self.placeholder_code_lines:
             code_lines = self.placeholder_code_lines
             code = code_lines[0]
         else:
@@ -498,7 +560,7 @@ class PandocCodeChunk(CodeChunk):
             while delim in code:
                 delim += '`'
             md_lines = ['{delim}{code}{delim}{{{attr}}}'.format(delim=delim, code=code, attr=' '.join(attr_list))]
-        elif self.placeholder_code_lines is None or code:
+        elif not self.placeholder_code_lines or code:
             delim = '```'
             while delim in code:
                 delim += '```'
@@ -514,7 +576,11 @@ class PandocCodeChunk(CodeChunk):
         '''
         if not self.options['example']:
             index = self.parent_node_list_index
-            self.parent_node_list[index:index+1] = self.output_nodes
+            if self.inline or (not self.node_sourcepos_classes and not self.node_sourcepos_kvpairs):
+                output_nodes = self.output_nodes
+            else:
+                output_nodes =  [{'t': 'Div', 'c': [[self.node_sourcepos_id, self.node_sourcepos_classes, self.node_sourcepos_kvpairs], self.output_nodes]}]
+            self.parent_node_list[index:index+1] = output_nodes
             return
         markup_node = {'t': 'CodeBlock', 'c': [['', [], []], self.layout_output('example_markup', 'verbatim')]}
         example_div_contents = [{'t': 'Div', 'c': [['', ['exampleMarkup'], []], [markup_node]]}]
@@ -525,7 +591,10 @@ class PandocCodeChunk(CodeChunk):
                 # div, so need a block-level wrapper
                 output_nodes = [{'t': 'Para', 'c': output_nodes}]
             example_div_contents.append({'t': 'Div', 'c': [['', ['exampleOutput'], []], output_nodes]})
-        example_div_node = {'t': 'Div', 'c': [['', ['example'], []], example_div_contents]}
+        if self.inline or (not self.node_sourcepos_classes and not self.node_sourcepos_kvpairs):
+            example_div_node = {'t': 'Div', 'c': [['', ['example'], []], example_div_contents]}
+        else:
+            example_div_node = {'t': 'Div', 'c': [[self.node_sourcepos_id, ['example', *self.node_sourcepos_classes], self.node_sourcepos_kvpairs], example_div_contents]}
         if self.inline:
             # An inline node can't be replaced with a div directly.  Instead,
             # its block-level parent node is redefined.  The validity of this
@@ -611,6 +680,7 @@ class PandocConverter(Converter):
     def __init__(self, *,
                  pandoc_path: Optional[Union[str, pathlib.Path]]=None,
                  pandoc_file_scope: Optional[bool]=False,
+                 other_pandoc_args_at_load: Optional[list]=None,
                  from_format: Optional[str]=None,
                  scroll_sync: bool=False,
                  **kwargs):
@@ -661,25 +731,26 @@ class PandocConverter(Converter):
 
         if not isinstance(pandoc_file_scope, bool):
             raise TypeError
-        if pandoc_file_scope and kwargs.get('cross_source_sessions') is None:
-            # `pandoc_file_scope` automatically disables `cross_source_sessions`
-            # unless `cross_source_sessions` is explicitly specified.
-            self.cross_source_sessions = False
+        if pandoc_file_scope and kwargs.get('cross_origin_sessions') is None:
+            # `pandoc_file_scope` automatically disables `cross_origin_sessions`
+            # unless `cross_origin_sessions` is explicitly specified.
+            self.cross_origin_sessions = False
         self.pandoc_file_scope = pandoc_file_scope
+        self.other_pandoc_args_at_load = other_pandoc_args_at_load
 
-        if self.from_format == 'markdown' and not pandoc_file_scope and len(self.sources) > 1:
+        if self.from_format == 'markdown' and not pandoc_file_scope and len(self.origins) > 1:
             # If multiple files are being passed to Pandoc for concatenated
             # processing, ensure sufficient whitespace to prevent elements in
             # different files from merging, and insert a comment to prevent
             # indented elements from merging.  This means that the original
             # sources cannot be passed to Pandoc directly.
-            for source_name, source_string in self.sources.items():
-                if source_string[-1:] == '\n':
-                    source_string += '\n<!--codebraid.eof-->\n\n'
+            for origin_name, origin_string in self.origins.items():
+                if origin_string[-1:] == '\n':
+                    origin_string += '\n<!--codebraid.eof-->\n\n'
                 else:
-                    source_string += '\n\n<!--codebraid.eof-->\n\n'
-                self.sources[source_name] = source_string
-            self.concat_source_string = ''.join(self.sources.values())
+                    origin_string += '\n\n<!--codebraid.eof-->\n\n'
+                self.origins[origin_name] = origin_string
+            self.concat_origin_string = ''.join(self.origins.values())
 
         self.from_format_pandoc_extensions = from_format_pandoc_extensions
 
@@ -691,12 +762,12 @@ class PandocConverter(Converter):
             raise NotImplementedError
 
         self._asts = {}
-        self._para_plain_source_name_node_line_number = []
+        self._para_plain_origin_name_node_line_number = []
         self._final_ast = None
 
 
-    from_formats = set(['markdown'])
-    multi_source_formats = set(['markdown'])
+    from_formats = set(['markdown', 'commonmark_x'])
+    multi_origin_formats = set(['markdown', 'commonmark_x'])
     to_formats = None
 
 
@@ -826,7 +897,7 @@ class PandocConverter(Converter):
 
 
     @staticmethod
-    def _io_map_span_node(source_name, line_number):
+    def _io_map_span_node(origin_name, line_number):
         '''
         Create an empty span node containing source name and line number as
         attributes.  This is used to attach source info to an AST location,
@@ -838,7 +909,7 @@ class PandocConverter(Converter):
                               [
                                   '',  # id
                                   ['codebraid--temp'],  # classes
-                                  [['trace', '{0}:{1}'.format(source_name, line_number)]]  # kv pairs
+                                  [['trace', '{0}:{1}'.format(origin_name, line_number)]]  # kv pairs
                               ],
                               []  # contents
                           ]
@@ -852,7 +923,7 @@ class PandocConverter(Converter):
 
 
     @staticmethod
-    def _freeze_raw_node(node, source_name, line_number,
+    def _freeze_raw_node(node, origin_name, line_number,
                          type_translation_dict={'RawBlock': 'CodeBlock', 'RawInline': 'Code'}):
         '''
         Convert a raw node into a special code node.  This prevents the raw
@@ -871,7 +942,7 @@ class PandocConverter(Converter):
                     ]
 
     @staticmethod
-    def _freeze_raw_node_io_map(node, source_name, line_number,
+    def _freeze_raw_node_io_map(node, origin_name, line_number,
                                 type_translation_dict={'RawBlock': 'CodeBlock', 'RawInline': 'Code'}):
         '''
         Same as `_freeze_raw_node()`, but also store trace info.
@@ -882,7 +953,7 @@ class PandocConverter(Converter):
                         [
                             '',  # id
                             ['codebraid--temp'],  # classes
-                            [['format', raw_format], ['trace', '{0}:{1}'.format(source_name, line_number)]]  # kv pairs
+                            [['format', raw_format], ['trace', '{0}:{1}'.format(origin_name, line_number)]]  # kv pairs
                         ],
                         raw_content
                     ]
@@ -917,27 +988,39 @@ class PandocConverter(Converter):
     def _find_cb_command(
             text: str,
             *,
+            from_format: str,
             max_command_len=max(len(x) for x in CodeChunk.commands),
             commands_set=CodeChunk.commands,
             before_attr_chars=set('{ \t\n'),
             after_attr_chars=set('} \t\n')
         ) -> List[Tuple[int, int, bool, Optional[str]]]:
         '''
-        Find all occurrences of `.cb.` in a string, which may indicate the
-        presence of Codebraid code.  Try to extract a command `.cb.<command>`
-        for each occurrence, and if a valid command is not found use None.
-        Check the characters immediately before/after `.cb.<command>` to
-        determine whether this may be part of code attributes.
+        Find all occurrences of `.cb.` and/or `.cb-` in a string, which may
+        indicate the presence of Codebraid code.  Try to extract a command
+        `.cb<sep><command>` for each occurrence, and if a valid command is not
+        found use None.  Check the characters immediately before/after
+        `.cb<sep><command>` to determine whether this may be part of code
+        attributes.
 
         Return a list of tuples.  Each tuple contains data about an occurrence
-        of `.cb.`:
+        of `.cb<sep>`:
             (<index>, <line_number>, <maybe_codebraid_attr>, <command>)
         '''
+        command_prefixes = {'.cb-': True}
+        if not from_format.startswith('commonmark_x'):
+            command_prefixes['.cb.'] = True
         results = []
         line_num = 1
         start_index = 0
         while True:
-            maybe_start_cb_command_index = text.find('.cb.', start_index)
+            maybe_start_cb_command_index = -1
+            for command_prefix, prefix_is_active in command_prefixes.items():
+                if prefix_is_active:
+                    search_index = text.find(command_prefix, start_index)
+                    if search_index == -1:
+                        command_prefixes[command_prefix] = False
+                    elif maybe_start_cb_command_index == -1 or search_index < maybe_start_cb_command_index:
+                        maybe_start_cb_command_index = search_index
             if maybe_start_cb_command_index == -1:
                 break
             line_num += text.count('\n', start_index, maybe_start_cb_command_index)
@@ -980,7 +1063,7 @@ class PandocConverter(Converter):
 
 
     def _load_and_process_initial_ast(self, *,
-                                      source_string, single_source_name=None):
+                                      origin_string, single_origin_name=None):
         '''
         Convert source string into a Pandoc AST and perform a number of
         operations on the AST.
@@ -996,32 +1079,36 @@ class PandocConverter(Converter):
         '''
         # Convert source string to AST with Pandoc.
         # Order of extensions is important: earlier override later.
-        from_format_pandoc_extensions = ''.join(['-latex_macros',
-                                                 '-smart'])
+        from_format_pandoc_extensions = ['-smart']
+        if self.from_format == 'markdown':
+            from_format_pandoc_extensions.append('-latex_macros')
+        from_format_pandoc_extensions = ''.join(from_format_pandoc_extensions)
+
         if self.from_format_pandoc_extensions is not None:
             from_format_pandoc_extensions += self.from_format_pandoc_extensions
 
-        stdout_bytes, stderr_bytes = self._run_pandoc(input=source_string,
-                                                      input_name=single_source_name,
+        stdout_bytes, stderr_bytes = self._run_pandoc(input=origin_string,
+                                                      input_name=single_origin_name,
                                                       from_format=self.from_format,
                                                       from_format_pandoc_extensions=from_format_pandoc_extensions,
+                                                      other_pandoc_args=self.other_pandoc_args_at_load,
                                                       to_format='json',
                                                       newline_lf=True,
                                                       preserve_tabs=True)
+        if self.from_format_pandoc_extensions is not None:
+            self.from_format_pandoc_extensions = self.from_format_pandoc_extensions.replace('+sourcepos', '')
+
         if stderr_bytes:
             sys.stderr.buffer.write(stderr_bytes)
         try:
-            if sys.version_info < (3, 6):
-                ast = json.loads(stdout_bytes.decode('utf8'))
-            else:
-                ast = json.loads(stdout_bytes)
+            ast = json.loads(stdout_bytes)
         except Exception as e:
             raise PandocError('Failed to load AST (incompatible Pandoc version?):\n{0}'.format(e))
         if not (isinstance(ast, dict) and
                 'pandoc-api-version' in ast and isinstance(ast['pandoc-api-version'], list) and
                 all(isinstance(x, int) for x in ast['pandoc-api-version']) and 'blocks' in ast):
             raise PandocError('Unrecognized AST format (incompatible Pandoc version?)')
-        self._asts[single_source_name] = ast
+        self._asts[single_origin_name] = ast
 
 
         # Locate all code nodes to find Codebraid code nodes.  Also locate all
@@ -1037,7 +1124,7 @@ class PandocConverter(Converter):
             node, parent_node, parent_node_list, parent_node_list_index, in_note = node_tuple
             node_type = node['t']
             if node_type.startswith('Code'):
-                if any(c.startswith('cb.') for c in node['c'][0][1]):
+                if any(c.startswith('cb.') or c.startswith('cb-')for c in node['c'][0][1]):
                     if in_note:
                         code_chunks_in_notes = True
                     code_chunk = PandocCodeChunk(node, parent_node, parent_node_list, parent_node_list_index)
@@ -1045,14 +1132,14 @@ class PandocConverter(Converter):
                     codebraid_node_set.add(id(node))
         # Locate all occurrences of `.cb.` in source(s), to provide
         # traceback information for source errors
-        if single_source_name is not None:
-            sources_cb = [(single_source_name, cb_i) for cb_i in self._find_cb_command(source_string)]
-            source_names_stack = [single_source_name]
+        if single_origin_name is not None:
+            sources_cb = [(single_origin_name, cb_i) for cb_i in self._find_cb_command(origin_string, from_format=self.from_format)]
+            origin_names_stack = [single_origin_name]
         else:
-            sources_cb = [(src_name, cb_i) for (src_name, src_string) in self.sources.items() for cb_i in self._find_cb_command(src_string)]
-            source_names_stack = [k for k in self.sources]
+            sources_cb = [(src_name, cb_i) for (src_name, src_string) in self.origins.items() for cb_i in self._find_cb_command(src_string, from_format=self.from_format)]
+            origin_names_stack = [k for k in self.origins]
         sources_cb.reverse()
-        source_names_stack.reverse()
+        origin_names_stack.reverse()
         # Process code and raw nodes:  Attach location info to code nodes and
         # "freeze" raw nodes.  If necessary, also search raw node contents to
         # eliminate false positives for code node location.
@@ -1072,11 +1159,11 @@ class PandocConverter(Converter):
                         skipped.append(src_cb_i)
                         src_cb_i = sources_cb.pop()
                         src_name, (_, src_line_number, _, src_command) = src_cb_i
-                chunk.source_name = src_name
+                chunk.origin_name = src_name
                 if chunk.inline:
-                    chunk.source_start_line_number = src_line_number
+                    chunk.origin_start_line_number = src_line_number
                 else:
-                    chunk.source_start_line_number = src_line_number + 1
+                    chunk.origin_start_line_number = src_line_number + 1
                 if skipped:
                     while skipped:
                         sources_cb.append(skipped.pop())
@@ -1084,7 +1171,7 @@ class PandocConverter(Converter):
                 node, parent_node, parent_node_list, parent_node_list_index, in_note = node_tuple
                 node_type = node['t']
                 if node_type.startswith('Raw'):
-                    if single_source_name is None:
+                    if single_origin_name is None:
                         node_format, node_contents = node['c']
                         node_format = node_format.lower()
                         if node_format == 'html' and node_contents == '<!--codebraid.eof-->':
@@ -1101,17 +1188,17 @@ class PandocConverter(Converter):
             for node_tuple in code_raw_node_tuples:
                 node, parent_node, parent_node_list, parent_node_list_index, in_note = node_tuple
                 node_type = node['t']
-                if single_source_name is None and node_type.startswith('Raw'):
+                if single_origin_name is None and node_type.startswith('Raw'):
                     node_format, node_contents = node['c']
                     node_format = node_format.lower()
                     if node_format == 'html' and node_contents == '<!--codebraid.eof-->':
                         node['t'] = 'Null'
                         del node['c']
-                        current_source_name = source_names_stack.pop()
-                        while sources_cb and sources_cb[-1][0] == current_source_name:
+                        current_origin_name = origin_names_stack.pop()
+                        while sources_cb and sources_cb[-1][0] == current_origin_name:
                             sources_cb.pop()
                         continue
-                node_cb = self._find_cb_command(node['c'][1])
+                node_cb = self._find_cb_command(node['c'][1], from_format=self.from_format)
                 if node_cb and not node_type.endswith('Block'):
                     # Inline:  code comes before attr
                     for _, _, node_maybe_codebraid, node_command in node_cb:
@@ -1136,11 +1223,11 @@ class PandocConverter(Converter):
                             skipped.append(src_cb_i)
                             src_cb_i = sources_cb.pop()
                             src_name, (_, src_line_number, src_maybe_codebraid, src_command) = src_cb_i
-                    chunk.source_name = src_name
+                    chunk.origin_name = src_name
                     if chunk.inline:
-                        chunk.source_start_line_number = src_line_number
+                        chunk.origin_start_line_number = src_line_number
                     else:
-                        chunk.source_start_line_number = src_line_number + 1
+                        chunk.origin_start_line_number = src_line_number + 1
                     if skipped:
                         while skipped:
                             sources_cb.append(skipped.pop())
@@ -1162,11 +1249,11 @@ class PandocConverter(Converter):
 
 
     def _extract_code_chunks(self):
-        if self.pandoc_file_scope or len(self.sources) == 1:
-            for source_name, source_string in self.sources.items():
-                self._load_and_process_initial_ast(source_string=source_string, single_source_name=source_name)
+        if self.pandoc_file_scope or len(self.origins) == 1:
+            for origin_name, origin_string in self.origins.items():
+                self._load_and_process_initial_ast(origin_string=origin_string, single_origin_name=origin_name)
         else:
-            self._load_and_process_initial_ast(source_string=self.concat_source_string)
+            self._load_and_process_initial_ast(origin_string=self.concat_origin_string)
 
 
     def _postprocess_code_chunks(self):
@@ -1177,22 +1264,22 @@ class PandocConverter(Converter):
         if self._io_map:
             # Insert tracking spans if needed
             io_map_span_node = self._io_map_span_node
-            for source_name, node, line_number in self._para_plain_source_name_node_line_number:
+            for origin_name, node, line_number in self._para_plain_origin_name_node_line_number:
                 if node['t'] in ('Para', 'Plain'):
                     # When `example` is in use, a node can be converted into
                     # a different type
-                    node['c'].insert(0, io_map_span_node(source_name, line_number))
+                    node['c'].insert(0, io_map_span_node(origin_name, line_number))
 
         # Convert modified AST to markdown, then back, so that raw output
         # can be reinterpreted as markdown.
         # Order of extensions is important: earlier override later.
-        processed_to_format_extensions = ''.join(['-latex_macros',
-                                                  '-raw_attribute',
-                                                  '-smart'])
-        if self.from_format_pandoc_extensions is not None:
-            processed_to_format_extensions += self.from_format_pandoc_extensions
+        processed_to_format_extensions = ['-raw_attribute', '-smart']
+        if self.from_format == 'markdown':
+            processed_to_format_extensions.append('-latex_macros')
+        processed_to_format_extensions = ''.join(processed_to_format_extensions)
+
         processed_markup = collections.OrderedDict()
-        for source_name, ast in self._asts.items():
+        for origin_name, ast in self._asts.items():
             markup_bytes, stderr_bytes = self._run_pandoc(input=json.dumps(ast),
                                                           from_format='json',
                                                           to_format='markdown',
@@ -1202,9 +1289,9 @@ class PandocConverter(Converter):
                                                           preserve_tabs=True)
             if stderr_bytes:
                 sys.stderr.buffer.write(stderr_bytes)
-            processed_markup[source_name] = markup_bytes
+            processed_markup[origin_name] = markup_bytes
 
-        if not self.pandoc_file_scope or len(self.sources) == 1:
+        if not self.pandoc_file_scope or len(self.origins) == 1:
             for markup_bytes in processed_markup.values():
                 final_ast_bytes, stderr_bytes = self._run_pandoc(input=markup_bytes,
                                                                  from_format='markdown',
@@ -1231,10 +1318,7 @@ class PandocConverter(Converter):
                                                                  preserve_tabs=True)
                 if stderr_bytes:
                     sys.stderr.buffer.write(stderr_bytes)
-        if sys.version_info < (3, 6):
-            final_ast = json.loads(final_ast_bytes.decode('utf8'))
-        else:
-            final_ast = json.loads(final_ast_bytes)
+        final_ast = json.loads(final_ast_bytes)
         self._final_ast = final_ast
 
         if not self._io_map:
@@ -1259,7 +1343,7 @@ class PandocConverter(Converter):
             self._io_tracker_nodes = io_tracker_nodes
 
 
-    def convert(self, *, to_format, output_path=None, overwrite=False,
+    def _convert(self, *, to_format, output_path=None, overwrite=False,
                 standalone=None, other_pandoc_args=None):
         if to_format is None:
             if output_path is None:
