@@ -86,13 +86,17 @@ class CodeProcessor(object):
 
     @property
     def exit_code(self) -> int:
+        code = 0b00000000
         if any(s.status.prevent_exec for s in self._sessions.values()):
-            return 64
-        if any(s.status.has_errors for s in self._sessions.values()):
-            return 65
-        if any(s.status.has_errors for s in self._sources.values()):
-            return 65
-        return 0
+            code ^= 0b00000100
+        if (any(s.status.has_errors and not s.status.prevent_exec for s in self._sessions.values()) or
+                any(s.status.has_errors and not s.status.prevent_exec for s in self._sources.values())):
+            code ^= 0b00001000
+        if any(s.status.has_warnings for s in self._sessions.values()):
+            code ^= 0b00010000
+        # Once there are warnings related to document build, add condition:
+        #   code ^= 0b0010000
+        return code
 
 
     def process(self):

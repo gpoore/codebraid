@@ -35,15 +35,22 @@
   cached.
 
   At the end of document build, `codebraid` now exits with a non-zero exit
-  code if there are errors in the document (#24).  This is triggered by using
-  invalid settings or by executing code that causes errors.  It is also
-  triggered by loading cached output from code that caused errors when it was
-  originally executed (error state is cached).  An exit code of 64 indicates
-  an error serious enough to prevent or interrupt code execution.  An exit
-  code of 65 indicates an error that does not affect code execution, such as
-  invalid settings related to displaying code output.  An exit code of 1 still
-  indicates that `codebraid` itself exited unexpectedly and failed to complete
-  document build.
+  code if there are errors or warnings (#24).  This is triggered by using
+  invalid settings or by executing code that causes errors or warnings.  It is
+  also triggered by loading cached output from code that caused errors or
+  warnings when it was originally executed (error and warning state is
+  cached).  Exit codes are between 4 and 60 inclusive.  The bits in the exit
+  code are assigned value as follow:
+  ```
+  0b00<doc_warn><exec_warn><doc_error><exec_error>00
+  ```
+  Nonzero values for `<doc_warn>` and `<exec_warn>` indicate the presence of
+  warnings from document build and from code execution, respectively.
+  `<doc_error>` represents an error in document build that was not so severe
+  that build was canceled with exit code 1, such as invalid settings related
+  to displaying code output.  `<exec_error>` represents an error from code
+  execution.  An exit code of 1 still indicates that `codebraid` itself exited
+  unexpectedly or otherwise failed to complete document build.
 
 * Reimplemented built-in code execution system and Jupyter kernel support as
   async.  This makes possible new progress tracking and `live_output`
