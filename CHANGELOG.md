@@ -1,7 +1,7 @@
 # Change Log
 
 
-## v0.6.0 (dev)
+## v0.6.0 (2022-02-22)
 
 * Python 3.7 is now the minimum supported version.
 
