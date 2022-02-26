@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Codebraid with GAP (Groups, Algorithms, Programming - a System for Computational Discrete Algebra)</title>
+  <style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+</style>
+  <style type="text/css">body {
+display: block;
+text-align: left;
+max-width: 40rem;
+padding-left: 0.5rem;
+padding-right: 0.5rem;
+margin: auto;
+}
+
+pre.numberSource a.sourceLine {
+position: relative;
+left: -3em;
+}
+pre.numberSource a.sourceLine::before{
+content: attr(title);
+position: relative;
+left: -1em;
+text-align: right;
+vertical-align: baseline;
+border: none;
+pointer-events: all;
+display: inline-block;
+-webkit-touch-callout: none;
+-webkit-user-select: none;
+-khtml-user-select: none;
+-moz-user-select: none;
+-ms-user-select: none;
+user-select: none;
+padding: 0 4px;
+width: 3em;
+color: #aaaaaa;
+}
+pre.numberSource {
+margin-left: 2em;
+border-left: 1px solid #aaaaaa;
+padding-left: 4px;
+}
+
+div.exampleMarkup:before{
+content: "Markdown";
+font-family: monospace;
+display: block;
+height: 2em;
+font-size: 150%;
+}
+div.exampleMarkup {
+padding-top: 0.5em;
+padding-left: 0.5em;
+padding-right: 0.5em;
+margin-top: 2em;
+margin-bottom: 1em;
+background-color: honeydew;
+border-style: solid;
+border-width: 1px;
+border-color: limegreen;
+border-radius: 0.2em;
+}
+div.exampleOutput:before{
+content: "Output";
+font-family: monospace;
+display: block;
+font-size: 150%;
+}
+div.exampleOutput {
+color: black;
+padding-top: 0.5em;
+padding-left: 0.5em;
+padding-right: 0.5em;
+margin-top: 1em;
+margin-bottom: 2em;
+background-color: whitesmoke;
+border-style: solid;
+border-width: 1px;
+border-color: lightgray;
+border-radius: 0.2em;
+}
+div.sourceCode {
+padding: 0.5em;
+background-color: aliceblue;
+border-style: solid;
+border-width: 1px;
+border-color: lightskyblue;
+border-radius: 0.2em;
+}
+div.exampleOutput div.sourceCode:before{
+content: "code";
+font-family: monospace;
+display: block;
+height: 2em;
+font-weight: bold;
+font-size: 120%;
+}
+pre.stdout:before{
+content: "stdout";
+display: block;
+height: 2em;
+font-weight: bold;
+font-size: 120%;
+}
+pre.stdout {
+color: black;
+padding: 0.5em;
+background-color: azure;
+border-style: solid;
+border-width: 1px;
+border-color: turquoise;
+border-radius: 0.2em;
+padding-left: 0.5em;
+}
+code.stdout {
+color: black;
+background-color: azure;
+border-style: solid;
+border-width: 1px;
+border-color: turquoise;
+}
+pre.stderr:before{
+content: "stderr";
+display: block;
+height: 2em;
+font-weight: bold;
+font-size: 120%;
+}
+pre.stderr {
+color: red;
+padding: 0.5em;
+background-color: lavenderblush;
+border-style: solid;
+border-width: 1px;
+border-color: pink;
+border-radius: 0.2em;
+padding-left: 0.5em;
+}
+code.stderr {
+color: red;
+background-color: lavenderblush;
+border-style: solid;
+border-width: 1px;
+border-color: pink;
+}
+pre.error:before{
+content: "Error";
+display: block;
+height: 2em;
+font-weight: bold;
+font-size: 120%;
+}
+pre.error {
+color: red;
+padding: 0.5em;
+background-color: lavenderblush;
+border-style: solid;
+border-width: 1px;
+border-color: pink;
+border-radius: 0.2em;
+padding-left: 0.5em;
+}
+code.error {
+color: red;
+background-color: lavenderblush;
+border-style: solid;
+border-width: 1px;
+border-color: pink;
+}
+</style>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Codebraid with GAP (Groups, Algorithms, Programming -
+a System for Computational Discrete Algebra)</h1>
+</header>
+<h2 id="inline-code">Inline code</h2>
+<h3 id="run">Run</h3>
+<p>Inline code with <code>.cb-run</code> gives raw stdout.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`Print(1 + 2);`{.gap .cb-run session=firsttest}</code></pre>
+</div>
+<div class="exampleOutput">
+<p>3</p>
+</div>
+</div>
+<h3 id="expression-and-inline-notebook">Expression and inline
+notebook</h3>
+<p>Inline code with <code>.cb-expr</code> evaluates an expression and
+then inserts the raw output into the document, where it is interpreted
+as Markdown. Inline code with <code>.cb-nb</code> (<code>nb</code> is
+short for <code>notebook</code>) is similar, except output is shown
+verbatim. Notice that since these are expressions, a trailing semicolon
+must not be used.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`StringFormatted(&quot;*{}*&quot;, Sum([1..10]))`{.gap .cb-expr}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><em>55</em></p>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`StringFormatted(&quot;*{}*&quot;, Sum([1..10]))`{.gap .cb-nb}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="expr">*55*</code></p>
+</div>
+</div>
+<h3 id="stderr">Stderr</h3>
+<p>In the event of an error, inline code automatically shows stderr by
+default. This code is executed in its own session,
+<code>inline_error</code>, so that it does not impact other
+examples.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`1 + &quot;a&quot;`{.gap .cb-run session=inline_error}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="stderr error">Error, no method found! For debugging hints type ?Recovery from NoMethodFound Error, no 1st choice method found for `CallFuncList&#39; on 2 arguments</code></p>
+</div>
+</div>
+<h3 id="source-errors">Source errors</h3>
+<p>A message is also displayed for errors in the Markdown source. This
+usually includes the name of the document source and the approximate
+line number.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`Print(1 + 2);`{.gp .cb-run session=inline_source_error}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="error sysConfigError">SYS CONFIG ERROR in &quot;gap.cbmd&quot; near line 43: Language definition for &quot;gp&quot; does not exist</code></p>
+</div>
+</div>
+<h3 id="code">Code</h3>
+<p>Inline code with <code>.cb-code</code> simply displays the code.
+Nothing is executed.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>`Print(&quot;Hello from GAP!&quot;);`{.gap .cb-code}</code></pre>
+</div>
+<div class="exampleOutput">
+<p><code class="gap">Print(&quot;Hello from GAP!&quot;);</code></p>
+</div>
+</div>
+<p>The output is identical to that of</p>
+<pre><code>`Print(&quot;Hello from GAP!&quot;);`{.gap}</code></pre>
+<p>so <code>.cb-code</code> is only really useful when it is combined
+with other Codebraid features. For example, it is possible to give code
+with <code>.cb-code</code> a <code>name</code>, and then copy it by
+<code>name</code> into a separate location where it is executed. See <a href="#copying">Copying code and output</a>.</p>
+<h2 id="block-code">Block code</h2>
+<h3 id="run-1">Run</h3>
+<p>Code blocks with <code>.cb-run</code> give raw stdout. There is
+continuity between code blocks so long as they are in the same session;
+variables persist.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-run session=hello}
+x := &quot;Hello from *GAP!*&quot;;
+```</code></pre>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-run session=hello}
+Print(x);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<p>Hello from <em>GAP!</em></p>
+</div>
+</div>
+<h3 id="stderr-1">Stderr</h3>
+<p>Code blocks show stderr automatically by default.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-nb session=block_error}
+x := 12;
+y := x + &quot;x&quot;;
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb11" data-startFrom="1"><pre class="sourceCode numberSource gap numberLines"><code class="sourceCode"><span id="cb11-1"><a href="#cb11-1"></a>x := 12;</span>
+<span id="cb11-2"><a href="#cb11-2"></a>y := x + &quot;x&quot;;</span></code></pre></div>
+<pre class="stderr error"><code>Error, no method found! For debugging hints type ?Recovery from NoMethodFound
+Error, no 1st choice method found for `+&#39; on 2 arguments</code></pre>
+</div>
+</div>
+<h3 id="source-errors-1">Source errors</h3>
+<p>A message is also displayed for errors in the Markdown source. This
+usually includes the name of the document source and the approximate
+line number.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-ruuun session=block_source_error}
+print(1 + 2);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<pre class="error sourceError"><code>SOURCE ERROR in &quot;gap.cbmd&quot; near line 96:
+Unknown or unsupported Codebraid command &quot;cb-ruuun&quot;
+
+SOURCE ERROR in &quot;gap.cbmd&quot; near line 96:
+Missing valid Codebraid command</code></pre>
+</div>
+</div>
+<h3 id="code-1">Code</h3>
+<p>Code blocks with <code>.cb-code</code> simply display the code.
+Nothing is executed.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-code}
+Print(&quot;Hello from GAP!&quot;);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb16" data-startFrom="1"><pre class="sourceCode numberSource gap numberLines"><code class="sourceCode"><span id="cb16-1"><a href="#cb16-1"></a>Print(&quot;Hello from GAP!&quot;);</span></code></pre></div>
+</div>
+</div>
+<p>The output is essentially identical to that of a normal code block;
+the only differences are some default display options, like line
+numbering. Thus <code>.cb-code</code> is primarily useful when it is
+combined with other Codebraid features. For example, it is possible to
+give code with <code>.cb-code</code> a <code>name</code>, and then copy
+it by <code>name</code> into a separate location where it is executed.
+See <a href="#copying">Copying code and output</a>.</p>
+<h2 id="other-options">Other options</h2>
+<p>By default, stdout and stderr are only shown if they are non-empty.
+In some situations, it may be useful to represent empty output visually
+as confirmation that there indeed was none.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-run show=code+stdout+stderr:verbatim_or_empty}
+x := 1 + 2;;
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb18" data-startFrom="1"><pre class="sourceCode numberSource gap numberLines"><code class="sourceCode"><span id="cb18-1"><a href="#cb18-1"></a>x := 1 + 2;;</span></code></pre></div>
+<pre class="stderr"><code> </code></pre>
+</div>
+</div>
+<p>It is also possible to selectively hide output from a code chunk.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-nb hide=stdout}
+Print(x);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb21" data-startFrom="2"><pre class="sourceCode numberSource gap numberLines"><code class="sourceCode" style="counter-reset: source-line 1;"><span id="cb21-2"><a href="#cb21-2"></a>Print(x);</span></code></pre></div>
+</div>
+</div>
+<p><code>hide</code> takes any combination of <code>code</code>,
+<code>stderr</code>, and <code>stdout</code>, or simply
+<code>all</code>.</p>
+<h2 id="advanced">Advanced features</h2>
+<h3 id="copying">Copying code and output</h3>
+<p>Code chunks can be named using the <code>name</code> keyword, which
+takes an identifier-style name. Then the <code>copy</code> keyword can
+be used in other code chunks to copy a named chunk or a combination of
+named chunks. When <code>copy</code> is used with <code>cb-run</code>,
+<code>cb-expr</code>, or <code>cb-nb</code>, the code is copied and then
+executed as if it had been entered directly. When <code>copy</code> is
+used with <code>cb-code</code>, the code is copied and displayed, but
+nothing is executed. When <code>copy</code> is used with the special
+command <code>cb-paste</code>, both the code and output are copied but
+nothing is executed. This is useful in executing code and then showing
+snippets of the code and/or output in different parts of a document.</p>
+<p><code>copy</code> works with named code chunks anywhere in a
+document; a named code chunk does not have to appear in a document
+before the location where it is copied. A code chunk that copies another
+code chunk can itself have a <code>name</code>, and then itself be
+copied.</p>
+<p>The next two code chunks are named.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-run name=part1 session=copy_source}
+rnums := List([1..10], x -&gt; Random([1..x]));;
+```</code></pre>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-run name=part2 session=copy_source}
+PrintFormatted(&quot;Random numbers: {}&quot;, rnums);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<p>Random numbers: [ 1, 2, 1, 3, 3, 2, 3, 3, 5, 5 ]</p>
+</div>
+</div>
+<p>Now the code and output of the previous two code chunks are copied
+and combined. Because the content for this code block is copied from
+other code chunks, the code block itself should be empty, or may
+alternately contain a space or underscore as a placeholder.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-paste copy=part1+part2 show=code+stdout}
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb25" data-startFrom="1"><pre class="sourceCode numberSource gap numberLines"><code class="sourceCode"><span id="cb25-1"><a href="#cb25-1"></a>rnums := List([1..10], x -&gt; Random([1..x]));;</span>
+<span id="cb25-2"><a href="#cb25-2"></a>PrintFormatted(&quot;Random numbers: {}&quot;, rnums);</span></code></pre></div>
+<pre class="stdout"><code>Random numbers: [ 1, 2, 1, 3, 3, 2, 3, 3, 5, 5 ]</code></pre>
+</div>
+</div>
+<p>It would also be possible to copy and re-execute the code.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-run copy=part1+part2 session=copied show=code+stdout:raw}
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb28" data-startFrom="1"><pre class="sourceCode numberSource gap numberLines"><code class="sourceCode"><span id="cb28-1"><a href="#cb28-1"></a>rnums := List([1..10], x -&gt; Random([1..x]));;</span>
+<span id="cb28-2"><a href="#cb28-2"></a>PrintFormatted(&quot;Random numbers: {}&quot;, rnums);</span></code></pre></div>
+<p>Random numbers: [ 1, 2, 1, 3, 3, 2, 3, 3, 5, 5 ]</p>
+</div>
+</div>
+<p>Another option is to display code, and then copy and execute it
+later.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-code name=hello}
+Print(&quot;Hello from GAP!&quot;);
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb30" data-startFrom="1"><pre class="sourceCode numberSource gap numberLines"><code class="sourceCode"><span id="cb30-1"><a href="#cb30-1"></a>Print(&quot;Hello from GAP!&quot;);</span></code></pre></div>
+</div>
+</div>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.gap .cb-nb copy=hello}
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb32" data-startFrom="3"><pre class="sourceCode numberSource gap numberLines"><code class="sourceCode" style="counter-reset: source-line 2;"><span id="cb32-3"><a href="#cb32-3"></a>Print(&quot;Hello from GAP!&quot;);</span></code></pre></div>
+<pre class="stdout"><code>Hello from GAP!</code></pre>
+</div>
+</div>
+<h3 id="including-external-files">Including external files</h3>
+<p>External files can be included for display or execution using
+<code>include_file</code>. The default encoding is UTF-8; other
+encodings can be selected with <code>include_encoding</code>. Instead of
+including the entire file, it is possible to include only a selected
+range of lines with <code>include_lines</code>. It is also possible to
+include part of a file that matches a regular expression with
+<code>include_regex</code>, as shown in the example. Other options for
+controlling what is included based on starting or ending literal strings
+or regular expressions can be found in the documentation.</p>
+<div class="example">
+<div class="exampleMarkup">
+<pre><code>```{.html .cb-code include_file=gap.html include_regex=&quot;&lt;header.*?/header&gt;&quot;}
+```</code></pre>
+</div>
+<div class="exampleOutput">
+<div class="sourceCode" id="cb35" data-startFrom="1"><pre class="sourceCode numberSource html numberLines"><code class="sourceCode html"><span id="cb35-1"><a href="#cb35-1"></a><span class="kw">&lt;header</span> <span class="er">id</span><span class="ot">=</span><span class="st">&quot;title-block-header&quot;</span><span class="kw">&gt;</span></span>
+<span id="cb35-2"><a href="#cb35-2"></a><span class="kw">&lt;h1</span> <span class="er">class</span><span class="ot">=</span><span class="st">&quot;title&quot;</span><span class="kw">&gt;</span>Codebraid with GAP (Groups, Algorithms, Programming -</span>
+<span id="cb35-3"><a href="#cb35-3"></a>a System for Computational Discrete Algebra)<span class="kw">&lt;/h1&gt;</span></span>
+<span id="cb35-4"><a href="#cb35-4"></a><span class="kw">&lt;/header&gt;</span></span></code></pre></div>
+</div>
+</div>
+<p>When <code>include_file</code> is used with <code>cb-code</code>, the
+included code is simply displayed. When <code>include_file</code> is
+used with <code>cb-run</code> or another command that executes code, the
+included code is executed just as if it had been entered directly.</p>
+</body>
+</html>

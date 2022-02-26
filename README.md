@@ -11,7 +11,7 @@ for editor support.
 
 Codebraid provides two options for executing code.  It includes a built-in
 code execution system that currently supports **Python 3.7+**, **Julia**,
-**Rust**, **R**, **Bash**, **JavaScript**, and **SageMath**.  Code can also be
+**Rust**, **R**, **Bash**, **JavaScript**, **GAP** and **SageMath**.  Code can also be
 executed using **Jupyter kernels**, with support for rich output like plots.
 
 **Development:**  https://github.com/gpoore/codebraid
@@ -44,6 +44,9 @@ and Rust examples demonstrate more advanced features at the end):
   * [JavaScript example](https://htmlpreview.github.io/?https://github.com/gpoore/codebraid/blob/master/examples/javascript.html)
     [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/javascript.cbmd)]
     [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/javascript.html)]
+  * [GAP example](https://htmlpreview.github.io/?https://github.com/gpoore/codebraid/blob/master/examples/gap.html)
+    [[Pandoc Markdown source](https://github.com/gpoore/codebraid/blob/master/examples/gap.cbmd)]
+    [[raw HTML](https://github.com/gpoore/codebraid/blob/master/examples/gap.html)]
 
 
 ## Simple example

@@ -1,0 +1,40 @@
+|=== gap
+extension = 'gap'
+
+executable = 'gap'
+
+run_command = '{executable} -x 9999 -A --quiet --nointeract {source}'
+run_encoding = 'utf8'
+
+run_template =
+    |```
+    LoadPackage("io",false);; # for 'IO_Flush'
+    {code}
+    |```/
+
+chunk_wrapper =
+    |```
+    Print("\n{stdout_start_delim}\n");
+    PrintTo("*errout*","\n{stderr_start_delim}\n");
+    {code}
+    ();; # This ensures parser errors in code do not stop the 'Print' below
+    Print("\n{stdout_end_delim}\n");
+    PrintTo("*errout*","\n{stderr_end_delim}\n");
+    IO_Flush(IO_WrapFD(1,false,false));
+    IO_Flush(IO_WrapFD(2,false,false));
+    |```/
+
+inline_expression_formatter =
+    |```
+    _codebraid_temp_{temp_suffix} := ({code});
+    Print("\n{expr_start_delim}\n");
+    PrintTo("*errout*","\n{expr_start_delim}\n");
+    Print(_codebraid_temp_{temp_suffix});
+    Print("\n{expr_end_delim}\n");
+    PrintTo("*errout*","\n{expr_end_delim}\n");
+    IO_Flush(IO_WrapFD(1,false,false));
+    IO_Flush(IO_WrapFD(2,false,false));
+    |```/
+
+error_patterns = ['Error,', 'error:']
+line_number_patterns = ':{number}'
