@@ -342,6 +342,13 @@ session is in use).
   instead of the default.  This only applies to Codebraid's built-in code
   execution system.
 
+* `executable_opts`={string} — Command-line options passed to `executable`.
+  This only applies to Codebraid's built-in code execution system.
+
+* `args`={string} — Command-line arguments passed to code during execution.
+  For example, this could be used to add values to `sys.argv` for Python.
+  This only applies to Codebraid's built-in code execution system.
+
 * `jupyter_kernel`={string} — Jupyter kernel to use for executing code instead
   of Codebraid's built-in code execution system.  Multiple Jupyter kernels can
   be used within a single document, and multiple sessions are possible per

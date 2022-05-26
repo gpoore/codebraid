@@ -68,7 +68,7 @@ class SessionSubprocess(object):
         self.encoding = getattr(session.lang_def, f'{stage}_encoding')
         self.has_interpreter_script = session.lang_def.interpreter_script is not None
         template_dict = {
-            'executable': session.executable.as_posix(),
+            'executable': session.executable,
             'extension': session.lang_def.extension,
             'run_delim_start': session.run_delim_start,
             'run_delim_hash': session.run_delim_hash,
@@ -87,7 +87,17 @@ class SessionSubprocess(object):
                 'run_script': session.lang_def.interpreter_script.as_posix(),
                 'buffering': 'line',
             })
-        program_with_args = [s.format(**template_dict) for s in shlex.split(command)]
+        program_with_args: list[str] = []
+        for s in shlex.split(command):
+            if s == '{executable_opts}':
+                if session.executable_opts:
+                    program_with_args.extend(session.executable_opts)
+                continue
+            if s == '{args}':
+                if session.args:
+                    program_with_args.extend(session.args)
+                continue
+            program_with_args.append(s.format(**template_dict))
         if platform.system() == 'Windows':
             # Modify args since subprocess.Popen() ignores PATH
             #   * https://bugs.python.org/issue8557

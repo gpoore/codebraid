@@ -1,6 +1,20 @@
 # Change Log
 
 
+## v0.7.0 (dev)
+
+* Added first-chunk setting `executable_opts` for passing command-line options
+  to the executable that compiles/runs code (#52).
+
+* Setting `executable` to an executable relative to the working directory (for
+  example, `./exec.sh`) now functions correctly.  Previously, `pathlib.Path()`
+  was used to track executables, but it strips a leading `./`.
+
+* Added first-chunk setting `args` for passing command-line arguments to
+  executed code.
+
+
+
 ## v0.6.0 (2022-02-22)
 
 * Python 3.7 is now the minimum supported version.

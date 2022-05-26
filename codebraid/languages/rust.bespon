@@ -4,10 +4,10 @@ extension = 'rs'
 executable = 'rustc'
 
 compile_encoding = 'utf8'
-compile_commands = '{executable} --crate-type bin -o {source_without_extension}.exe {source}'
+compile_commands = '{executable} {executable_opts} --crate-type bin -o {source_without_extension}.exe {source}'
 
 run_encoding = 'utf8'
-run_command = '{source_without_extension}.exe'
+run_command = '{source_without_extension}.exe {args}'
 
 run_template =
     |```

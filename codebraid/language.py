@@ -17,6 +17,7 @@ import pathlib
 import pkgutil
 import platform
 import re
+import shlex
 import shutil
 import string
 from typing import Optional
@@ -124,18 +125,20 @@ class Language(object):
                     if which_python3:
                         if (platform.system() == 'Windows' and
                                 'AppData/Local/Microsoft/WindowsApps' in pathlib.Path(which_python3).as_posix()):
-                            executable = pathlib.Path('python')
+                            executable = 'python'
                         else:
-                            executable = pathlib.Path('python3')
+                            executable = 'python3'
                     else:
-                        executable = pathlib.Path('python')
+                        executable = 'python'
                 else:
-                    executable = pathlib.Path(name_root)
+                    executable = name_root
             elif isinstance(raw_executable, str):
-                executable = pathlib.Path(raw_executable).expanduser()
+                executable = pathlib.Path(raw_executable).expanduser().as_posix()
+                if raw_executable.startswith('./') or raw_executable.startswith('.\\'):
+                    executable = f'./{executable}'
             else:
                 raise TypeError
-            self.executable: pathlib.Path = executable
+            self.executable: str = executable
 
             raw_interpreter_script = definition.pop('run_script', None)
             if raw_interpreter_script is None:
@@ -162,6 +165,36 @@ class Language(object):
                         interpreter_script.parent.mkdir(parents=True, exist_ok=True)
                         interpreter_script.write_bytes(script_bytes)
             self.interpreter_script: Optional[pathlib.Path] = interpreter_script
+
+            raw_opts = definition.pop('executable_opts', None)
+            if self.interpreter_script and raw_opts is not None:
+                raise TypeError
+            if raw_opts is None:
+                opts = raw_opts
+            elif isinstance(raw_opts, str):
+                opts = shlex.split(raw_opts)
+                if not opts:
+                    raise TypeError
+            elif isinstance(raw_opts, list) and raw_opts and all(isinstance(x, str) for x in raw_opts):
+                opts = raw_opts
+            else:
+                raise TypeError
+            self.executable_opts: Optional[list[str]] = opts
+
+            raw_args = definition.pop('args', None)
+            if self.interpreter_script and raw_args is not None:
+                raise TypeError
+            if raw_args is None:
+                args = raw_args
+            elif isinstance(raw_args, str):
+                args = shlex.split(raw_args)
+                if not args:
+                    raise TypeError
+            elif isinstance(raw_args, list) and raw_args and all(isinstance(x, str) for x in raw_args):
+                args = raw_args
+            else:
+                raise TypeError
+            self.args: Optional[list[str]] = args
 
             extension = definition.pop('extension', None)
             if not isinstance(extension, str):
@@ -197,7 +230,7 @@ class Language(object):
                 raise TypeError
             self.run_encoding: Optional[str] = run_encoding
             if not self.interpreter_script:
-                run_command = definition.pop('run_command', '{executable} {source}')
+                run_command = definition.pop('run_command', '{executable} {executable_opts} {source} {args}')
             else:
                 run_command = definition.pop('run_command', '{executable} {run_script} {run_delim_start} {run_delim_hash} {buffering}')
             if not isinstance(run_command, str):

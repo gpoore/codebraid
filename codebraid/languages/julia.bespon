@@ -1,7 +1,7 @@
 |=== julia
 extension = 'jl'
 
-run_command = '{executable} --project=@. {source}'
+executable_opts = '--project=@.'
 
 run_encoding = 'utf8'
 

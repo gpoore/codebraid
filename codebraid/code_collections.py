@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+import shlex
 from typing import Dict, List, NamedTuple, Optional, Union
 from . import language
 from . import message
@@ -133,7 +134,9 @@ class Session(Code):
         super().__init__(code_key, code_defaults=code_defaults)
 
         self.lang_def: Optional[language.Language] = None
-        self.executable: Optional[pathlib.Path] = None
+        self.executable: Optional[str] = None
+        self.executable_opts: Optional[list[str]] = None
+        self.args: Optional[list[str]] = None
         self.live_output: Optional[bool] = None
         self.repl: Optional[bool] = None
         self.jupyter_kernel: Optional[str] = None
@@ -202,7 +205,29 @@ class Session(Code):
                     msg = f'Language definition for "{self.lang}" does not exist'
                     self.errors.append(message.SysConfigError(msg))
                 else:
-                    self.executable = pathlib.Path(first_chunk_options.get('executable', self.lang_def.executable)).expanduser()
+                    try:
+                        raw_executable = first_chunk_options['executable']
+                    except KeyError:
+                        executable = self.lang_def.executable
+                    else:
+                        executable = pathlib.Path(raw_executable).expanduser().as_posix()
+                        if raw_executable.startswith('./') or raw_executable.startswith('.\\'):
+                            executable = f'./{executable}'
+                    self.executable = executable
+                    try:
+                        raw_executable_opts = first_chunk_options['executable_opts']
+                    except KeyError:
+                        executable_opts = self.lang_def.executable_opts
+                    else:
+                        executable_opts = shlex.split(raw_executable_opts)
+                    self.executable_opts = executable_opts
+                    try:
+                        raw_args = first_chunk_options['args']
+                    except KeyError:
+                        args = self.lang_def.args
+                    else:
+                        args = shlex.split(raw_args)
+                    self.args = args
                     self.repl = self.lang_def.repl
             live_output = first_chunk_options.get('live_output')
             if live_output is not None:
@@ -292,7 +317,9 @@ class Session(Code):
         if self.executable:
             hashed_options = {
                 'session': self.name,
-                'executable': self.executable.as_posix(),
+                'executable': self.executable,
+                'executable_opts': self.executable_opts,
+                'args': self.args,
             }
         elif self.jupyter_kernel:
             hashed_options = {
