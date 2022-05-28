@@ -3,6 +3,9 @@
 
 ## v0.7.0 (dev)
 
+* Added command-line option `--no-execute` that disables code execution and
+  only uses available cached output.
+
 * Added first-chunk setting `executable_opts` for passing command-line options
   to the executable that compiles/runs code (#52).
 

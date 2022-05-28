@@ -81,6 +81,8 @@ def main():
                                     'For Jupyter kernels, also show  errors and a summary of rich output. '
                                     'Output still appears in the document as normal. '
                                     'Individual sessions can override this by setting live_output=false in the document.')
+    parser_pandoc.add_argument('--no-execute', action='store_true',
+                               help='Disable code execution.  Only load code output from cache, if it exists.')
     parser_pandoc.add_argument('files', nargs='*', metavar='FILE',
                                help="Files (multiple files are allowed for formats supported by Pandoc)")
     for opts_or_long_opt, narg in PANDOC_OPTIONS.items():
@@ -187,6 +189,7 @@ def pandoc(args):
         code_defaults=code_defaults,
         session_defaults=session_defaults,
         other_pandoc_args_at_load=other_pandoc_args_at_load,
+        no_execute=args.no_execute,
     ) as converter:
         converter.convert(
             to_format=args.to_format,

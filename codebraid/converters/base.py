@@ -67,6 +67,7 @@ class Converter(object):
                  from_format: Optional[str]=None,
                  code_defaults: Optional[Dict[str, Union[bool, str]]]=None,
                  session_defaults: Optional[Dict[str, Union[bool, str]]]=None,
+                 no_execute: bool=False,
                  synctex: bool=False):
         self._progress = Progress()
 
@@ -184,6 +185,10 @@ class Converter(object):
         self.origin_paths_for_cache = origin_paths_for_cache
         self.cache_key = cache_key_hasher.hexdigest()[:16]
 
+        if not isinstance(no_execute, bool):
+            raise TypeError
+        self.no_execute = no_execute
+
         self._io_map = False
         if not isinstance(synctex, bool):
             raise TypeError
@@ -220,7 +225,10 @@ class Converter(object):
     def code_braid(self):
         self.extract_code_chunks()
         self.process_code_chunks()
-        self.exec_code_chunks()
+        if self.no_execute:
+            pass
+        else:
+            self.exec_code_chunks()
         self.postprocess_code_chunks()
 
     def extract_code_chunks(self):

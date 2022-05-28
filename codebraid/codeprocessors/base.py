@@ -119,13 +119,12 @@ class CodeProcessor(object):
         builtin_sessions = []
         jupyter_sessions = []
         for session in self._sessions.values():
-            if session.status.prevent_exec:
+            if session.status.prevent_exec or session in self._cached_sessions:
                 continue
-            if not self._load_session_cache(session):
-                if session.jupyter_kernel is None:
-                    builtin_sessions.append(session)
-                else:
-                    jupyter_sessions.append(session)
+            if session.jupyter_kernel is None:
+                builtin_sessions.append(session)
+            else:
+                jupyter_sessions.append(session)
         # Use `atexit` to improve the odds of updating the cache index in the
         # event of an unexpected exit.  Any session caches that are
         # successfully updated can be used in the future, regardless of
@@ -439,6 +438,8 @@ class CodeProcessor(object):
                         pass
             else:
                 self._old_cache_index = cache_index
+        for session in self._sessions.values():
+            self._load_session_cache(session)
 
 
     def _load_session_cache(self, session: Session) -> bool:
@@ -449,9 +450,9 @@ class CodeProcessor(object):
         of rich output that results in additional files, because that is done
         during cache prep when the cache index is loaded.
         '''
-        if self.no_cache:
+        if self.no_cache or session.status.prevent_exec:
             return False
-        if session.hash in self._cached_sessions:
+        if session in self._cached_sessions:
             return True
         session_cache_path = self._cache_key_path / f'{session.hash_root}.zip'
         try:

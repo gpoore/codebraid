@@ -214,6 +214,8 @@ needed in Markdown documents, this can be accomplished by piping the output of
   Individual sessions can override this by setting `live_output=false` in the
   document.
 
+* `--no-execute` — Disables code execution.  Only use available cached output.
+
 
 ## Caching
 
