@@ -35,12 +35,12 @@ class CodeLineOrigin(NamedTuple):
 
 
 
-class Code(object):
+class CodeCollection(object):
     '''
     Base class for sessions and sources.  Never instantiated.
     '''
     def __init__(self, code_key: CodeKey, *, code_defaults: Optional[Dict[str, Union[bool, str]]]):
-        if type(self) is Code:
+        if type(self) is CodeCollection:
             raise NotImplementedError
         self.key: CodeKey = code_key
         self.lang: Optional[str] = code_key.lang
@@ -69,7 +69,7 @@ class Code(object):
 
 
 
-class Source(Code):
+class Source(CodeCollection):
     '''
     An ordered collection of code chunks that is typically displayed but never
     executed.  May be exported as a single file of source code.
@@ -93,7 +93,7 @@ class Source(Code):
         Append a code chunk to internal code chunk list.  Check code chunk
         options for validity and update chunk summary data.
         '''
-        code_chunk.source = self
+        code_chunk.code_collection = self
         code_chunk.index = len(self.code_chunks)
         code_chunk.errors.register_status(self.status)
         code_chunk.warnings.register_status(self.status)
@@ -124,7 +124,7 @@ class Source(Code):
 
 
 
-class Session(Code):
+class Session(CodeCollection):
     '''
     Code chunks comprising a session.
     '''
@@ -188,7 +188,7 @@ class Session(Code):
         Append a code chunk to internal code chunk list.  Check code chunk
         options for validity and update chunk summary data.
         '''
-        code_chunk.session = self
+        code_chunk.code_collection = self
         code_chunk.index = len(self.code_chunks)
         code_chunk.errors.register_status(self.status)
         code_chunk.warnings.register_status(self.status)
@@ -351,10 +351,10 @@ class Session(Code):
             }
             hasher.update(json.dumps(cc_options).encode('utf8'))
             hasher.update(hasher.digest())
-            code_bytes = cc.code.encode('utf8')
+            code_bytes = cc.code_str.encode('utf8')
             hasher.update(code_bytes)
             hasher.update(hasher.digest())
-            code_len += len(cc.code) + 1  # +1 for omitted trailing newline
+            code_len += len(cc.code_str) + 1  # +1 for omitted trailing newline
         self.hash = f'{hasher.hexdigest()}_{code_len}'
         self.hash_root = self.temp_suffix = hasher.hexdigest()[:16]
         self.run_delim_hash = hasher.hexdigest()[:64]
@@ -437,7 +437,7 @@ class Session(Code):
                         expr_start_delim=expr_start_delim,
                         expr_end_delim=expr_end_delim,
                         temp_suffix=self.temp_suffix,
-                        code=cc.code,
+                        code=cc.code_str,
                     )
                     if not self.lang_def.chunk_wrapper_code_indent:
                         run_code_list.append(expr_code)
@@ -450,7 +450,7 @@ class Session(Code):
                     self.run_code_to_origins[line_number] = CodeLineOrigin(chunk=cc, line_number=1)
                     run_code_line_number += self.lang_def.inline_expression_formatter_n_lines
                 else:
-                    run_code_list.append(f'{self.lang_def.chunk_wrapper_code_indent}{cc.code}\n')
+                    run_code_list.append(f'{self.lang_def.chunk_wrapper_code_indent}{cc.code_str}\n')
                     self.run_code_to_origins[run_code_line_number] = CodeLineOrigin(chunk=cc, line_number=1)
                     run_code_line_number += 1
             else:

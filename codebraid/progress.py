@@ -14,12 +14,13 @@ from __future__ import annotations
 import asyncio
 import collections
 import datetime
+import json
 import time
 import textwrap
 from typing import Callable, Deque, Dict, Iterable, List, Optional
 from .terminal import stderr_term
 from .code_chunks import CodeChunk, CodeKey
-from .code_collections import Code, Session, Source
+from .code_collections import CodeCollection, Session, Source
 from . import util
 
 
@@ -28,12 +29,14 @@ from . import util
 class Progress(object):
     '''
     Centralized tracking of Codebraid progress, from parsing original document
-    source files to executing code to postprocessing.  This makes possible a
+    source files to executing code to converting.  This makes possible a
     terminal progress display with customizable levels of detail.  It also
     makes possible arbitrary tasks that use code output immediately after it
     becomes available.
     '''
-    def __init__(self):
+    def __init__(self, only_code_output: Optional[str]):
+        self._only_code_output = only_code_output
+
         self._last_error_counts: Dict[CodeKey, int] = {}
         self._error_count: int = 0
         self._last_warning_counts: Dict[CodeKey, int] = {}
@@ -71,7 +74,7 @@ class Progress(object):
     )
 
 
-    def _register_codes(self, codes: Iterable[Code]):
+    def _register_codes(self, codes: Iterable[CodeCollection]):
         for code in codes:
             self._last_error_counts[code.key] = code.status.error_count
             self._error_count += code.status.error_count
@@ -87,7 +90,7 @@ class Progress(object):
         self._session_exec_chunks_count = self._session_total_chunks_count
 
 
-    def _code_messages_to_summary_list(self, code: Code, *, msg_type: str, columns: int) -> List[str]:
+    def _code_messages_to_summary_list(self, code_collection: CodeCollection, *, msg_type: str, columns: int) -> List[str]:
         first_textwrapper = self._first_textwrappers[columns]
         subsequent_textwrapper = self._subsequent_textwrappers[columns]
         if msg_type == 'errors':
@@ -97,16 +100,16 @@ class Progress(object):
         else:
             raise ValueError
         summary_list = []
-        for msg in getattr(code, msg_type):
+        for msg in getattr(code_collection, msg_type):
             if msg.is_refed:
                 continue
             if summary_list:
                 summary_list.append('')
-            for line in first_textwrapper.wrap(f'"{code.code_chunks[0].origin_name}":'):
+            for line in first_textwrapper.wrap(f'"{code_collection.code_chunks[0].origin_name}":'):
                 summary_list.append(fmt_msg_type(line))
             for line in msg.message:
                 summary_list.extend(subsequent_textwrapper.wrap(line))
-        for cc in code.code_chunks:
+        for cc in code_collection.code_chunks:
             for msg in getattr(cc, msg_type):
                 if msg.is_refed:
                     continue
@@ -118,14 +121,14 @@ class Progress(object):
                     summary_list.extend(subsequent_textwrapper.wrap(line))
         return summary_list
 
-    def _summarize_code_messages(self, code: Code, *, columns: int) -> str:
+    def _summarize_code_messages(self, code_collection: CodeCollection, *, columns: int) -> str:
         summary_list = []
-        if code.status.has_errors:
+        if code_collection.status.has_errors:
             summary_list.append(self.term.fmt_error('Errors:'))
-            summary_list.extend(self._code_messages_to_summary_list(code, msg_type='errors', columns=columns))
-        if code.status.has_warnings:
+            summary_list.extend(self._code_messages_to_summary_list(code_collection, msg_type='errors', columns=columns))
+        if code_collection.status.has_warnings:
             summary_list.append(self.term.fmt_warning('Warnings:'))
-            summary_list.extend(self._code_messages_to_summary_list(code, msg_type='warnings', columns=columns))
+            summary_list.extend(self._code_messages_to_summary_list(code_collection, msg_type='warnings', columns=columns))
         summary_list.append('')
         return '\n'.join(summary_list)
 
@@ -135,7 +138,7 @@ class Progress(object):
         Update terminal progress summary, which includes current task, current
         error and warnings counts, and code execution progress.
         '''
-        if self._current_task is None:
+        if self._only_code_output or self._current_task is None:
             return
         if self._last_live_output is not None and not self._last_live_output.endswith('\n'):
             return
@@ -210,7 +213,7 @@ class Progress(object):
                     break
 
 
-    def _print_live_heading(self, code: Code, *, notification_type: str, title: str,
+    def _print_live_heading(self, code_collection: CodeCollection, *, notification_type: str, title: str,
                             columns: int, flush: bool, clearline: bool,
                             content_sep: bool=True, chunk: Optional[CodeChunk]=None):
         output_list = []
@@ -225,14 +228,14 @@ class Progress(object):
             chunk_progress = ''
             chunk_traceback = ''
         else:
-            chunk_progress = f', code chunk {chunk.index+1}/{len(code.code_chunks)}'
+            chunk_progress = f', code chunk {chunk.index+1}/{len(code_collection.code_chunks)}'
             chunk_traceback = f'\n"{chunk.origin_name}", line {chunk.origin_start_line_number}'
-        output_list.append(self.term.fmt_notify(f'{code.lang}, {code.type} "{code.name or "<default>"}"{chunk_progress}{chunk_traceback}'))
+        output_list.append(self.term.fmt_notify(f'{code_collection.lang}, {code_collection.type} "{code_collection.name or "<default>"}"{chunk_progress}{chunk_traceback}'))
         if content_sep:
             output_list.append(self.term.fmt_delim('.'*columns))
         print('\n'.join(output_list), file=self.term.stream, flush=flush)
 
-    def _print_live_closing(self, code: Code, *, notification_type: str, title: str,
+    def _print_live_closing(self, code_collection: CodeCollection, *, notification_type: str, title: str,
                             columns: int, flush: bool, clearline: bool, chunk: Optional[CodeChunk]=None):
         output_list = []
         if self._last_live_output is not None and not self._last_live_output.endswith('\n'):
@@ -243,11 +246,11 @@ class Progress(object):
         output_list.append('\n')
         print(''.join(output_list), file=self.term.stream, flush=flush)
 
-    def _print_live_notification(self, code: Code, *, notification_type: str, title: str,
+    def _print_live_notification(self, code_collection: CodeCollection, *, notification_type: str, title: str,
                                  columns: Optional[int]=None, text: Optional[str]=None):
         if columns is None:
             columns = self.term.columns()
-        self._print_live_heading(code, notification_type=notification_type, title=title,
+        self._print_live_heading(code_collection, notification_type=notification_type, title=title,
                                  columns=columns, flush=False, clearline=self.term.isatty,
                                  content_sep=text is not None)
         if text is not None:
@@ -255,7 +258,7 @@ class Progress(object):
                 print(text, file=self.term.stream, end='')
             else:
                 print(text, file=self.term.stream)
-        self._print_live_closing(code, notification_type=notification_type, title=title,
+        self._print_live_closing(code_collection, notification_type=notification_type, title=title,
                                  columns=columns, flush=True, clearline=False)
 
     def _print_live_output(self, output: str, *, stream: str, fmter: Optional[Callable[[str], str]]=None):
@@ -322,11 +325,15 @@ class Progress(object):
         self.term.stream.flush()
 
 
-    def _update_message_count(self, code: Code):
-        self._error_count += code.status.error_count - self._last_error_counts[code.key]
-        self._last_error_counts[code.key] = code.status.error_count
-        self._warning_count += code.status.warning_count - self._last_warning_counts[code.key]
-        self._last_warning_counts[code.key] = code.status.warning_count
+    def _print_code_output(self, session: Session, *, chunk: CodeChunk):
+        pass
+
+
+    def _update_message_count(self, code_collection: CodeCollection):
+        self._error_count += code_collection.status.error_count - self._last_error_counts[code_collection.key]
+        self._last_error_counts[code_collection.key] = code_collection.status.error_count
+        self._warning_count += code_collection.status.warning_count - self._last_warning_counts[code_collection.key]
+        self._last_warning_counts[code_collection.key] = code_collection.status.warning_count
 
 
     def parse_start(self):
@@ -351,14 +358,6 @@ class Progress(object):
         self._update_progress()
 
     def exec_end(self):
-        pass
-
-    def postprocess_start(self):
-        self._current_task = 'Postprocess'
-        self._current_subtask = None
-        self._update_progress()
-
-    def postprocess_end(self):
         pass
 
     def convert_start(self):
@@ -399,12 +398,14 @@ class Progress(object):
         self._update_progress()
 
 
-    def _finished(self, code: Code):
-        self._update_message_count(code)
-        if code.live_output and (code.status.has_errors or code.status.has_warnings):
+    def _finished(self, code_collection: CodeCollection):
+        self._update_message_count(code_collection)
+        if (code_collection.type == 'session' and code_collection.live_output and
+                (code_collection.status.has_errors or code_collection.status.has_warnings)):
             columns = self.term.columns()
-            self._print_live_notification(code, notification_type=f'{code.type.upper()}', title='SUMMARY',
-                                          columns=columns, text=self._summarize_code_messages(code, columns=columns))
+            self._print_live_notification(code_collection, notification_type=f'{code_collection.type.upper()}',
+                                          title='SUMMARY', columns=columns,
+                                          text=self._summarize_code_messages(code_collection, columns=columns))
         self._update_progress()
         self._in_live_output = False
 
@@ -435,6 +436,8 @@ class Progress(object):
                                      columns=self.term.columns(), flush=True, clearline=self.term.isatty)
             self._last_live_output = None
             self._last_live_output_stream = None
+        if self._only_code_output:
+            self._print_code_output(session, chunk=chunk)
         self._update_progress()
 
 

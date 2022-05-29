@@ -83,6 +83,12 @@ def main():
                                     'Individual sessions can override this by setting live_output=false in the document.')
     parser_pandoc.add_argument('--no-execute', action='store_true',
                                help='Disable code execution.  Only load code output from cache, if it exists.')
+    parser_pandoc.add_argument('--only-code-output', metavar='FORMAT',
+                               help='Write code output to stdout in the specified format. '
+                                    'Cached output is written immediately. '
+                                    'Output from execution is written as soon as it becomes available. '
+                                    'No document is created. '
+                                    'Options --to and --output are only used (if at all) to inform code output formatting.')
     parser_pandoc.add_argument('files', nargs='*', metavar='FILE',
                                help="Files (multiple files are allowed for formats supported by Pandoc)")
     for opts_or_long_opt, narg in PANDOC_OPTIONS.items():
@@ -190,14 +196,16 @@ def pandoc(args):
         session_defaults=session_defaults,
         other_pandoc_args_at_load=other_pandoc_args_at_load,
         no_execute=args.no_execute,
+        only_code_output=args.only_code_output,
     ) as converter:
-        converter.convert(
-            to_format=args.to_format,
-            standalone=args.standalone,
-            output_path=output_path,
-            overwrite=args.overwrite,
-            other_pandoc_args=other_pandoc_args
-        )
+        if not args.only_code_output:
+            converter.convert(
+                to_format=args.to_format,
+                standalone=args.standalone,
+                output_path=output_path,
+                overwrite=args.overwrite,
+                other_pandoc_args=other_pandoc_args
+            )
         exit_code = converter.exit_code
 
     sys.exit(exit_code)

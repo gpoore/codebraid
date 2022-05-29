@@ -546,23 +546,23 @@ class PandocCodeChunk(CodeChunk):
                 attr_list.append('{0}={1}'.format(k, v))
         if self.placeholder_code_lines:
             code_lines = self.placeholder_code_lines
-            code = code_lines[0]
+            code_str = code_lines[0]
         else:
             code_lines = self.code_lines
-            code = self.code
+            code_str = self.code_str
         if self.inline:
-            code_strip = code.strip(' ')
+            code_strip = code_str.strip(' ')
             if code_strip.startswith('`'):
-                code = ' ' + code
+                code_str = ' ' + code_str
             if code_strip.endswith('`'):
-                code = code + ' '
+                code_str = code_str + ' '
             delim = '`'
-            while delim in code:
+            while delim in code_str:
                 delim += '`'
-            md_lines = ['{delim}{code}{delim}{{{attr}}}'.format(delim=delim, code=code, attr=' '.join(attr_list))]
-        elif not self.placeholder_code_lines or code:
+            md_lines = ['{delim}{code}{delim}{{{attr}}}'.format(delim=delim, code=code_str, attr=' '.join(attr_list))]
+        elif not self.placeholder_code_lines or code_str:
             delim = '```'
-            while delim in code:
+            while delim in code_str:
                 delim += '```'
             md_lines = ['{delim}{{{attr}}}'.format(delim=delim, attr=' '.join(attr_list)), *code_lines, delim]
         else:
@@ -1256,7 +1256,7 @@ class PandocConverter(Converter):
             self._load_and_process_initial_ast(origin_string=self.concat_origin_string)
 
 
-    def _postprocess_code_chunks(self):
+    def _generate_final_ast(self):
         for code_chunk in reversed(self.code_chunks):
             # Substitute code output into AST in reversed order to preserve
             # indices
@@ -1345,6 +1345,9 @@ class PandocConverter(Converter):
 
     def _convert(self, *, to_format, output_path=None, overwrite=False,
                 standalone=None, other_pandoc_args=None):
+        if self._final_ast is None:
+            self._generate_final_ast()
+
         if to_format is None:
             if output_path is None:
                 raise ValueError('Explicit output format is required when it cannot be inferred from output file name')

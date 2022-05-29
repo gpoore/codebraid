@@ -16,9 +16,12 @@ from collections import OrderedDict as ODict
 import pathlib
 import re
 import textwrap
+import typing
 from typing import List, NamedTuple, Optional, Union
 from . import message
 from . import util
+if typing.TYPE_CHECKING:
+    from .code_collections import CodeCollection
 
 
 
@@ -774,7 +777,7 @@ class CodeChunk(object):
         self.inline = inline
 
         # Check for len(code_lines) > 1 for inline later
-        self._code = None
+        self._code_str = None
         if isinstance(code, list):
             code_lines = code
         else:
@@ -817,11 +820,8 @@ class CodeChunk(object):
         if 'copy' in self.options:
             self.copy_chunks = []
 
-        if self.execute:
-            self.session = None
-        else:
-            self.source = None
-        self.index = None
+        self.code_collection: Optional[CodeCollection] = None
+        self.index: Optional[int] = None
         self.output_index = None
         self.stdout_lines = []
         self.stderr_lines = []
@@ -832,6 +832,18 @@ class CodeChunk(object):
         self.code_start_line_number = 1
         self.stdout_start_line_number = 1
         self.stderr_start_line_number = 1
+
+    @property
+    def session(self):
+        if self.execute:
+            return self.code_collection
+        raise TypeError
+
+    @property
+    def source(self):
+        if not self.execute:
+            return self.code_collection
+        raise TypeError
 
 
     def __pre_init__(self):
@@ -857,12 +869,12 @@ class CodeChunk(object):
 
 
     @property
-    def code(self):
-        code = self._code
-        if code is not None:
-            return code
+    def code_str(self):
+        code_str = self._code_str
+        if code_str is not None:
+            return code_str
         code = '\n'.join(self.code_lines)
-        self._code = code
+        self._code_str = code
         return code
 
 

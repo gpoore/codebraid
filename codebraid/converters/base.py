@@ -68,8 +68,8 @@ class Converter(object):
                  code_defaults: Optional[Dict[str, Union[bool, str]]]=None,
                  session_defaults: Optional[Dict[str, Union[bool, str]]]=None,
                  no_execute: bool=False,
+                 only_code_output: Optional[str]=None,
                  synctex: bool=False):
-        self._progress = Progress()
 
         if not all(isinstance(x, bool) for x in (cross_origin_sessions, expanduser, expandvars)):
             raise TypeError
@@ -189,12 +189,22 @@ class Converter(object):
             raise TypeError
         self.no_execute = no_execute
 
+        if only_code_output is None:
+            pass
+        elif not isinstance(only_code_output, str):
+            raise TypeError
+        elif only_code_output not in ('codebraid_preview',):
+            raise ValueError
+        self.only_code_output = only_code_output
+
         self._io_map = False
         if not isinstance(synctex, bool):
             raise TypeError
         self.synctex = synctex
         if synctex:
             self._io_map = True
+
+        self._progress = Progress(self.only_code_output)
 
         self.code_chunks = []
         self.code_processor: Optional[codeprocessors.CodeProcessor] = None
@@ -229,7 +239,6 @@ class Converter(object):
             pass
         else:
             self.exec_code_chunks()
-        self.postprocess_code_chunks()
 
     def extract_code_chunks(self):
         self._progress.parse_start()
@@ -262,14 +271,6 @@ class Converter(object):
         self._progress.exec_start()
         self.code_processor.exec()
         self._progress.exec_end()
-
-    def postprocess_code_chunks(self):
-        self._progress.postprocess_start()
-        self._postprocess_code_chunks()
-        self._progress.postprocess_end()
-
-    def _postprocess_code_chunks(self):
-        raise NotImplementedError
 
     def convert(self, *, to_format, **kwargs):
         self._progress.convert_start()

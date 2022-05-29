@@ -136,11 +136,11 @@ async def exec(session: Session, *, cache_key_path: pathlib.Path, progress: Prog
                 continue
             if not incomplete_cc_stack:
                 progress.chunk_start(session, chunk=cc)
-                cc_jupyter_id = kernel_client.execute(cc.code)
+                cc_jupyter_id = kernel_client.execute(cc.code_str)
             else:
                 incomplete_cc_stack.append(cc)
                 progress.chunk_start(session, chunk=incomplete_cc_stack[0])
-                cc_jupyter_id = kernel_client.execute('\n'.join(icc.code for icc in incomplete_cc_stack))
+                cc_jupyter_id = kernel_client.execute('\n'.join(icc.code_str for icc in incomplete_cc_stack))
             deadline = time.monotonic() + session.jupyter_timeout
             while True:
                 try:
