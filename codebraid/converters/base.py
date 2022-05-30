@@ -263,7 +263,8 @@ class Converter(object):
             origin_paths_for_cache=self.origin_paths_for_cache,
             code_defaults=self.code_defaults,
             session_defaults=self.session_defaults,
-            progress=self._progress
+            progress=self._progress,
+            only_code_output=self.only_code_output,
         )
         self.code_processor.process()
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 
 import collections
+import hashlib
 import json
 import os
 import pathlib
@@ -339,6 +340,26 @@ class PandocCodeChunk(CodeChunk):
     _unquoted_kv_value_re = re.compile(r'[A-Za-z$_+\-][A-Za-z0-9$_+\-:]*')
 
 
+    @property
+    def attr_hash(self):
+        attr_list = []
+        attr_list.append('{')
+        attr_list.append(f'#{self.node_id}')
+        attr_list.extend(f'.{c}' for c in self.node_classes)
+        attr_list.extend('"{0}"="{1}"'.format(k.replace('"', '\\"'), v.replace('"', '\\"')) for k, v in self.node_kvpairs)
+        attr_list.append('}')
+        attr_str = ' '.join(attr_list)
+        hasher = hashlib.sha1()
+        hasher.update(attr_str.encode('utf8'))
+        return hasher.hexdigest()
+
+    @property
+    def code_hash(self):
+        hasher = hashlib.sha1()
+        hasher.update(self.code_str.encode('utf8'))
+        return hasher.hexdigest()
+
+
     def finalize_after_copy(self):
         if self.options['lang'] is None:
             self.pandoc_classes.insert(0, self.copy_chunks[0].options['lang'])
@@ -354,10 +375,10 @@ class PandocCodeChunk(CodeChunk):
         if self._output_nodes is not None:
             return self._output_nodes
         nodes = []
-        if self.index == 0 and self.execute and self.session is not None and self.session.errors:
+        if self.index == 0 and self.code_collection.errors:
             msgs_list = []
             error_class_list = ['error']
-            for error in self.session.errors:
+            for error in self.code_collection.errors:
                 if error.is_refed:
                     continue
                 if msgs_list:
@@ -568,6 +589,221 @@ class PandocCodeChunk(CodeChunk):
         else:
             md_lines = ['```{{{attr}}}'.format(attr=' '.join(attr_list)), '```']
         return md_lines
+
+
+    def only_code_output(self, format):
+        if format != 'codebraid_preview':
+            raise ValueError
+        output_list = []
+        if self.index == 0 and self.code_collection.errors:
+            msgs_list = []
+            error_class_list = ['error']
+            for error in self.code_collection.errors:
+                if error.is_refed:
+                    continue
+                if msgs_list:
+                    msgs_list.append('')
+                msgs_list.append(f'{error.display_name.upper()} in "{self.origin_name}" near line {self.origin_start_line_number}:')
+                msgs_list.extend(error.message)
+                error_class = error.type[0].lower() + error.type[1:]
+                if error_class not in error_class_list:
+                    error_class_list.append(error_class)
+            if msgs_list:
+                if self.inline:
+                    output_list.append(self._as_markdown_inline_code(' '.join(msgs_list), classes=error_class_list))
+                else:
+                    output_list.append(self._as_markdown_block_code('\n'.join(msgs_list), classes=error_class_list))
+                return output_list
+        if self.errors.has_non_stderr:
+            msgs_list = []
+            error_class_list = ['error']
+            for error in self.errors:
+                if error.is_stderr:
+                    continue
+                if msgs_list:
+                    msgs_list.append('')
+                msgs_list.append(f'{error.display_name.upper()} in "{self.origin_name}" near line {self.origin_start_line_number}:')
+                msgs_list.extend(error.message)
+                error_class = error.type[0].lower() + error.type[1:]
+                if error_class not in error_class_list:
+                    error_class_list.append(error_class)
+            if self.inline:
+                output_list.append(self._as_markdown_inline_code(' '.join(msgs_list), classes=error_class_list))
+            else:
+                output_list.append(self._as_markdown_block_code('\n'.join(msgs_list), classes=error_class_list))
+            return output_list
+        if not self.inline and self.options['code_line_numbers']:
+            # Line numbers can't be precalculated since they are determined by
+            # how a session is assembled across potentially multiple sources
+            first_number = self.options['code_first_number']
+            if first_number == 'next':
+                first_number = str(self.code_start_line_number)
+            else:
+                first_number = str(first_number)
+            self.pandoc_kvpairs.append(['startFrom', first_number])
+        for output, format in self.options['show'].items():
+            if output in ('markup', 'copied_markup'):
+                output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline, classes=['markdown']))
+            elif output == 'code':
+                output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline,
+                                                          id=self.pandoc_id, classes=self.pandoc_classes, keyval=self.pandoc_kvpairs))
+            elif output == 'repl':
+                if not self.repl_lines:
+                    continue
+                output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline,
+                                                          id=self.pandoc_id, classes=self.pandoc_classes, keyval=self.pandoc_kvpairs))
+            elif output in ('expr', 'stdout', 'stderr'):
+                if output == 'stderr' and self.errors.has_stderr:
+                    stderr_output_lines = self.stderr_lines.copy()
+                    for error in self.errors:
+                        if error.is_ref and error.message:
+                            stderr_output_lines.extend(error.message)
+                    if format == 'verbatim':
+                        if stderr_output_lines:
+                            output_list.append(self._as_markdown_code(self.layout_output(output, format, stderr_output_lines),
+                                               inline=self.inline, classes=['stderr', 'error']))
+                    elif format == 'verbatim_or_empty':
+                        output_list.append(self._as_markdown_code(self.layout_output(output, format, stderr_output_lines),
+                                           inline=self.inline, classes=['stderr', 'error']))
+                    elif format == 'raw':
+                        if getattr(self, output+'_lines'):
+                            output_list.append(self._as_markdown_included_text(self.layout_output(output, format, stderr_output_lines), inline=self.inline))
+                    else:
+                        raise ValueError
+                    continue
+                if format == 'verbatim':
+                    if getattr(self, output+'_lines'):
+                        output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline, classes=[output]))
+                elif format == 'verbatim_or_empty':
+                    output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline, classes=[output]))
+                elif format == 'raw':
+                    if getattr(self, output+'_lines'):
+                        output_list.append(self._as_markdown_included_text(self.layout_output(output, format), inline=self.inline))
+                else:
+                    raise ValueError
+            elif output == 'rich_output':
+                if not self.rich_output:
+                    continue
+                for ro in self.rich_output:
+                    ro_data = ro['data']
+                    ro_files = ro['files']
+                    for fmt_and_text_display in format:
+                        if ':' in fmt_and_text_display:
+                            fmt, fmt_text_display = fmt_and_text_display.split(':')
+                        else:
+                            fmt = fmt_and_text_display
+                            fmt_text_display = self.options.rich_text_default_display.get(fmt)
+                        fmt_mime_type = self.options.mime_map[fmt]
+                        if fmt_mime_type not in ro_data:
+                            continue
+                        if fmt_mime_type in ro_files:
+                            output_list.append(self._as_markdown_image(ro_files[fmt_mime_type], classes=['richOutput']))
+                            break
+                        data = ro_data[fmt_mime_type]
+                        lines = util.splitlines_lf(data)
+                        if fmt in ('latex', 'html', 'markdown'):
+                            if fmt == 'latex':
+                                raw_fmt = 'tex'
+                            else:
+                                raw_fmt = fmt
+                            if fmt_text_display == 'raw':
+                                if fmt == 'markdown':
+                                    output_list.append(self._as_markdown_included_text(self.layout_output(output, 'raw', lines), inline=self.inline))
+                                else:
+                                    output_list.append(self._as_markdown_code(self.layout_output(output, 'raw', lines), inline=self.inline, raw=raw_fmt))
+                            elif fmt_text_display == 'verbatim':
+                                if lines:
+                                    output_list.append(self._as_markdown_code(self.layout_output(output, 'verbatim', lines), inline=self.inline, classes=fmt))
+                            elif fmt_text_display == 'verbatim_or_empty':
+                                output_list.append(self._as_markdown_code(self.layout_output(output, 'verbatim', lines), inline=self.inline, classes=fmt))
+                            else:
+                                raise ValueError
+                            break
+                        if fmt == 'plain':
+                            if fmt_text_display == 'raw':
+                                output_list.append(self._as_markdown_included_text(self.layout_output(output, fmt_text_display, lines), inline=self.inline))
+                            elif fmt_text_display == 'verbatim':
+                                if lines:
+                                    output_list.append(self._as_markdown_code(self.layout_output(output, 'verbatim', lines), inline=self.inline))
+                            elif fmt_text_display == 'verbatim_or_empty':
+                                output_list.append(self._as_markdown_code(self.layout_output(output, 'verbatim', lines), inline=self.inline))
+                            else:
+                                raise ValueError
+                            break
+                        raise ValueError
+            else:
+                raise ValueError
+        return output_list
+
+
+    def _as_markdown_attr(self,
+                          id: Optional[str]=None,
+                          classes: Optional[list[str]]=None,
+                          keyval: Optional[list]=None,
+                          raw: Optional[str]=None):
+        if raw:
+            if id or classes or keyval:
+                raise TypeError
+            return f'{{={raw}}}'
+        attr_list = []
+        if id or classes or keyval or raw:
+            attr_list.append('{ ')
+            if id:
+                attr_list.append(f'#{id} ')
+            if classes:
+                attr_list.extend(f'.{c} ' for c in classes)
+            if keyval:
+                attr_list.extend('{0}="{1}" '.format(k, v.replace('"', '\\"')) for k, v in keyval)
+            attr_list.append('}')
+        return ''.join(attr_list)
+
+    def _as_markdown_inline_code(self, text: str, *, id=None, classes=None, keyval=None, raw=None, protect_start=True):
+        md_list = []
+        if protect_start:
+            md_list.append('[]{.codebraid-protect-inline-start}')
+        delim = '`'
+        while delim in text:
+            delim += '`'
+        md_list.append(delim)
+        if text.startswith(' ') and text.endswith(' '):  # https://spec.commonmark.org/0.30/#code-spans
+            md_list.append(f'{delim} {text} {delim}')
+        else:
+            if text.startswith('`'):
+                md_list.append(f'{delim} {text}')
+            else:
+                md_list.append(f'{delim}{text}')
+            if text.endswith('`'):
+                md_list.append(f' {delim}')
+            else:
+                md_list.append(delim)
+        md_list.append(self._as_markdown_attr(id, classes, keyval, raw))
+        return ''.join(md_list)
+
+    def _as_markdown_block_code(self, text: str, *, id=None, classes=None, keyval=None, raw=None):
+        md_list = []
+        delim = '```'
+        while delim in text:
+            delim += '```'
+        md_list.append(f'{delim}{self._as_markdown_attr(id, classes, keyval, raw)}\n')
+        md_list.append(text)
+        if not text.endswith('\n'):
+            md_list.append('\n')
+        md_list.append(delim)
+        return ''.join(md_list)
+
+    def _as_markdown_code(self, text: str, *, inline: Optional[bool], id=None, classes=None, keyval=None, raw=None, protect_start=True):
+        if inline:
+            return self._as_markdown_inline_code(text, id=id, classes=classes, keyval=keyval, raw=raw, protect_start=protect_start)
+        else:
+            return self._as_markdown_block_code(text, id=id, classes=classes, keyval=keyval, raw=raw)
+
+    def _as_markdown_included_text(self, text: str, *, inline: Optional[bool], protect_start=True):
+        if inline and protect_start:
+            return f'[]{{.codebraid-protect-inline-start}}{text}'
+        return text
+
+    def _as_markdown_image(self, path: str, *, alt='', id=None, classes=None, keyval=None):
+        return f'![{alt}]({path}){self._as_markdown_attr(id, classes, keyval)}'
 
 
     def update_parent_node(self):

@@ -296,7 +296,7 @@ class Session(CodeCollection):
             else:
                 msg = 'Final code chunk cannot have "complete" value "false"'
                 last_cc.errors.append(message.SourceError(msg))
-        if self.status.has_errors:
+        if self.status.prevent_exec:
             # Hashes and line numbers are only needed if code will indeed be
             # executed.  It is impossible to determine these in the case of
             # errors like copy errors which leave code for one or more chunks

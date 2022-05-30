@@ -48,6 +48,7 @@ class CodeProcessor(object):
                  origin_paths_for_cache: Optional[List[pathlib.Path]],
                  code_defaults: Optional[Dict],
                  session_defaults: Optional[Dict],
+                 only_code_output: bool,
                  progress: Progress):
         self.code_chunks = code_chunks
         self.cross_origin_sessions = cross_origin_sessions
@@ -62,6 +63,7 @@ class CodeProcessor(object):
             self._origin_paths_for_cache_as_strings = [p.as_posix() for p in origin_paths_for_cache]
         self.code_defaults = code_defaults
         self.session_defaults = session_defaults
+        self._only_code_output = only_code_output
         self._progress = progress
 
         self._old_cache_index: Optional[Dict] = None
@@ -90,7 +92,7 @@ class CodeProcessor(object):
         if any(s.status.prevent_exec for s in self._sessions.values()):
             code ^= 0b00000100
         if (any(s.status.has_errors and not s.status.prevent_exec for s in self._sessions.values()) or
-                any(s.status.has_errors and not s.status.prevent_exec for s in self._sources.values())):
+                any(s.status.has_errors for s in self._sources.values())):
             code ^= 0b00001000
         if any(s.status.has_warnings for s in self._sessions.values()):
             code ^= 0b00010000
@@ -110,6 +112,9 @@ class CodeProcessor(object):
         self._resolve_code_copying()
         self._create_sessions_and_sources()
         self._prep_cache()
+        if self._only_code_output and self._cached_sessions:
+            # Resolve output copying as early as possible
+            self._resolve_output_copying(from_cache=True)
 
 
     def exec(self):
@@ -181,6 +186,7 @@ class CodeProcessor(object):
         '''
         Assign code chunk session/source keys.
         '''
+        placeholder_lang_num = 0
         for cc in self.code_chunks:
             if cc.execute:
                 if self.cross_origin_sessions:
@@ -193,6 +199,9 @@ class CodeProcessor(object):
                 else:
                     key = CodeKey(cc.options['lang'], cc.options['source'], 'source', cc.origin_name)
             cc.key = key
+            if cc.options['inherited_lang']:
+                cc.options['placeholder_lang'] = f'{placeholder_lang_num}_placeholder'
+                placeholder_lang_num += 1
 
 
     def _index_named_code_chunks(self):
@@ -292,7 +301,7 @@ class CodeProcessor(object):
             unresolved_chunks = still_unresolved_chunks
             still_unresolved_chunks = []
 
-    def _resolve_output_copying(self):
+    def _resolve_output_copying(self, *, from_cache: bool=False):
         '''
         For code chunks with copying, handle the output copying.  The output
         copying for commands like "paste" must be handled after code is
@@ -303,11 +312,11 @@ class CodeProcessor(object):
         # dependencies; that's already been handled in
         # `_resolve_code_copying()`.  Still need to check for errors that
         # prevent copying, since there can be runtime source errors or other
-        # errors related to output.  Code chunks with `.has_output == True`
-        # are copying code-only code chunks and thus have no output for
-        # copying.
+        # errors related to output.  Code chunks with
+        # `.needs_to_copy == False` are copying code-only code chunks and thus
+        # have no output for copying.
         unresolved_chunks = [cc for cc in self.code_chunks
-                             if cc.command == 'paste' and not cc.errors.prevent_exec and not cc.has_output]
+                             if cc.command == 'paste' and not cc.errors.prevent_exec and cc.needs_to_copy]
         still_unresolved_chunks = []
         while True:
             for cc in unresolved_chunks:
@@ -322,11 +331,13 @@ class CodeProcessor(object):
                     traceback = '\n'.join(traceback_list)
                     msg = f'Code chunk(s) have error(s) that prevent copying:\n{traceback}'
                     cc.errors.append(message.SourceError(msg))
-                elif any(not copied_cc.has_output for copied_cc in cc.copy_chunks):
+                    self._progress.source_chunk_complete(cc.source, chunk=cc)
+                elif any(copied_cc.needs_to_copy for copied_cc in cc.copy_chunks):
                     still_unresolved_chunks.append(cc)
                 else:
                     cc.copy_output()
-            if not still_unresolved_chunks:
+                    self._progress.source_chunk_complete(cc.source, chunk=cc)
+            if not still_unresolved_chunks or (from_cache and len(unresolved_chunks) == len(still_unresolved_chunks)):
                 break
             unresolved_chunks = still_unresolved_chunks
             still_unresolved_chunks = []
@@ -347,6 +358,9 @@ class CodeProcessor(object):
                 self._session_hash_root_sets[session.hash_root].add(session)
         for source in self._sources.values():
             source.finalize()
+            for cc in source.code_chunks:
+                if not cc.needs_to_copy or cc.errors.prevent_exec:
+                    self._progress.source_chunk_complete(cc.source, chunk=cc)
         self._progress.register_sessions(self._sessions.values())
         self._progress.register_sources(self._sources.values())
 

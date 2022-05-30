@@ -256,7 +256,7 @@ class SessionSubprocess(object):
         output_str = self._decode(output, output_type=output_type, code_chunk=code_chunk)
         if output_type == 'stderr':
             output_str = self._sync_stderr_or_compile_output(output_str, code_chunk=code_chunk)
-        getattr(self.progress, f'chunk_{output_type}')(self.session, chunk=code_chunk, output=output_str)
+        getattr(self.progress, f'session_chunk_{output_type}')(self.session, chunk=code_chunk, output=output_str)
         getattr(code_chunk, f'{output_type}_lines').extend(util.splitlines_lf(output_str))
 
     def _run_line_number_to_origin(self, run_line_number: int) -> CodeLineOrigin | tuple[None, None]:
@@ -395,7 +395,7 @@ class SessionSubprocess(object):
     async def _sync_chunk_start_delims(self, code_chunk: CodeChunk):
         self._sync_chunk_start_delims_state[code_chunk.index] += 1
         if self._sync_chunk_start_delims_state[code_chunk.index] == 2:
-            self.progress.chunk_start(self.session, chunk=code_chunk)
+            self.progress.session_chunk_start(self.session, chunk=code_chunk)
             return
         self._sync_chunk_start_delims_waiting += 1
         while self._sync_chunk_start_delims_state[code_chunk.index] < 2:
@@ -413,7 +413,7 @@ class SessionSubprocess(object):
     async def _sync_chunk_end_delims(self, code_chunk: CodeChunk):
         self._sync_chunk_end_delims_state[code_chunk.index] += 1
         if self._sync_chunk_end_delims_state[code_chunk.index] == 2:
-            self.progress.chunk_end(self.session, chunk=code_chunk)
+            self.progress.session_chunk_end(self.session, chunk=code_chunk)
             return
         self._sync_chunk_end_delims_waiting += 1
         while self._sync_chunk_end_delims_state[code_chunk.index] < 2:

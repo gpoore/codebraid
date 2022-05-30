@@ -298,6 +298,7 @@ class Options(dict):
         code_chunk = self.code_chunk
         custom_options = self.custom_options
         if self['lang'] is None:
+            self['inherited_lang'] = True
             self['lang'] = code_chunk.copy_chunks[0].options['lang']
         if code_chunk.inline:
             if code_chunk.command == 'paste' and 'show' not in custom_options:
@@ -335,6 +336,7 @@ class Options(dict):
     _default_inline_options = {'complete': True,
                                'example': False,
                                'lang': None,
+                               'inherited_lang': False,
                                'outside_main': False}
     _default_block_options = _default_inline_options.copy()
     _default_block_options.update({'code_first_number': 'next',
@@ -814,9 +816,9 @@ class CodeChunk(object):
         if command == 'paste':
             if 'copy' not in custom_options:
                 self.errors.append(message.SourceError('Command "paste" cannot be used without specifying a target via "copy"'))
-            self.has_output = False
+            self.needs_to_copy = True
         else:
-            self.has_output = True  # Whether need output from copying
+            self.needs_to_copy = False
         if 'copy' in self.options:
             self.copy_chunks = []
 
@@ -878,6 +880,18 @@ class CodeChunk(object):
         return code
 
 
+    @property
+    def attr_hash(self):
+        raise NotImplementedError
+
+    @property
+    def code_hash(self):
+        raise NotImplementedError
+
+    def only_code_output(self, format):
+        raise NotImplementedError
+
+
     def finalize_after_copy(self):
         '''
         Finalize options.  This can be redefined by subclasses so that they
@@ -926,7 +940,7 @@ class CodeChunk(object):
         if self.command == 'paste':
             if all(cc.command == 'code' for cc in copy_chunks):
                 # When possible, simplify the copying resolution process
-                self.has_output = True
+                self.needs_to_copy = False
         self.code_start_line_number = copy_chunks[0].code_start_line_number
 
 
@@ -983,8 +997,16 @@ class CodeChunk(object):
             self.expr_lines = copy_chunks[0].expr_lines
         self.stdout_start_line_number = copy_chunks[0].stdout_start_line_number
         self.stderr_start_line_number = copy_chunks[0].stderr_start_line_number
-        self.has_output = True
+        self.needs_to_copy = False
 
+
+    @property
+    def as_markup_lines(self):
+        raise NotImplementedError
+
+    @property
+    def as_example_markup_lines(self):
+        raise NotImplementedError
 
     def layout_output(self, output_type, output_format, lines=None):
         '''

@@ -36,6 +36,8 @@ class Progress(object):
     '''
     def __init__(self, only_code_output: Optional[str]):
         self._only_code_output = only_code_output
+        if only_code_output:
+            self._only_code_output_first_chunk_cache: dict[tuple, dict] = {}
 
         self._last_error_counts: Dict[CodeKey, int] = {}
         self._error_count: int = 0
@@ -325,8 +327,26 @@ class Progress(object):
         self.term.stream.flush()
 
 
-    def _print_code_output(self, session: Session, *, chunk: CodeChunk):
-        pass
+    def _print_code_output(self, code_collection: CodeCollection, *, chunk: CodeChunk, check_first_chunk=False):
+        type = code_collection.type
+        lang = chunk.options.get('placeholder_lang', chunk.options['lang'] or '')
+        name = code_collection.name or ''
+        data = {
+            'command': 'output',
+            'key': f'{type}>{lang}>{name}',
+            'inline': chunk.inline,
+            'index': f'{chunk.index+1}/{len(code_collection.code_chunks)}',
+            'attr_hash': chunk.attr_hash,
+            'code_hash': chunk.code_hash,
+            'output': chunk.only_code_output(self._only_code_output),
+        }
+        if check_first_chunk:
+            old_data = self._only_code_output_first_chunk_cache[code_collection.key]
+            if old_data == data:
+                return
+        elif chunk.index == 0:
+            self._only_code_output_first_chunk_cache[code_collection.key] = data
+        print(json.dumps(data), flush=True)
 
 
     def _update_message_count(self, code_collection: CodeCollection):
@@ -410,6 +430,11 @@ class Progress(object):
         self._in_live_output = False
 
     def source_finished(self, source: Source):
+        # No need for conditional ._only_code_output processing here for
+        # missed chunks, since unlike the code execution case, source chunks
+        # always update their status when complete.
+        if self._only_code_output:
+            self._print_code_output(source, chunk=source.code_chunks[0], check_first_chunk=True)
         self._finished(source)
 
     def session_finished(self, session: Session):
@@ -418,38 +443,46 @@ class Progress(object):
             # be off because per-chunk progress wasn't registered
             delta = len(session.code_chunks) - self._session_exec_last_completed_chunk_count[session.key]
             self._session_exec_completed_chunks_count += delta
+        if self._only_code_output:
+            for index in range(self._session_exec_last_completed_chunk_count[session.key], len(session.code_chunks)):
+                self._print_code_output(session, chunk=session.code_chunks[index])
+            self._print_code_output(session, chunk=session.code_chunks[0], check_first_chunk=True)
         self._finished(session)
 
+    def source_chunk_complete(self, source: Source, *, chunk: CodeChunk):
+        if self._only_code_output:
+            self._print_code_output(source, chunk=chunk)
 
-    def chunk_start(self, session: Session, *, chunk: CodeChunk):
+    def session_chunk_start(self, session: Session, *, chunk: CodeChunk):
         if session.live_output:
             self._print_live_heading(session, chunk=chunk, notification_type='CODE CHUNK', title='LIVE OUTPUT',
                                      columns=self.term.columns(), flush=True, clearline=self.term.isatty)
         self._update_progress()
 
-    def chunk_end(self, session: Session, *, chunk: CodeChunk):
+    def session_chunk_end(self, session: Session, *, chunk: CodeChunk):
         self._update_message_count(session)
-        self._session_exec_completed_chunks_count += 1 + (chunk.output_index - chunk.index)
-        self._session_exec_last_completed_chunk_count[session.key] = chunk.output_index + 1
+        if self._only_code_output:
+            for index in range(self._session_exec_last_completed_chunk_count[session.key], chunk.index+1):
+                self._print_code_output(session, chunk=session.code_chunks[index])
+        self._session_exec_completed_chunks_count += chunk.index + 1 - self._session_exec_last_completed_chunk_count[session.key]
+        self._session_exec_last_completed_chunk_count[session.key] = chunk.index + 1
         if session.live_output:
             self._print_live_closing(session, chunk=chunk, notification_type='CODE CHUNK', title='LIVE OUTPUT',
                                      columns=self.term.columns(), flush=True, clearline=self.term.isatty)
             self._last_live_output = None
             self._last_live_output_stream = None
-        if self._only_code_output:
-            self._print_code_output(session, chunk=chunk)
         self._update_progress()
 
 
-    def chunk_stdout(self, session: Session, *, chunk: Optional[CodeChunk], output: str):
+    def session_chunk_stdout(self, session: Session, *, chunk: Optional[CodeChunk], output: str):
         if session.live_output:
             self._print_live_output(output, stream='stdout')
 
-    def chunk_stderr(self, session: Session, *, chunk: Optional[CodeChunk], output: str):
+    def session_chunk_stderr(self, session: Session, *, chunk: Optional[CodeChunk], output: str):
         if session.live_output:
             self._print_live_output(output, stream='stderr', fmter=self.term.fmt_error)
 
-    def chunk_rich_output_text(self, session: Session, *, chunk: CodeChunk, output: str):
+    def session_chunk_rich_output_text(self, session: Session, *, chunk: CodeChunk, output: str):
         if session.live_output:
             output_lines = util.splitlines_lf(output)
             columns = self.term.columns()
@@ -460,19 +493,19 @@ class Progress(object):
             output_list.append('')
             self._print_live_output('\n'.join(output_list), stream='rich_output', fmter=self.term.fmt_notify)
 
-    def chunk_rich_output_files(self, session: Session, *, chunk: CodeChunk, files: Iterable[str]):
+    def session_chunk_rich_output_files(self, session: Session, *, chunk: CodeChunk, files: Iterable[str]):
         if session.live_output:
             output_list = ['RICH OUTPUT FILES:\n']
             for file in files:
                 output_list.append(f'  * {file}\n')
             self._print_live_output(''.join(output_list), stream='rich_output_files', fmter=self.term.fmt_notify)
 
-    def chunk_expr(self, session: Session, *, chunk: CodeChunk, output: str):
+    def session_chunk_expr(self, session: Session, *, chunk: CodeChunk, output: str):
         if session.live_output:
             output_list = ['EXPR:']
             output_list.extend(self._first_textwrappers[self.term.columns()].wrap(output))
             self._print_live_output('\n'.join(output_list), stream='expr', fmter=self.term.fmt_notify)
 
-    def chunk_repl(self, session: Session, *, chunk: CodeChunk, output: str):
+    def session_chunk_repl(self, session: Session, *, chunk: CodeChunk, output: str):
         if session.live_output:
             self._print_live_output(output, stream='repl')

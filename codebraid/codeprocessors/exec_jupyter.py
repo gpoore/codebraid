@@ -135,11 +135,11 @@ async def exec(session: Session, *, cache_key_path: pathlib.Path, progress: Prog
                 incomplete_cc_stack.append(cc)
                 continue
             if not incomplete_cc_stack:
-                progress.chunk_start(session, chunk=cc)
+                progress.session_chunk_start(session, chunk=cc)
                 cc_jupyter_id = kernel_client.execute(cc.code_str)
             else:
                 incomplete_cc_stack.append(cc)
-                progress.chunk_start(session, chunk=incomplete_cc_stack[0])
+                progress.session_chunk_start(session, chunk=incomplete_cc_stack[0])
                 cc_jupyter_id = kernel_client.execute('\n'.join(icc.code_str for icc in incomplete_cc_stack))
             deadline = time.monotonic() + session.jupyter_timeout
             while True:
@@ -178,16 +178,16 @@ async def exec(session: Session, *, cache_key_path: pathlib.Path, progress: Prog
                     cc.rich_output.append(rich_output)
                     rich_output_text = kernel_msg_content['data'].get('text/plain')
                     if rich_output_text:
-                        progress.chunk_rich_output_text(session, chunk=cc, output=rich_output_text)
+                        progress.session_chunk_rich_output_text(session, chunk=cc, output=rich_output_text)
                     if rich_output_files:
-                        progress.chunk_rich_output_files(session, chunk=cc, files=rich_output_files.values())
+                        progress.session_chunk_rich_output_files(session, chunk=cc, files=rich_output_files.values())
                 elif kernel_msg_type == 'stream':
                     if kernel_msg_content['name'] == 'stdout':
                         cc.stdout_lines.extend(util.splitlines_lf(kernel_msg_content['text']))
-                        progress.chunk_stdout(session, chunk=cc, output=kernel_msg_content['text'])
+                        progress.session_chunk_stdout(session, chunk=cc, output=kernel_msg_content['text'])
                     elif kernel_msg_content['name'] == 'stderr':
                         cc.stderr_lines.extend(util.splitlines_lf(_home_path_re.sub('~', kernel_msg_content['text'])))
-                        progress.chunk_stderr(session, chunk=cc, output=kernel_msg_content['text'])
+                        progress.session_chunk_stderr(session, chunk=cc, output=kernel_msg_content['text'])
                 elif kernel_msg_type == 'error':
                     kernel_msg_text = _ansi_color_escape_code_re.sub('', '\n'.join(kernel_msg_content['traceback']))
                     kernel_msg_text = _home_path_re.sub('~', kernel_msg_text)
@@ -198,13 +198,11 @@ async def exec(session: Session, *, cache_key_path: pathlib.Path, progress: Prog
                     cc.stderr_lines.extend(util.splitlines_lf(kernel_msg_text))
                     cc.errors.append(message.StderrRunError(cc.stderr_lines))
                     kernel_has_errors = True
-                    progress.chunk_stderr(session, chunk=cc, output=kernel_msg_text)
+                    progress.session_chunk_stderr(session, chunk=cc, output=kernel_msg_text)
             if not incomplete_cc_stack:
-                progress.chunk_end(session, chunk=cc)
+                progress.session_chunk_end(session, chunk=cc)
             else:
-                # `progress` only takes first chunk but accounts for all
-                # chunks that are grouped together
-                progress.chunk_end(session, chunk=incomplete_cc_stack[0])
+                progress.session_chunk_end(session, chunk=incomplete_cc_stack[-1])
                 incomplete_cc_stack = []
     finally:
         kernel_client.stop_channels()
