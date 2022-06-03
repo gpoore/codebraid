@@ -12,7 +12,6 @@ from __future__ import annotations
 
 
 import argparse
-import codecs
 import io
 import pathlib
 import sys
@@ -128,7 +127,7 @@ def main():
 
 def pandoc(args):
     # Stay consistent with Pandoc's requirement of UTF-8
-    sys.stdin = codecs.getreader('utf_8_sig')(sys.stdin.buffer, 'strict')
+    sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf_8_sig')
 
     other_pandoc_args = []
     if vars(args).get('--defaults') is not None:

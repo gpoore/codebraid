@@ -216,6 +216,22 @@ needed in Markdown documents, this can be accomplished by piping the output of
 
 * `--no-execute` — Disables code execution.  Only use available cached output.
 
+* `--only-code-output`={format} — Write code output in JSON Lines format to
+  stdout as soon as it is available, and do not create a document.
+
+  This is intended for use with Codebraid Preview, so that document previews
+  can be updated during code execution.  Currently, the only supported format
+  is `codebraid_preview`.  One JSON data object followed by a newline is
+  written to stdout for each code chunk.  In some cases, the data for a chunk
+  will be resent later if the data relevant for a chunk changes (for example,
+  if code execution fails after the first chunk runs, but in such a way that
+  an error message needs to be attached to the first chunk).  Data for a chunk
+  is sent as soon as it is available from code processing, from cache, or from
+  code execution (as soon as the chunk completes, typically before the session
+  completes).  Additional JSON data may be sent to provide tracking of code
+  execution progress or information such as metadata.  The JSON data provided
+  for format `codebraid_preview` may change between minor versions.
+
 
 ## Caching
 

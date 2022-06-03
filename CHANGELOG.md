@@ -3,6 +3,11 @@
 
 ## v0.7.0 (dev)
 
+* Added `--only-code-output` option, which writes code output in JSON Lines
+  format to stdout as soon as it is available, and does not create a document.
+  This is intended for use with Codebraid Preview, so that document previews
+  can be updated during code execution.
+
 * Added command-line option `--no-execute` that disables code execution and
   only uses available cached output.
 

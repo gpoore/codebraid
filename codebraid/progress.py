@@ -15,6 +15,7 @@ import asyncio
 import collections
 import datetime
 import json
+import sys
 import time
 import textwrap
 from typing import Callable, Deque, Dict, Iterable, List, Optional
@@ -328,14 +329,16 @@ class Progress(object):
 
 
     def _print_code_output(self, code_collection: CodeCollection, *, chunk: CodeChunk, check_first_chunk=False):
-        type = code_collection.type
-        lang = chunk.options.get('placeholder_lang', chunk.options['lang'] or '')
-        name = code_collection.name or ''
         data = {
-            'command': 'output',
-            'key': f'{type}>{lang}>{name}',
+            'message_type': 'output',
+            'origin': chunk.origin_name or '',
+            'code_collection': {
+                'type': code_collection.type,
+                'lang': chunk.options.get('placeholder_lang', chunk.options['lang'] or ''),
+                'name': code_collection.name or '',
+            },
             'inline': chunk.inline,
-            'index': f'{chunk.index+1}/{len(code_collection.code_chunks)}',
+            'number': f'{chunk.index+1}/{len(code_collection.code_chunks)}',
             'attr_hash': chunk.attr_hash,
             'code_hash': chunk.code_hash,
             'output': chunk.only_code_output(self._only_code_output),
@@ -346,7 +349,10 @@ class Progress(object):
                 return
         elif chunk.index == 0:
             self._only_code_output_first_chunk_cache[code_collection.key] = data
-        print(json.dumps(data), flush=True)
+        # All data I/O must be UTF-8, following Pandoc
+        sys.stdout.buffer.write(json.dumps(data).encode('utf8'))
+        sys.stdout.buffer.write(b'\n')
+        sys.stdout.buffer.flush()
 
 
     def _update_message_count(self, code_collection: CodeCollection):

@@ -344,9 +344,12 @@ class PandocCodeChunk(CodeChunk):
     def attr_hash(self):
         attr_list = []
         attr_list.append('{')
-        attr_list.append(f'#{self.node_id}')
+        if self.node_id:
+            attr_list.append(f'#{self.node_id}')
         attr_list.extend(f'.{c}' for c in self.node_classes)
-        attr_list.extend('"{0}"="{1}"'.format(k.replace('"', '\\"'), v.replace('"', '\\"')) for k, v in self.node_kvpairs)
+        for k, v in self.node_kvpairs:
+            v = v.replace('\\', '\\\\').replace('"', '\\"')
+            attr_list.extend(f'{k}="{v}"')
         attr_list.append('}')
         attr_str = ' '.join(attr_list)
         hasher = hashlib.sha1()
@@ -760,7 +763,7 @@ class PandocCodeChunk(CodeChunk):
     def _as_markdown_inline_code(self, text: str, *, id=None, classes=None, keyval=None, raw=None, protect_start=True):
         md_list = []
         if protect_start:
-            md_list.append('[]{.codebraid-protect-inline-start}')
+            md_list.append('[]{.codebraid-protect-inline=true}')
         delim = '`'
         while delim in text:
             delim += '`'
