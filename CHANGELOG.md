@@ -1,7 +1,7 @@
 # Change Log
 
 
-## v0.7.0 (dev)
+## v0.7.0 (2022-06-04)
 
 * Added `--only-code-output` option, which writes code output in JSON Lines
   format to stdout as soon as it is available, and does not create a document.
