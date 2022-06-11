@@ -41,7 +41,7 @@ def random_ascii_lower_alpha(n):
     return ''.join(chr(num) for num in (random.randrange(97, 122+1) for _ in range(n)))
 
 
-def splitlines_lf(string):
+def splitlines_lf(string, *, last_lf_stripped=False):
     r'''
     Like `str.splitlines()`, but only splits on `\n`.  This should be used
     on strings that have had `\r\n?` normalized to `\n`.  It avoids the
@@ -49,6 +49,6 @@ def splitlines_lf(string):
     like `\v` and `\f`.
     '''
     lines = string.split('\n')
-    if string == '' or string[-1] == '\n':
+    if not last_lf_stripped and (string == '' or string[-1] == '\n'):
         lines.pop()
     return lines

@@ -349,7 +349,7 @@ class PandocCodeChunk(CodeChunk):
         attr_list.extend(f'.{c}' for c in self.node_classes)
         for k, v in self.node_kvpairs:
             v = v.replace('\\', '\\\\').replace('"', '\\"')
-            attr_list.extend(f'{k}="{v}"')
+            attr_list.append(f'{k}="{v}"')
         attr_list.append('}')
         attr_str = ' '.join(attr_list)
         hasher = hashlib.sha1()

@@ -1,6 +1,15 @@
 # Change Log
 
 
+## v0.8.0 (dev)
+
+* Fixed a bug that stripped a trailing empty line from code blocks.
+
+* Fixed a bug that caused an incorrect `attr_hash` in `--only-code-output`
+  when a code chunk has key-value attributes.
+
+
+
 ## v0.7.0 (2022-06-04)
 
 * Added `--only-code-output` option, which writes code output in JSON Lines

@@ -783,7 +783,7 @@ class CodeChunk(object):
         if isinstance(code, list):
             code_lines = code
         else:
-            code_lines = util.splitlines_lf(code) or ['']
+            code_lines = util.splitlines_lf(code, last_lf_stripped=True) or ['']
         if 'copy' not in custom_options and 'include' not in custom_options:
             if inline and len(code_lines) > 1:
                 self.errors.append(message.SourceError('Inline code cannot be longer that 1 line'))
