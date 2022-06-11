@@ -396,8 +396,8 @@ session is in use).
   code output is line buffered or code manually flushes stdout and stderr.
   For example, with Python you may want to use print functions like
   `print("text", flush=True)`.  Another option is to use Python in
-  line-buffered mode by setting `executable="python -u"` or
-  `executable="python3 -u"` in the first code chunk of a session.
+  line-buffered mode by setting `executable_opts="-u"` in the first code chunk
+  of a session.
 
   With Jupyter kernels, the output for a code chunk will be delayed until all
   code in the chunk has finished executing.
