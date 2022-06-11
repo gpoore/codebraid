@@ -1,7 +1,7 @@
 # Change Log
 
 
-## v0.8.0 (dev)
+## v0.8.0 (2022-06-11)
 
 * Improved process for setting the default Python executable used by the
   built-in code execution system.  For `.python` code chunks in a session that
