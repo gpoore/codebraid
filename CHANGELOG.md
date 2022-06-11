@@ -3,6 +3,16 @@
 
 ## v0.8.0 (dev)
 
+* Improved process for setting the default Python executable used by the
+  built-in code execution system.  For `.python` code chunks in a session that
+  does not set `executable` to a custom value, Python's `sys.executable` is
+  now used as the default Python executable if it is set and if it is
+  equivalent to either `python` or `python3` on PATH.  This will typically
+  guarantee that the Python interpreter running `codebraid` is identical to
+  the default for built-in code execution.  The default Python executable is
+  now set using an absolute path when possible, to avoid name resolution
+  issues under Windows with Python environments.
+
 * Fixed a bug that stripped a trailing empty line from code blocks.
 
 * Fixed a bug that caused an incorrect `attr_hash` in `--only-code-output`

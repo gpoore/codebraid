@@ -20,6 +20,7 @@ import re
 import shlex
 import shutil
 import string
+import sys
 from typing import Optional
 
 import bespon
@@ -118,18 +119,45 @@ class Language(object):
             raw_executable = definition.pop('executable', None)
             if raw_executable is None:
                 if name_root == 'python':
-                    # Windows can have "python3", and Arch Linux uses
-                    # "python", so use "python3" if it exists and otherwise
-                    # "python"
-                    which_python3 = shutil.which('python3')
-                    if which_python3:
-                        if (platform.system() == 'Windows' and
-                                'AppData/Local/Microsoft/WindowsApps' in pathlib.Path(which_python3).as_posix()):
-                            executable = 'python'
-                        else:
-                            executable = 'python3'
+                    # Use `sys.executable` if it is on PATH as either `python`
+                    # or `python3`.  Otherwise, Windows can have `python3`,
+                    # and Arch Linux uses `python`, so use `python3` if it
+                    # exists and otherwise `python`.  Set `executable` to
+                    # absolute path when possible to avoid issues like
+                    # https://github.com/python/cpython/issues/83086.
+                    executable = None
+                    if sys.executable:
+                        sys_executable_path = pathlib.Path(sys.executable)
                     else:
-                        executable = 'python'
+                        sys_executable_path = None
+                    which_python = shutil.which('python')
+                    if which_python:
+                        which_python_path = pathlib.Path(which_python)
+                    else:
+                        which_python_path = None
+                    if sys_executable_path is not None and which_python_path is not None:
+                        if sys_executable_path == which_python_path or sys_executable_path == which_python_path.resolve():
+                            executable = which_python_path.as_posix()
+                    if not executable:
+                        which_python3 = shutil.which('python3')
+                        if which_python3:
+                            which_python3_path = pathlib.Path(which_python3)
+                            if sys_executable_path is not None and which_python3_path is not None:
+                                if sys_executable_path == which_python3_path or sys_executable_path == which_python3_path.resolve():
+                                    executable = which_python3_path.as_posix()
+                            if not executable:
+                                if (platform.system() == 'Windows' and
+                                        'AppData/Local/Microsoft/WindowsApps' in which_python3_path.as_posix()):
+                                    if which_python_path:
+                                        executable = which_python_path.as_posix()
+                                    else:
+                                        executable = 'python'
+                                else:
+                                    executable = which_python3_path.as_posix()
+                        elif which_python_path:
+                            executable = which_python_path.as_posix()
+                        else:
+                            executable = 'python'
                 else:
                     executable = name_root
             elif isinstance(raw_executable, str):
