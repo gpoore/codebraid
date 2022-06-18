@@ -520,13 +520,15 @@ class CodeProcessor(object):
         output is preserved if at all possible in the event of an unexpected
         exit.
         '''
-        if self.no_cache:
+        if self.no_cache or update_session.status.prevent_caching:
             return
         hash_root_cache = {
             'codebraid_version': codebraid_version,
             'cache': {},
         }
         for session in self._session_hash_root_sets[update_session.hash_root]:
+            if session.status.prevent_caching:
+                continue
             session_code_chunks_cache = {}
             for index, chunk in enumerate(session.code_chunks):
                 chunk_cache = {}

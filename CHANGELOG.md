@@ -3,6 +3,13 @@
 
 ## v0.9.0 (dev)
 
+* Fixed a caching bug.  Errors due to missing executables (built-in code
+  execution system), missing Jupyter kernels, ambiguous Jupyter kernel names,
+  and some Jupyter configuration issues were only reported during an initial
+  Codebraid run.  During subsequent runs with unmodified code and settings,
+  errors were not reported and there was no attempt to re-execute sessions to
+  check for newly available executables/Jupyter kernels/libraries.
+
 * When a Jupyter kernel name is ambiguous (for example, `python` on a machine
   with multiple Python kernels), the error message now lists all potentially
   compatible kernels instead of just stating that a kernel could not be found.
