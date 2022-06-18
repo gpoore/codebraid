@@ -1,6 +1,14 @@
 # Change Log
 
 
+## v0.9.0 (dev)
+
+* When a Jupyter kernel name is ambiguous (for example, `python` on a machine
+  with multiple Python kernels), the error message now lists all potentially
+  compatible kernels instead of just stating that a kernel could not be found.
+
+
+
 ## v0.8.0 (2022-06-11)
 
 * Improved process for setting the default Python executable used by the

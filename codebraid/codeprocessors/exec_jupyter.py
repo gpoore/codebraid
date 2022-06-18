@@ -12,6 +12,7 @@ from __future__ import annotations
 
 
 import base64
+import collections
 import queue
 import re
 import time
@@ -30,17 +31,17 @@ _ansi_color_escape_code_re = re.compile('\x1b.*?m')
 
 
 kernel_name_aliases: dict[str, str] = {}
+kernel_name_collisions: dict[str, set[str]] = collections.defaultdict(set)
 if jupyter_client is not None:
-    duplicates = set()
     for k, v in jupyter_client.kernelspec.KernelSpecManager().get_all_specs().items():
         for alias in [k.lower(), v['spec']['display_name'].lower(), v['spec']['language'].lower()]:
             if alias in kernel_name_aliases:
-                duplicates.add(alias)
+                kernel_name_collisions[alias].add(k)
             else:
                 kernel_name_aliases[alias] = k
-    for k in duplicates:
-        del kernel_name_aliases[k]
-    del duplicates
+    for alias in kernel_name_collisions:
+        kernel_name_collisions[alias].add(kernel_name_aliases[alias])
+        del kernel_name_aliases[alias]
 
 
 mime_type_to_file_extension_map: dict[str, str] = {
@@ -83,7 +84,13 @@ async def exec(session: Session, *, cache_key_path: pathlib.Path, progress: Prog
 
     kernel_name = kernel_name_aliases.get(session.jupyter_kernel.lower())
     if kernel_name is None:
-        msg = f'No Jupyter kernel was found for "{session.jupyter_kernel}"'
+        if session.jupyter_kernel in kernel_name_collisions:
+            msg = (
+                f'''Jupyter kernel "{session.jupyter_kernel}" is ambiguous; '''
+                f'''could refer to {', '.join(f'"{k}"' for k in kernel_name_collisions[session.jupyter_kernel])}'''
+            )
+        else:
+            msg = f'No Jupyter kernel was found for "{session.jupyter_kernel}"'
         session.errors.append(message.SysConfigError(msg))
         progress.session_exec_stage_end(session, stage='run')
         progress.session_finished(session)
