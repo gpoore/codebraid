@@ -50,6 +50,7 @@ class CodeCollection(object):
         self.code_chunks: List[CodeChunk] = []
         self._code_start_line_number: int = 1
         self.code_chunk_origins: set[str] = set()
+        self.code_chunk_placeholder_langs = set()
 
         self.status: message.CodeStatus = message.CodeStatus()
         self.errors: message.ErrorMessageList = message.ErrorMessageList(status=self.status)
@@ -105,6 +106,8 @@ class Source(CodeCollection):
             code_chunk.errors.append(message.SourceError(msg))
         self.code_chunks.append(code_chunk)
         self.code_chunk_origins.add(code_chunk.origin_name)
+        if 'placeholder_lang' in code_chunk.options:
+            self.code_chunk_placeholder_langs.add(code_chunk.options['placeholder_lang'])
 
 
     def finalize(self):
@@ -115,7 +118,7 @@ class Source(CodeCollection):
             return
         for cc in self.code_chunks:
             if not cc.inline:
-                cc.code_start_line_number = self._code_start_line_number
+                cc.finalize_line_numbers(self._code_start_line_number)
                 # Only named sources have sequential line numbering between
                 # code chunks
                 if self.name is not None:
@@ -239,6 +242,8 @@ class Session(CodeCollection):
             code_chunk.errors.append(message.SourceError(msg))
         self.code_chunks.append(code_chunk)
         self.code_chunk_origins.add(code_chunk.origin_name)
+        if 'placeholder_lang' in code_chunk.options:
+            self.code_chunk_placeholder_langs.add(code_chunk.options['placeholder_lang'])
 
 
     def finalize(self):
@@ -337,7 +342,7 @@ class Session(CodeCollection):
         hasher.update(hasher.digest())
         for cc in self.code_chunks:
             if not cc.inline:
-                cc.code_start_line_number = self._code_start_line_number
+                cc.finalize_line_numbers(self._code_start_line_number)
                 self._code_start_line_number += len(cc.code_lines)
             # Hash needs to depend on some code chunk options.  `command`
             # determines some wrapper code.  `inline` affects line count

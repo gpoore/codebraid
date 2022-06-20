@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import datetime
+import itertools
 import json
 import sys
 import time
@@ -38,7 +39,7 @@ class Progress(object):
     def __init__(self, only_code_output: Optional[str]):
         self._only_code_output = only_code_output
         if only_code_output:
-            self._only_code_output_first_chunk_cache: dict[tuple, dict] = {}
+            self._only_code_output_first_chunk_cache: dict[tuple, str] = {}
 
         self._last_error_counts: Dict[CodeKey, int] = {}
         self._error_count: int = 0
@@ -77,20 +78,36 @@ class Progress(object):
     )
 
 
-    def _register_codes(self, codes: Iterable[CodeCollection]):
-        for code in codes:
-            self._last_error_counts[code.key] = code.status.error_count
-            self._error_count += code.status.error_count
-            self._last_warning_counts[code.key] = code.status.warning_count
-            self._warning_count += code.status.warning_count
-
-    def register_sources(self, sources: Iterable[Source]):
-        self._register_codes(sources)
-
-    def register_sessions(self, sessions: Iterable[Session]):
-        self._register_codes(sessions)
+    def register_code_collections(self, *, sessions: Iterable[Session], sources: Iterable[Source]):
+        for code_collection in itertools.chain(sessions, sources):
+            self._last_error_counts[code_collection.key] = code_collection.status.error_count
+            self._error_count += code_collection.status.error_count
+            self._last_warning_counts[code_collection.key] = code_collection.status.warning_count
+            self._warning_count += code_collection.status.warning_count
         self._session_total_chunks_count = sum(len(s.code_chunks) for s in sessions)
         self._session_exec_chunks_count = self._session_total_chunks_count
+        if self._only_code_output:
+            code_collections_list = []
+            placeholder_langs_dict = {}
+            for code_collection in itertools.chain(sessions, sources):
+                code_collections_list.append({
+                    'type': code_collection.type,
+                    'lang': code_collection.lang or '',
+                    'name': code_collection.name or '',
+                    'origin_name': code_collection.origin_name or '',
+                    'length': len(code_collection.code_chunks),
+                })
+                for placeholder_lang in code_collection.code_chunk_placeholder_langs:
+                    placeholder_langs_dict[placeholder_lang] = code_collection.lang or ''
+            data = {
+                'message_type': 'index',
+                'code_collections': code_collections_list,
+                'placeholder_langs': placeholder_langs_dict
+            }
+            # All data I/O must be UTF-8, following Pandoc
+            sys.stdout.buffer.write(json.dumps(data).encode('utf8'))
+            sys.stdout.buffer.write(b'\n')
+            sys.stdout.buffer.flush()
 
 
     def _code_messages_to_summary_list(self, code_collection: CodeCollection, *, msg_type: str, columns: int) -> List[str]:
@@ -329,28 +346,35 @@ class Progress(object):
 
 
     def _print_code_output(self, code_collection: CodeCollection, *, chunk: CodeChunk, check_first_chunk=False):
+        if isinstance(code_collection, Session) and code_collection.did_exec:
+            exec_progress = f'{self._session_exec_completed_chunks_count}/{self._session_exec_chunks_count}'
+        else:
+            exec_progress = None
         data = {
             'message_type': 'output',
             'origin': chunk.origin_name or '',
             'code_collection': {
                 'type': code_collection.type,
-                'lang': chunk.options.get('placeholder_lang', chunk.options['lang'] or ''),
+                'lang': chunk.options['lang'] or '',
                 'name': code_collection.name or '',
+                'origin_name': code_collection.origin_name or '',
             },
             'inline': chunk.inline,
             'number': f'{chunk.index+1}/{len(code_collection.code_chunks)}',
+            'exec_progress': exec_progress,
             'attr_hash': chunk.attr_hash,
             'code_hash': chunk.code_hash,
             'output': chunk.only_code_output(self._only_code_output),
         }
+        data_str = json.dumps(data)
         if check_first_chunk:
-            old_data = self._only_code_output_first_chunk_cache[code_collection.key]
-            if old_data == data:
+            old_data_str = self._only_code_output_first_chunk_cache.get(code_collection.key)
+            if old_data_str == data_str:
                 return
         elif chunk.index == 0:
-            self._only_code_output_first_chunk_cache[code_collection.key] = data
+            self._only_code_output_first_chunk_cache[code_collection.key] = data_str
         # All data I/O must be UTF-8, following Pandoc
-        sys.stdout.buffer.write(json.dumps(data).encode('utf8'))
+        sys.stdout.buffer.write(data_str.encode('utf8'))
         sys.stdout.buffer.write(b'\n')
         sys.stdout.buffer.flush()
 
@@ -467,11 +491,12 @@ class Progress(object):
 
     def session_chunk_end(self, session: Session, *, chunk: CodeChunk):
         self._update_message_count(session)
-        if self._only_code_output:
-            for index in range(self._session_exec_last_completed_chunk_count[session.key], chunk.index+1):
-                self._print_code_output(session, chunk=session.code_chunks[index])
-        self._session_exec_completed_chunks_count += chunk.index + 1 - self._session_exec_last_completed_chunk_count[session.key]
+        old_session_exec_last_completed_chunk_count = self._session_exec_last_completed_chunk_count[session.key]
+        self._session_exec_completed_chunks_count += chunk.index + 1 - old_session_exec_last_completed_chunk_count
         self._session_exec_last_completed_chunk_count[session.key] = chunk.index + 1
+        if self._only_code_output:
+            for index in range(old_session_exec_last_completed_chunk_count, chunk.index+1):
+                self._print_code_output(session, chunk=session.code_chunks[index])
         if session.live_output:
             self._print_live_closing(session, chunk=chunk, notification_type='CODE CHUNK', title='LIVE OUTPUT',
                                      columns=self.term.columns(), flush=True, clearline=self.term.isatty)

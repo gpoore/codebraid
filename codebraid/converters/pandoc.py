@@ -340,6 +340,16 @@ class PandocCodeChunk(CodeChunk):
     _unquoted_kv_value_re = re.compile(r'[A-Za-z$_+\-][A-Za-z0-9$_+\-:]*')
 
 
+    def finalize_line_numbers(self, code_start_line_number):
+        super().finalize_line_numbers(code_start_line_number)
+        first_number = self.options['code_first_number']
+        if first_number == 'next':
+            first_number = str(self.code_start_line_number)
+        else:
+            first_number = str(first_number)
+        self.pandoc_kvpairs.append(['startFrom', first_number])
+
+
     @property
     def attr_hash(self):
         attr_list = []
@@ -415,15 +425,6 @@ class PandocCodeChunk(CodeChunk):
             else:
                 nodes.append({'t': 'CodeBlock', 'c': [['', error_class_list, []], '\n'.join(msgs_list)]})
             return nodes
-        if not self.inline and self.options['code_line_numbers']:
-            # Line numbers can't be precalculated since they are determined by
-            # how a session is assembled across potentially multiple sources
-            first_number = self.options['code_first_number']
-            if first_number == 'next':
-                first_number = str(self.code_start_line_number)
-            else:
-                first_number = str(first_number)
-            self.pandoc_kvpairs.append(['startFrom', first_number])
         t_code = 'Code' if self.inline else 'CodeBlock'
         t_raw = 'RawInline' if self.inline else 'RawBlock'
         unformatted_nodes = []
@@ -635,15 +636,6 @@ class PandocCodeChunk(CodeChunk):
             else:
                 output_list.append(self._as_markdown_block_code('\n'.join(msgs_list), classes=error_class_list))
             return output_list
-        if not self.inline and self.options['code_line_numbers']:
-            # Line numbers can't be precalculated since they are determined by
-            # how a session is assembled across potentially multiple sources
-            first_number = self.options['code_first_number']
-            if first_number == 'next':
-                first_number = str(self.code_start_line_number)
-            else:
-                first_number = str(first_number)
-            self.pandoc_kvpairs.append(['startFrom', first_number])
         for output, format in self.options['show'].items():
             if output in ('markup', 'copied_markup'):
                 output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline, classes=['markdown']))

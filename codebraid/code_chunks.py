@@ -880,6 +880,12 @@ class CodeChunk(object):
         return code
 
 
+    def finalize_line_numbers(self, code_start_line_number):
+        # Line numbers can't be precalculated since they are determined by
+        # how a session is assembled across potentially multiple sources
+        self.code_start_line_number = code_start_line_number
+
+
     @property
     def attr_hash(self):
         raise NotImplementedError
@@ -941,7 +947,6 @@ class CodeChunk(object):
             if all(cc.command == 'code' for cc in copy_chunks):
                 # When possible, simplify the copying resolution process
                 self.needs_to_copy = False
-        self.code_start_line_number = copy_chunks[0].code_start_line_number
 
 
     def copy_output(self):

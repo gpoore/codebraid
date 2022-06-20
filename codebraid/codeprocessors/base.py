@@ -200,7 +200,7 @@ class CodeProcessor(object):
                     key = CodeKey(cc.options['lang'], cc.options['source'], 'source', cc.origin_name)
             cc.key = key
             if cc.options['inherited_lang']:
-                cc.options['placeholder_lang'] = f'{placeholder_lang_num}_placeholder'
+                cc.options['placeholder_lang'] = f'{placeholder_lang_num}'
                 placeholder_lang_num += 1
 
 
@@ -361,8 +361,7 @@ class CodeProcessor(object):
             for cc in source.code_chunks:
                 if not cc.needs_to_copy or cc.errors.prevent_exec:
                     self._progress.source_chunk_complete(cc.source, chunk=cc)
-        self._progress.register_sessions(self._sessions.values())
-        self._progress.register_sources(self._sources.values())
+        self._progress.register_code_collections(sessions=self._sessions.values(), sources=self._sources.values())
 
 
     def _prep_cache(self):

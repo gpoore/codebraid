@@ -14,6 +14,20 @@
   with multiple Python kernels), the error message now lists all potentially
   compatible kernels instead of just stating that a kernel could not be found.
 
+* Improved `--only-code-output`.  It now sends an `index` message that lists
+  all code collections being processed and includes information about language
+  inheritance through `copy`.  Code chunk `output` messages now include
+  execution progress information for chunks being executed.  Fixed a bug that
+  could cause a `KeyError` for some sessions containing only a single code
+  chunk.  Fixed a bug that caused the first code chunk in a code collection to
+  be resent unnecessarily at the end of code collection processing.
+
+* Refactored line number calculations.  Fixed a bug that could produce
+  incorrect line numbers for code from `copy`.  Fixed a bug with
+  `--only-code-output` that duplicated line number settings for the first code
+  chunk in a code collection when checking the code chunk for modifications at
+  the end of code collection processing.
+
 
 
 ## v0.8.0 (2022-06-11)
