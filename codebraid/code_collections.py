@@ -152,6 +152,7 @@ class Session(CodeCollection):
                 else:
                     raise AttributeError
 
+        self.needs_exec: bool = True
         self.did_exec: bool = False
         self.is_finalized: bool = False
 

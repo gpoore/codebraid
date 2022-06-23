@@ -54,11 +54,13 @@ async def exec(session: Session, *, cache_key_path: pathlib.Path, progress: Prog
                 commands = command_or_commands
             for command in commands:
                 if session.status.prevent_exec:
+                    progress.session_exec_stage_end(session, stage=stage)
                     break
                 subproc = SessionSubprocess(session, stage, command, temp_dir_path, progress)
                 await subproc.start()
                 await subproc.wait()
             progress.session_exec_stage_end(session, stage=stage)
+        progress.session_finished(session)
 
 
 class SessionSubprocess(object):
@@ -395,7 +397,7 @@ class SessionSubprocess(object):
     async def _sync_chunk_start_delims(self, code_chunk: CodeChunk):
         self._sync_chunk_start_delims_state[code_chunk.index] += 1
         if self._sync_chunk_start_delims_state[code_chunk.index] == 2:
-            self.progress.session_chunk_start(self.session, chunk=code_chunk)
+            self.progress.session_chunk_start_exec(self.session, chunk=code_chunk)
             return
         self._sync_chunk_start_delims_waiting += 1
         while self._sync_chunk_start_delims_state[code_chunk.index] < 2:
@@ -413,7 +415,7 @@ class SessionSubprocess(object):
     async def _sync_chunk_end_delims(self, code_chunk: CodeChunk):
         self._sync_chunk_end_delims_state[code_chunk.index] += 1
         if self._sync_chunk_end_delims_state[code_chunk.index] == 2:
-            self.progress.session_chunk_end(self.session, chunk=code_chunk)
+            self.progress.session_chunk_end_exec(self.session, chunk=code_chunk)
             return
         self._sync_chunk_end_delims_waiting += 1
         while self._sync_chunk_end_delims_state[code_chunk.index] < 2:

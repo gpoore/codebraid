@@ -36,10 +36,11 @@ class Progress(object):
     makes possible arbitrary tasks that use code output immediately after it
     becomes available.
     '''
-    def __init__(self, only_code_output: Optional[str]):
+    def __init__(self, *, only_code_output: Optional[str], no_execute: bool):
         self._only_code_output = only_code_output
         if only_code_output:
             self._only_code_output_first_chunk_cache: dict[tuple, str] = {}
+        self._no_execute = no_execute
 
         self._last_error_counts: Dict[CodeKey, int] = {}
         self._error_count: int = 0
@@ -86,28 +87,32 @@ class Progress(object):
             self._warning_count += code_collection.status.warning_count
         self._session_total_chunks_count = sum(len(s.code_chunks) for s in sessions)
         self._session_exec_chunks_count = self._session_total_chunks_count
-        if self._only_code_output:
-            code_collections_list = []
-            placeholder_langs_dict = {}
-            for code_collection in itertools.chain(sessions, sources):
-                code_collections_list.append({
-                    'type': code_collection.type,
-                    'lang': code_collection.lang or '',
-                    'name': code_collection.name or '',
-                    'origin_name': code_collection.origin_name or '',
-                    'length': len(code_collection.code_chunks),
-                })
-                for placeholder_lang in code_collection.code_chunk_placeholder_langs:
-                    placeholder_langs_dict[placeholder_lang] = code_collection.lang or ''
-            data = {
-                'message_type': 'index',
-                'code_collections': code_collections_list,
-                'placeholder_langs': placeholder_langs_dict
-            }
-            # All data I/O must be UTF-8, following Pandoc
-            sys.stdout.buffer.write(json.dumps(data).encode('utf8'))
-            sys.stdout.buffer.write(b'\n')
-            sys.stdout.buffer.flush()
+        code_collections_list = []
+        placeholder_langs_dict = {}
+        for code_collection in itertools.chain(sessions, sources):
+            if isinstance(code_collection, Source) or self._no_execute:
+                will_execute = False
+            else:
+                will_execute = code_collection.needs_exec
+            code_collections_list.append({
+                'type': code_collection.type,
+                'lang': code_collection.lang or '',
+                'name': code_collection.name or '',
+                'origin_name': code_collection.origin_name or '',
+                'length': len(code_collection.code_chunks),
+                'will_execute': will_execute,
+            })
+            for placeholder_lang in code_collection.code_chunk_placeholder_langs:
+                placeholder_langs_dict[placeholder_lang] = code_collection.lang or ''
+        data = {
+            'message_type': 'index',
+            'code_collections': code_collections_list,
+            'placeholder_langs': placeholder_langs_dict
+        }
+        # All data I/O must be UTF-8, following Pandoc
+        sys.stdout.buffer.write(json.dumps(data).encode('utf8'))
+        sys.stdout.buffer.write(b'\n')
+        sys.stdout.buffer.flush()
 
 
     def _code_messages_to_summary_list(self, code_collection: CodeCollection, *, msg_type: str, columns: int) -> List[str]:
@@ -431,6 +436,9 @@ class Progress(object):
             self._print_live_notification(session, notification_type='SESSION', title='LOADED CACHE')
         self._update_progress()
 
+    def session_errors_prevent_exec(self, session: Session):
+        self._update_message_count(session)
+        self._session_exec_chunks_count -= len(session.code_chunks)
 
     def session_exec_stage_start(self, session: Session, *, stage: str):
         self._current_subtask = stage
@@ -473,23 +481,27 @@ class Progress(object):
             # be off because per-chunk progress wasn't registered
             delta = len(session.code_chunks) - self._session_exec_last_completed_chunk_count[session.key]
             self._session_exec_completed_chunks_count += delta
-        if self._only_code_output:
-            for index in range(self._session_exec_last_completed_chunk_count[session.key], len(session.code_chunks)):
-                self._print_code_output(session, chunk=session.code_chunks[index])
-            self._print_code_output(session, chunk=session.code_chunks[0], check_first_chunk=True)
+            if self._only_code_output:
+                for index in range(self._session_exec_last_completed_chunk_count[session.key], len(session.code_chunks)):
+                    self._print_code_output(session, chunk=session.code_chunks[index])
+                self._print_code_output(session, chunk=session.code_chunks[0], check_first_chunk=True)
         self._finished(session)
 
     def source_chunk_complete(self, source: Source, *, chunk: CodeChunk):
         if self._only_code_output:
             self._print_code_output(source, chunk=chunk)
 
-    def session_chunk_start(self, session: Session, *, chunk: CodeChunk):
+    def session_chunk_complete_no_exec(self, session: Session, *, chunk: CodeChunk):
+        if self._only_code_output:
+            self._print_code_output(session, chunk=chunk)
+
+    def session_chunk_start_exec(self, session: Session, *, chunk: CodeChunk):
         if session.live_output:
             self._print_live_heading(session, chunk=chunk, notification_type='CODE CHUNK', title='LIVE OUTPUT',
                                      columns=self.term.columns(), flush=True, clearline=self.term.isatty)
         self._update_progress()
 
-    def session_chunk_end(self, session: Session, *, chunk: CodeChunk):
+    def session_chunk_end_exec(self, session: Session, *, chunk: CodeChunk):
         self._update_message_count(session)
         old_session_exec_last_completed_chunk_count = self._session_exec_last_completed_chunk_count[session.key]
         self._session_exec_completed_chunks_count += chunk.index + 1 - old_session_exec_last_completed_chunk_count

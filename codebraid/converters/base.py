@@ -204,7 +204,7 @@ class Converter(object):
         if synctex:
             self._io_map = True
 
-        self._progress = Progress(self.only_code_output)
+        self._progress = Progress(only_code_output=self.only_code_output, no_execute=self.no_execute)
 
         self.code_chunks = []
         self.code_processor: Optional[codeprocessors.CodeProcessor] = None

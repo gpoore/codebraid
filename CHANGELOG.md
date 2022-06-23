@@ -28,6 +28,18 @@
   chunk in a code collection when checking the code chunk for modifications at
   the end of code collection processing.
 
+* Added code execution status to `--only-code-output` index.
+
+* Fixed a bug that skipped progress notifications for sessions with errors
+  that prevent code execution.  This prevented `--only-code-output` from
+  sending information about these sessions and prevented summaries with
+  `--live-output`.
+
+* Fixed a bug that prevented a progress notification for session completion
+  with the built-in code execution system.
+
+* Improved progress tracking for sources.
+
 
 
 ## v0.8.0 (2022-06-11)

@@ -142,11 +142,11 @@ async def exec(session: Session, *, cache_key_path: pathlib.Path, progress: Prog
                 incomplete_cc_stack.append(cc)
                 continue
             if not incomplete_cc_stack:
-                progress.session_chunk_start(session, chunk=cc)
+                progress.session_chunk_start_exec(session, chunk=cc)
                 cc_jupyter_id = kernel_client.execute(cc.code_str)
             else:
                 incomplete_cc_stack.append(cc)
-                progress.session_chunk_start(session, chunk=incomplete_cc_stack[0])
+                progress.session_chunk_start_exec(session, chunk=incomplete_cc_stack[0])
                 cc_jupyter_id = kernel_client.execute('\n'.join(icc.code_str for icc in incomplete_cc_stack))
             deadline = time.monotonic() + session.jupyter_timeout
             while True:
@@ -207,9 +207,9 @@ async def exec(session: Session, *, cache_key_path: pathlib.Path, progress: Prog
                     kernel_has_errors = True
                     progress.session_chunk_stderr(session, chunk=cc, output=kernel_msg_text)
             if not incomplete_cc_stack:
-                progress.session_chunk_end(session, chunk=cc)
+                progress.session_chunk_end_exec(session, chunk=cc)
             else:
-                progress.session_chunk_end(session, chunk=incomplete_cc_stack[-1])
+                progress.session_chunk_end_exec(session, chunk=incomplete_cc_stack[-1])
                 incomplete_cc_stack = []
     finally:
         kernel_client.stop_channels()

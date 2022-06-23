@@ -107,11 +107,10 @@ class CodeProcessor(object):
         impossible to determine until all code chunks are assembled.  Group
         code chunks into sessions and sources.
         '''
-        self._set_chunk_keys()
         self._index_named_code_chunks()
         self._resolve_code_copying()
-        self._create_sessions_and_sources()
         self._prep_cache()
+        self._create_sessions_and_sources()
         if self._only_code_output and self._cached_sessions:
             # Resolve output copying as early as possible
             self._resolve_output_copying(from_cache=True)
@@ -124,7 +123,7 @@ class CodeProcessor(object):
         builtin_sessions = []
         jupyter_sessions = []
         for session in self._sessions.values():
-            if session.status.prevent_exec or session in self._cached_sessions:
+            if not session.needs_exec:
                 continue
             if session.jupyter_kernel is None:
                 builtin_sessions.append(session)
@@ -180,28 +179,6 @@ class CodeProcessor(object):
         async with max_concurrent_jobs:
             await exec_func(session, cache_key_path=self._cache_key_path, progress=self._progress)
         self._update_session_cache(session)
-
-
-    def _set_chunk_keys(self):
-        '''
-        Assign code chunk session/source keys.
-        '''
-        placeholder_lang_num = 0
-        for cc in self.code_chunks:
-            if cc.execute:
-                if self.cross_origin_sessions:
-                    key = CodeKey(cc.options['lang'], cc.options['session'], 'session', None)
-                else:
-                    key = CodeKey(cc.options['lang'], cc.options['session'], 'session', cc.origin_name)
-            else:
-                if self.cross_origin_sessions:
-                    key = CodeKey(cc.options['lang'], cc.options['source'], 'source', None)
-                else:
-                    key = CodeKey(cc.options['lang'], cc.options['source'], 'source', cc.origin_name)
-            cc.key = key
-            if cc.options['inherited_lang']:
-                cc.options['placeholder_lang'] = f'{placeholder_lang_num}'
-                placeholder_lang_num += 1
 
 
     def _index_named_code_chunks(self):
@@ -332,11 +309,15 @@ class CodeProcessor(object):
                     msg = f'Code chunk(s) have error(s) that prevent copying:\n{traceback}'
                     cc.errors.append(message.SourceError(msg))
                     self._progress.source_chunk_complete(cc.source, chunk=cc)
+                    if all(not cc.needs_to_copy or cc.errors.prevent_exec for cc in cc.source.code_chunks):
+                        self._progress.source_finished(cc.source)
                 elif any(copied_cc.needs_to_copy for copied_cc in cc.copy_chunks):
                     still_unresolved_chunks.append(cc)
                 else:
                     cc.copy_output()
                     self._progress.source_chunk_complete(cc.source, chunk=cc)
+                    if all(not cc.needs_to_copy or cc.errors.prevent_exec for cc in cc.source.code_chunks):
+                        self._progress.source_finished(cc.source)
             if not still_unresolved_chunks or (from_cache and len(unresolved_chunks) == len(still_unresolved_chunks)):
                 break
             unresolved_chunks = still_unresolved_chunks
@@ -347,21 +328,56 @@ class CodeProcessor(object):
         '''
         Assemble code chunks into sessions and sources.
         '''
+        placeholder_lang_num = 0
         for cc in self.code_chunks:
+            if cc.execute:
+                code_collection_name = cc.options['session']
+                code_collection_type = 'session'
+            else:
+                code_collection_name = cc.options['source']
+                code_collection_type = 'source'
+            if self.cross_origin_sessions:
+                origin_name = None
+            else:
+                origin_name = cc.origin_name
+            cc.key = CodeKey(cc.options['lang'], code_collection_name, code_collection_type, origin_name)
+            if cc.options['inherited_lang']:
+                cc.options['placeholder_lang'] = f'{placeholder_lang_num}'
+                placeholder_lang_num += 1
             if cc.execute:
                 self._sessions[cc.key].append(cc)
             else:
                 self._sources[cc.key].append(cc)
         for session in self._sessions.values():
             session.finalize()
-            if not session.status.prevent_exec:
+            if session.status.prevent_exec:
+                session.needs_exec = False
+            else:
                 self._session_hash_root_sets[session.hash_root].add(session)
+                if self._load_session_cache(session):
+                    session.needs_exec = False
         for source in self._sources.values():
             source.finalize()
+
+        # Need to register collections before reporting any progress
+        self._progress.register_code_collections(sessions=self._sessions.values(), sources=self._sources.values())
+        for session in self._sessions.values():
+            if session.status.prevent_exec:
+                self._progress.session_errors_prevent_exec(session)
+                for cc in session.code_chunks:
+                    self._progress.session_chunk_complete_no_exec(session, chunk=cc)
+                self._progress.session_finished(session)
+            elif session in self._cached_sessions:
+                self._progress.session_load_cache(session)
+                for cc in session.code_chunks:
+                    self._progress.session_chunk_complete_no_exec(session, chunk=cc)
+                self._progress.session_finished(session)
+        for source in self._sources.values():
             for cc in source.code_chunks:
                 if not cc.needs_to_copy or cc.errors.prevent_exec:
-                    self._progress.source_chunk_complete(cc.source, chunk=cc)
-        self._progress.register_code_collections(sessions=self._sessions.values(), sources=self._sources.values())
+                    self._progress.source_chunk_complete(source, chunk=cc)
+            if all(not cc.needs_to_copy or cc.errors.prevent_exec for cc in source.code_chunks):
+                self._progress.source_finished(source)
 
 
     def _prep_cache(self):
@@ -451,8 +467,6 @@ class CodeProcessor(object):
                         pass
             else:
                 self._old_cache_index = cache_index
-        for session in self._sessions.values():
-            self._load_session_cache(session)
 
 
     def _load_session_cache(self, session: Session) -> bool:
@@ -501,8 +515,6 @@ class CodeProcessor(object):
             for output_name, output in chunk_cache.items():
                 setattr(chunk, output_name, output)
         self._cached_sessions.add(session)
-        self._progress.session_load_cache(session)
-        self._progress.session_finished(session)
         return True
 
 
