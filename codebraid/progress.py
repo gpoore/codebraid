@@ -87,32 +87,33 @@ class Progress(object):
             self._warning_count += code_collection.status.warning_count
         self._session_total_chunks_count = sum(len(s.code_chunks) for s in sessions)
         self._session_exec_chunks_count = self._session_total_chunks_count
-        code_collections_list = []
-        placeholder_langs_dict = {}
-        for code_collection in itertools.chain(sessions, sources):
-            if isinstance(code_collection, Source) or self._no_execute:
-                will_execute = False
-            else:
-                will_execute = code_collection.needs_exec
-            code_collections_list.append({
-                'type': code_collection.type,
-                'lang': code_collection.lang or '',
-                'name': code_collection.name or '',
-                'origin_name': code_collection.origin_name or '',
-                'length': len(code_collection.code_chunks),
-                'will_execute': will_execute,
-            })
-            for placeholder_lang in code_collection.code_chunk_placeholder_langs:
-                placeholder_langs_dict[placeholder_lang] = code_collection.lang or ''
-        data = {
-            'message_type': 'index',
-            'code_collections': code_collections_list,
-            'placeholder_langs': placeholder_langs_dict
-        }
-        # All data I/O must be UTF-8, following Pandoc
-        sys.stdout.buffer.write(json.dumps(data).encode('utf8'))
-        sys.stdout.buffer.write(b'\n')
-        sys.stdout.buffer.flush()
+        if self._only_code_output:
+            code_collections_list = []
+            placeholder_langs_dict = {}
+            for code_collection in itertools.chain(sessions, sources):
+                if isinstance(code_collection, Source) or self._no_execute:
+                    will_execute = False
+                else:
+                    will_execute = code_collection.needs_exec
+                code_collections_list.append({
+                    'type': code_collection.type,
+                    'lang': code_collection.lang or '',
+                    'name': code_collection.name or '',
+                    'origin_name': code_collection.origin_name or '',
+                    'length': len(code_collection.code_chunks),
+                    'will_execute': will_execute,
+                })
+                for placeholder_lang in code_collection.code_chunk_placeholder_langs:
+                    placeholder_langs_dict[placeholder_lang] = code_collection.lang or ''
+            data = {
+                'message_type': 'index',
+                'code_collections': code_collections_list,
+                'placeholder_langs': placeholder_langs_dict
+            }
+            # All data I/O must be UTF-8, following Pandoc
+            sys.stdout.buffer.write(json.dumps(data).encode('utf8'))
+            sys.stdout.buffer.write(b'\n')
+            sys.stdout.buffer.flush()
 
 
     def _code_messages_to_summary_list(self, code_collection: CodeCollection, *, msg_type: str, columns: int) -> List[str]:
