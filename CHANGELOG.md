@@ -1,7 +1,7 @@
 # Change Log
 
 
-## v0.9.0 (dev)
+## v0.9.0 (2022-06-25)
 
 * Added option `--stdin-json-header`, which treats the first line of stdin as
   a header in JSON format containing data about stdin such as file origin.
@@ -36,8 +36,6 @@
   `--only-code-output` that duplicated line number settings for the first code
   chunk in a code collection when checking the code chunk for modifications at
   the end of code collection processing.
-
-* Added code execution status to `--only-code-output` index.
 
 * Fixed a bug that skipped progress notifications for sessions with errors
   that prevent code execution.  This prevented `--only-code-output` from
