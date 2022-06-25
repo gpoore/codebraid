@@ -3,6 +3,15 @@
 
 ## v0.9.0 (dev)
 
+* Added option `--stdin-json-header`, which treats the first line of stdin as
+  a header in JSON format containing data about stdin such as file origin.
+  This allows Codebraid Preview to transmit multiple, concatenated files via
+  stdin while still getting correct file names and line numbers in error and
+  warning messages, rather than a file name like `<string>` and a number based
+  on concatenated file length.  It also allows Codebraid Preview and normal
+  Codebraid processing to share the same cache, since Codebraid can associate
+  the cache with specific file paths rather than just generic stdin.
+
 * Fixed a caching bug.  Errors due to missing executables (built-in code
   execution system), missing Jupyter kernels, ambiguous Jupyter kernel names,
   and some Jupyter configuration issues were only reported during an initial

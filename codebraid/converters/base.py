@@ -58,6 +58,7 @@ class Converter(object):
 
     def __init__(self, *,
                  strings: Optional[Union[str, Sequence[str]]]=None,
+                 string_origins: Optional[Union[str, pathlib.Path, Sequence[str], Sequence[pathlib.Path]]]=None,
                  paths: Optional[Union[str, Sequence[str], pathlib.Path, Sequence[pathlib.Path]]]=None,
                  no_cache: Optional[bool]=False,
                  cache_path: Optional[Union[str, pathlib.Path]]=None,
@@ -80,6 +81,8 @@ class Converter(object):
         self.session_defaults = session_defaults
 
         if paths is not None and strings is None:
+            if string_origins is not None:
+                raise TypeError
             if isinstance(paths, str):
                 paths = [pathlib.Path(paths)]
             elif isinstance(paths, pathlib.Path):
@@ -135,15 +138,47 @@ class Converter(object):
             elif not (isinstance(strings, collections.abc.Sequence) and
                       strings and all(isinstance(x, str) for x in strings)):
                 raise TypeError
-            # Normalize newlines, as if read from file with universal newlines
-            origin_strings = [io.StringIO(s, newline=None).read() or '\n' for s in strings]
-            if len(strings) == 1:
-                origin_names = ['<string>']
+            string_origins_normalized: Optional[Union[Sequence[str], Sequence[pathlib.Path]]]
+            if string_origins is None:
+                string_origins_normalized = None
+            elif isinstance(string_origins, str) or isinstance(string_origins, pathlib.Path):
+                string_origins_normalized = [string_origins]
+            elif (isinstance(string_origins, collections.abc.Sequence) and string_origins and
+                    (all(isinstance(x, str) for x in string_origins) or all(isinstance(x, pathlib.Path) for x in string_origins))):
+                string_origins_normalized = string_origins
             else:
-                origin_names = ['<string({0})>'.format(n+1) for n in range(len(strings))]
+                raise TypeError
+
+            # Normalize newlines, as if read from file with universal newlines
+            origin_strings = []
+            for s in strings:
+                if '\r' in s:
+                    origin_strings.append(io.StringIO(s, newline=None).read() or '\n')
+                else:
+                    origin_strings.append(s or '\n')
+            if string_origins_normalized is not None:
+                origin_names = []
+                self.raw_origin_paths = []
+                self.expanded_origin_paths = {}
+                cwd_path = pathlib.Path('.').absolute()
+                for string_origin in string_origins_normalized:
+                    string_origin_path = pathlib.Path(string_origin)
+                    try:
+                        string_origin_rel_path = string_origin_path.relative_to(cwd_path)
+                    except ValueError:
+                        string_origin_rel_path = string_origin_path
+                    origin_name = string_origin_rel_path.as_posix()
+                    origin_names.append(origin_name)
+                    self.raw_origin_paths.append(string_origin_path)
+                    self.expanded_origin_paths[origin_name] = string_origin_path
+            else:
+                if len(strings) == 1:
+                    origin_names = ['<string>']
+                else:
+                    origin_names = ['<string({0})>'.format(n+1) for n in range(len(strings))]
+                self.raw_origin_paths = None
+                self.expanded_origin_paths = None
             self.origins = collections.OrderedDict(zip(origin_names, origin_strings))
-            self.raw_origin_paths = None
-            self.expanded_origin_paths = None
             if from_format is None:
                 raise TypeError('Document format is required')
             if self.from_formats is not None and from_format not in self.from_formats:

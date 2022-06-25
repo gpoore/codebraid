@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import pathlib
 import sys
 from . import converters
+from . import util
 from .version import __version__ as version
 
 
@@ -88,6 +90,8 @@ def main():
                                     'Output from execution is written as soon as it becomes available. '
                                     'No document is created. '
                                     'Options --to and --output are only used (if at all) to inform code output formatting.')
+    parser_pandoc.add_argument('--stdin-json-header', action='store_true',
+                               help='Treat the first line of stdin as a header in JSON format containing data about stdin such as file origin.')
     parser_pandoc.add_argument('files', nargs='*', metavar='FILE',
                                help="Files (multiple files are allowed for formats supported by Pandoc)")
     for opts_or_long_opt, narg in PANDOC_OPTIONS.items():
@@ -154,13 +158,43 @@ def pandoc(args):
 
     if not args.files or (len(args.files) == 1 and args.files[0] == '-'):
         paths = None
+        string_origins = None
         try:
             strings = sys.stdin.read()
         except UnicodeDecodeError as e:
-            sys.exit('Input must be UTF-8:\n{0}'.format(e))
+            sys.exit(f'Input must be UTF-8:\n{e}')
+        if args.stdin_json_header:
+            stdin_lines = util.splitlines_lf(strings)
+            if not stdin_lines:
+                sys.exit('Missing data for --stdin-json-header')
+            if len(stdin_lines) == 1:
+                stdin_lines.append('')
+            json_header_str = stdin_lines[0]
+            try:
+                json_header = json.loads(json_header_str)
+            except Exception as e:
+                sys.exit(f'Invalid data for --stdin-json-header:\n{e}')
+            if not isinstance(json_header, dict):
+                sys.exit(f'Invalid data for --stdin-json-header: expected dict')
+            json_header_origins = json_header.get('origins')
+            if json_header_origins is not None:
+                if not isinstance(json_header_origins, list):
+                    sys.exit('Invalid data for --stdin-json-header field "string_origins"')
+                start_line = 1
+                strings = []
+                string_origins = []
+                for entry in json_header_origins:
+                    origin_name = entry['path']
+                    origin_length = entry['lines']
+                    string_origins.append(origin_name)
+                    strings.append('\n'.join(stdin_lines[start_line:start_line+origin_length]))
+                    start_line += origin_length
+            else:
+                strings = '\n'.join(stdin_lines[1:])
     else:
         paths = args.files
         strings = None
+        string_origins = None
 
     code_defaults = {}
     session_defaults = {}
@@ -187,6 +221,7 @@ def pandoc(args):
     with converters.PandocConverter(
         paths=paths,
         strings=strings,
+        string_origins=string_origins,
         from_format=args.from_format,
         pandoc_file_scope=args.pandoc_file_scope,
         no_cache=args.no_cache,
