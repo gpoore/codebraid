@@ -330,7 +330,9 @@ class CodeProcessor(object):
         '''
         placeholder_lang_num = 0
         for cc in self.code_chunks:
-            if cc.execute:
+            if cc.execute or 'session' in cc.options:
+                # `cc.execute` covers valid commands, 'session' key covers
+                # invalid commands with named sessions
                 code_collection_name = cc.options['session']
                 code_collection_type = 'session'
             else:

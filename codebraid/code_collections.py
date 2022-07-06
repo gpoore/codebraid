@@ -112,10 +112,8 @@ class Source(CodeCollection):
 
     def finalize(self):
         '''
-        Perform tasks that must wait until all code chunks are present,
+        Perform tasks that must wait until all code chunks are present.
         '''
-        if self.status.has_errors:
-            return
         for cc in self.code_chunks:
             if not cc.inline:
                 cc.finalize_line_numbers(self._code_start_line_number)
@@ -302,6 +300,10 @@ class Session(CodeCollection):
             else:
                 msg = 'Final code chunk cannot have "complete" value "false"'
                 last_cc.errors.append(message.SourceError(msg))
+        for cc in self.code_chunks:
+            if not cc.inline:
+                cc.finalize_line_numbers(self._code_start_line_number)
+                self._code_start_line_number += len(cc.code_lines)
         if self.status.prevent_exec:
             # Hashes and line numbers are only needed if code will indeed be
             # executed.  It is impossible to determine these in the case of
@@ -342,9 +344,6 @@ class Session(CodeCollection):
             hasher.update(self.lang_def.definition_bytes)
         hasher.update(hasher.digest())
         for cc in self.code_chunks:
-            if not cc.inline:
-                cc.finalize_line_numbers(self._code_start_line_number)
-                self._code_start_line_number += len(cc.code_lines)
             # Hash needs to depend on some code chunk options.  `command`
             # determines some wrapper code.  `inline` affects line count
             # and error sync currently, and might also affect code in the

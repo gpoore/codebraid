@@ -1,6 +1,17 @@
 # Change Log
 
 
+# v0.10.0 (dev)
+
+* Code chunks with a named session but an invalid command are now treated as
+  session rather than source chunks.  This provides better error messages and
+  prevents execution of the named session since it involves errors.
+
+* Code chunks in sessions and sources with significant errors are now given
+  consecutive line numbers, instead of all starting with a line number of 1.
+
+
+
 ## v0.9.0 (2022-06-25)
 
 * Added option `--stdin-json-header`, which treats the first line of stdin as
