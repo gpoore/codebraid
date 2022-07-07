@@ -28,7 +28,7 @@ from ..progress import Progress
 
 
 _ansi_color_escape_code_re = re.compile('\x1b.*?m')
-
+_version_number_re = re.compile(r'(?P<major>\d+)(?:\.(?P<minor>\d+)(?:\.(?P<patch>\d+))?)?')
 
 kernel_name_aliases: dict[str, str] = {}
 kernel_name_collisions: dict[str, set[str]] = collections.defaultdict(set)
@@ -41,7 +41,28 @@ if jupyter_client is not None:
                 kernel_name_aliases[alias] = k
     for alias in kernel_name_collisions:
         kernel_name_collisions[alias].add(kernel_name_aliases[alias])
-        del kernel_name_aliases[alias]
+        if len(kernel_name_collisions[alias]) > 1:
+            name_to_version_map = {}
+            for k in kernel_name_collisions[alias]:
+                match = _version_number_re.search(k)
+                if match is None:
+                    name_to_version_map[k] = None
+                else:
+                    major = int(match.group('major'))
+                    minor = int(match.group('minor')) if match.group('minor') is not None else 0
+                    patch = int(match.group('patch')) if match.group('patch') is not None else 0
+                    name_to_version_map[k] = (major, minor, patch)
+            if not all(v is not None for v in name_to_version_map.values()):
+                del kernel_name_aliases[alias]
+            else:
+                last_version = None
+                for k, v in name_to_version_map.items():
+                    if last_version is None or v > last_version:
+                        kernel_name_aliases[alias] = k
+                        last_version = v
+                    elif v == last_version:
+                        del kernel_name_aliases[alias]
+                        break
 
 
 mime_type_to_file_extension_map: dict[str, str] = {

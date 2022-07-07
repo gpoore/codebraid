@@ -27,6 +27,7 @@ from ..code_chunks import CodeChunk, Include
 from .. import err
 from .. import message
 from .. import util
+from ..codebraid_defaults import CodebraidDefaults
 from .base import Converter
 
 
@@ -996,6 +997,8 @@ class PandocConverter(Converter):
         self._para_plain_origin_name_node_line_number = []
         self._final_ast = None
 
+        self.codebraid_defaults.update_from_yaml_metadata(next(iter(self.origins.values())))
+
 
     from_formats = set(['markdown', 'commonmark_x'])
     multi_origin_formats = set(['markdown', 'commonmark_x'])
@@ -1339,6 +1342,11 @@ class PandocConverter(Converter):
                 'pandoc-api-version' in ast and isinstance(ast['pandoc-api-version'], list) and
                 all(isinstance(x, int) for x in ast['pandoc-api-version']) and 'blocks' in ast):
             raise PandocError('Unrecognized AST format (incompatible Pandoc version?)')
+        for k in ('codebraid', 'codebraid_'):
+            try:
+                del ast['meta'][k]
+            except KeyError:
+                pass
         self._asts[single_origin_name] = ast
 
 

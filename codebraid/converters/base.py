@@ -18,9 +18,10 @@ import io
 import json
 import os
 import pathlib
-from typing import Dict, Optional, Sequence, Union
+from typing import Optional, Sequence, Union
 import zipfile
 from .. import codeprocessors
+from ..codebraid_defaults import CodebraidDefaults
 from ..progress import Progress
 
 
@@ -66,8 +67,7 @@ class Converter(object):
                  expanduser: bool=False,
                  expandvars: bool=False,
                  from_format: Optional[str]=None,
-                 code_defaults: Optional[Dict[str, Union[bool, str]]]=None,
-                 session_defaults: Optional[Dict[str, Union[bool, str]]]=None,
+                 codebraid_defaults: Optional[CodebraidDefaults]=None,
                  no_execute: bool=False,
                  only_code_output: Optional[str]=None,
                  synctex: bool=False):
@@ -77,8 +77,11 @@ class Converter(object):
         self.cross_origin_sessions = cross_origin_sessions
         self.expanduser = expanduser
         self.expandvars = expandvars
-        self.code_defaults = code_defaults
-        self.session_defaults = session_defaults
+        if codebraid_defaults is None:
+            codebraid_defaults = CodebraidDefaults()
+        elif not isinstance(codebraid_defaults, CodebraidDefaults):
+            raise TypeError
+        self.codebraid_defaults = codebraid_defaults
 
         if paths is not None and strings is None:
             if string_origins is not None:
@@ -296,8 +299,7 @@ class Converter(object):
             cache_path=self.cache_path,
             cache_key=self.cache_key,
             origin_paths_for_cache=self.origin_paths_for_cache,
-            code_defaults=self.code_defaults,
-            session_defaults=self.session_defaults,
+            codebraid_defaults=self.codebraid_defaults,
             progress=self._progress,
             only_code_output=self.only_code_output,
         )

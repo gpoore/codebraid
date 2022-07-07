@@ -171,6 +171,11 @@ Manual installation:  `python3 setup.py install` or `python setup.py install`
   * Python 3.7+ with `setuptools`, and [`bespon`](https://bespon.org) 0.6
     (`bespon` installation is typically managed by `pip`/`setup.py`)
 
+  * For Jupyter support, [`jupyter_client`](https://pypi.org/project/jupyter-client/)
+    and language kernels
+
+  * For YAML metadata support, [`ruamel.yaml`](https://pypi.org/project/ruamel.yaml/) (can be `ruamel_yaml` for Anaconda installations)
+
 
 
 ## Converting a document
@@ -257,6 +262,41 @@ with `--no-cache` or delete the cache as necessary to prevent the cache from
 becoming out of sync with your data.  Future releases will allow external
 dependencies to be specified so that caching will work correctly in these
 situations.
+
+
+## YAML metadata
+
+Some document-wide settings can be given in the Markdown YAML metadata.
+Codebraid settings must be under either a `codebraid` or `codebraid_` key in
+the metadata.  Pandoc will ignore `codebraid_` so it will not be available to
+filters; this distinction should not typically be important.
+
+To use Jupyter kernels automatically for all sessions, simply set
+`jupyter: true`.  For example,
+
+```
+---
+codebraid:
+  jupyter: true
+---
+```
+
+It is also possible to set a default kernel and/or default timeout.  For example,
+
+```
+---
+codebraid:
+  jupyter:
+    kernel: python3
+    timeout: 120
+---
+```
+
+A Jupyter kernel and/or timeout can still be set in the first code chunk
+for a given session, and will override the document-wide default.
+
+It is also possible to set `live_output: <bool>` in the metadata.
+Additional metadata settings will be added in future releases.
 
 
 ## Code options

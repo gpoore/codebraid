@@ -19,6 +19,7 @@ from typing import Dict, List, NamedTuple, Optional, Union
 from . import language
 from . import message
 from .code_chunks import CodeChunk, CodeKey
+from .codebraid_defaults import CodebraidDefaults
 
 
 
@@ -39,13 +40,14 @@ class CodeCollection(object):
     '''
     Base class for sessions and sources.  Never instantiated.
     '''
-    def __init__(self, code_key: CodeKey, *, code_defaults: Optional[Dict[str, Union[bool, str]]]):
+    def __init__(self, code_key: CodeKey, *, codebraid_defaults: CodebraidDefaults):
         if type(self) is CodeCollection:
             raise NotImplementedError
         self.key: CodeKey = code_key
         self.lang: Optional[str] = code_key.lang
         self.name: Optional[str] = code_key.name
         self.origin_name: Optional[str] = code_key.origin_name
+        self.codebraid_defaults: CodebraidDefaults = codebraid_defaults
 
         self.code_chunks: List[CodeChunk] = []
         self._code_start_line_number: int = 1
@@ -56,13 +58,6 @@ class CodeCollection(object):
         self.errors: message.ErrorMessageList = message.ErrorMessageList(status=self.status)
         self.warnings: message.WarningMessageList = message.WarningMessageList(status=self.status)
         self.files: List[str] = []
-
-        if code_defaults is not None:
-            for k, v in code_defaults.items():
-                if hasattr(self, k):
-                    setattr(self, k, v)
-                elif k not in self._optional_attrs:
-                    raise AttributeError
 
     type: str = 'code'
     _optional_attrs = set(['live_output'])
@@ -75,16 +70,8 @@ class Source(CodeCollection):
     An ordered collection of code chunks that is typically displayed but never
     executed.  May be exported as a single file of source code.
     '''
-    def __init__(self, code_key: CodeKey, *,
-                 code_defaults: Optional[Dict[str, Union[bool, str]]]=None,
-                 source_defaults: Optional[Dict[str, Union[bool, str]]]=None):
-        super().__init__(code_key, code_defaults=code_defaults)
-        if source_defaults is not None:
-            for k, v in source_defaults.items():
-                if hasattr(self, k):
-                    setattr(self, k, v)
-                else:
-                    raise AttributeError
+    def __init__(self, code_key: CodeKey, *, codebraid_defaults: CodebraidDefaults):
+        super().__init__(code_key, codebraid_defaults=codebraid_defaults)
 
     type: str = 'source'
 
@@ -129,10 +116,8 @@ class Session(CodeCollection):
     '''
     Code chunks comprising a session.
     '''
-    def __init__(self, code_key: CodeKey, *,
-                 code_defaults: Optional[Dict[str, Union[bool, str]]]=None,
-                 session_defaults: Optional[Dict[str, Union[bool, str]]]=None):
-        super().__init__(code_key, code_defaults=code_defaults)
+    def __init__(self, code_key: CodeKey, *, codebraid_defaults: CodebraidDefaults):
+        super().__init__(code_key, codebraid_defaults=codebraid_defaults)
 
         self.lang_def: Optional[language.Language] = None
         self.executable: Optional[str] = None
@@ -142,13 +127,6 @@ class Session(CodeCollection):
         self.repl: Optional[bool] = None
         self.jupyter_kernel: Optional[str] = None
         self.jupyter_timeout: Optional[int] = None
-
-        if session_defaults is not None:
-            for k, v in session_defaults.items():
-                if hasattr(self, k):
-                    setattr(self, k, v)
-                else:
-                    raise AttributeError
 
         self.needs_exec: bool = True
         self.did_exec: bool = False
@@ -182,6 +160,7 @@ class Session(CodeCollection):
 
     type: str = 'session'
 
+    _default_live_output = False
     _default_jupyter_timeout = 60
 
 
@@ -196,11 +175,16 @@ class Session(CodeCollection):
         code_chunk.warnings.register_status(self.status)
         first_chunk_options = code_chunk.options['first_chunk_options']
         if code_chunk.index == 0:
-            jupyter_kernel = first_chunk_options.get('jupyter_kernel')
-            if jupyter_kernel is not None:
+            if any(k.startswith('jupyter') for k in first_chunk_options) or 'jupyter' in self.codebraid_defaults:
                 self.repl = False
-                self.jupyter_kernel = jupyter_kernel
-                self.jupyter_timeout = first_chunk_options.get('jupyter_timeout', self._default_jupyter_timeout)
+                self.jupyter_kernel = first_chunk_options.get(
+                    'jupyter_kernel',
+                    self.codebraid_defaults.get_keypath('jupyter.kernel', self.lang)
+                )
+                self.jupyter_timeout = first_chunk_options.get(
+                    'jupyter_timeout',
+                    self.codebraid_defaults.get_keypath('jupyter.timeout', self._default_jupyter_timeout)
+                )
             else:
                 self.lang_def = language.languages[self.lang]
                 if self.lang_def is None:
@@ -231,9 +215,10 @@ class Session(CodeCollection):
                         args = shlex.split(raw_args)
                     self.args = args
                     self.repl = self.lang_def.repl
-            live_output = first_chunk_options.get('live_output')
-            if live_output is not None:
-                self.live_output = live_output
+            self.live_output = first_chunk_options.get(
+                'live_output',
+                self.codebraid_defaults.get('live_output', self._default_live_output)
+            )
         elif first_chunk_options:
             invalid_options = ', '.join(f'"{k}"' for k in first_chunk_options)
             first_chunk_options.clear()
@@ -336,7 +321,10 @@ class Session(CodeCollection):
                 'jupyter_timeout': self.jupyter_timeout,
             }
         else:
-            raise TypeError
+            self.errors.append(message.SourceError(
+                'No execution method is specified; missing language or executable or Jupyter kernel'
+            ))
+            return
         hasher.update(json.dumps(hashed_options).encode('utf8'))
         hasher.update(hasher.digest())
         # Hash needs to depend on the language definition

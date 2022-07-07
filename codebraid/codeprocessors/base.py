@@ -25,6 +25,7 @@ from .. import message
 from .. import util
 from ..code_chunks import CodeChunk, CodeKey
 from ..code_collections import Session, Source
+from ..codebraid_defaults import CodebraidDefaults
 from ..progress import Progress
 from ..version import __version__ as codebraid_version
 from . import exec_builtin
@@ -46,8 +47,7 @@ class CodeProcessor(object):
                  cache_path: pathlib.Path,
                  cache_key: str,
                  origin_paths_for_cache: Optional[List[pathlib.Path]],
-                 code_defaults: Optional[Dict],
-                 session_defaults: Optional[Dict],
+                 codebraid_defaults: CodebraidDefaults,
                  only_code_output: bool,
                  progress: Progress):
         self.code_chunks = code_chunks
@@ -61,8 +61,7 @@ class CodeProcessor(object):
             self._origin_paths_for_cache_as_strings = None
         else:
             self._origin_paths_for_cache_as_strings = [p.as_posix() for p in origin_paths_for_cache]
-        self.code_defaults = code_defaults
-        self.session_defaults = session_defaults
+        self.codebraid_defaults = codebraid_defaults
         self._only_code_output = only_code_output
         self._progress = progress
 
@@ -72,13 +71,13 @@ class CodeProcessor(object):
         self._cache_lock_path = cache_path / cache_key / f'{cache_key}.lock'
 
         self._sessions: Dict[CodeKey, Session] = util.KeyDefaultDict(
-            lambda x: Session(x, code_defaults=self.code_defaults, session_defaults=self.session_defaults)
+            lambda x: Session(x, codebraid_defaults=self.codebraid_defaults)
         )
         self._session_hash_root_sets: Dict[str, Set] = collections.defaultdict(set)
         self._cached_sessions: Set[Session] = set()
         self._named_code_chunks: Dict[str, CodeChunk] = {}
 
-        self._sources: Dict[CodeKey, Source] = util.KeyDefaultDict(lambda x: Source(x))
+        self._sources: Dict[CodeKey, Source] = util.KeyDefaultDict(lambda x: Source(x, codebraid_defaults=self.codebraid_defaults))
 
         # Use `atexit` to improve the odds of cleanup in the event of an
         # unexpected exit.  `cleanup()` ends by invoking

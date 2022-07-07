@@ -17,7 +17,9 @@ import json
 import pathlib
 import sys
 from . import converters
+from . import err
 from . import util
+from .codebraid_defaults import CodebraidDefaults
 from .version import __version__ as version
 
 
@@ -196,10 +198,9 @@ def pandoc(args):
         strings = None
         string_origins = None
 
-    code_defaults = {}
-    session_defaults = {}
+    codebraid_defaults = CodebraidDefaults()
     if args.live_output:
-        session_defaults['live_output'] = args.live_output
+        codebraid_defaults['live_output'] = args.live_output
 
     preview = False
     other_pandoc_args_at_load = None
@@ -218,29 +219,31 @@ def pandoc(args):
             # There is also a check for this in `converter.convert()`, but should
             # fail early.
             sys.exit(f'File "{args.output}" already exists (to replace it, add option "--overwrite")')
-    with converters.PandocConverter(
-        paths=paths,
-        strings=strings,
-        string_origins=string_origins,
-        from_format=args.from_format,
-        pandoc_file_scope=args.pandoc_file_scope,
-        no_cache=args.no_cache,
-        cache_path=args.cache_dir,
-        code_defaults=code_defaults,
-        session_defaults=session_defaults,
-        other_pandoc_args_at_load=other_pandoc_args_at_load,
-        no_execute=args.no_execute,
-        only_code_output=args.only_code_output,
-    ) as converter:
-        if not args.only_code_output:
-            converter.convert(
-                to_format=args.to_format,
-                standalone=args.standalone,
-                output_path=output_path,
-                overwrite=args.overwrite,
-                other_pandoc_args=other_pandoc_args
-            )
-        exit_code = converter.exit_code
+    try:
+        with converters.PandocConverter(
+            paths=paths,
+            strings=strings,
+            string_origins=string_origins,
+            from_format=args.from_format,
+            pandoc_file_scope=args.pandoc_file_scope,
+            no_cache=args.no_cache,
+            cache_path=args.cache_dir,
+            codebraid_defaults=codebraid_defaults,
+            other_pandoc_args_at_load=other_pandoc_args_at_load,
+            no_execute=args.no_execute,
+            only_code_output=args.only_code_output,
+        ) as converter:
+            if not args.only_code_output:
+                converter.convert(
+                    to_format=args.to_format,
+                    standalone=args.standalone,
+                    output_path=output_path,
+                    overwrite=args.overwrite,
+                    other_pandoc_args=other_pandoc_args
+                )
+            exit_code = converter.exit_code
+    except err.YAMLMetadataError as e:
+        sys.exit(str(e))
 
     sys.exit(exit_code)
 

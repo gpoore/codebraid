@@ -3,6 +3,60 @@
 
 # v0.10.0 (dev)
 
+* Added support for specifying document-wide settings in the YAML metadata.
+  Codebraid settings must be under either a `codebraid` or `codebraid_` key in
+  the metadata.  Pandoc will ignore `codebraid_` so it will not be available
+  to filters; this distinction should not typically be important.
+
+  To use Jupyter kernels automatically for all sessions, simply set
+  `jupyter: true`.  For example,
+
+  ```
+  ---
+  codebraid:
+    jupyter: true
+  ---
+  ```
+
+  It is also possible to set a default kernel and/or default timeout.  For example,
+
+  ```
+  ---
+  codebraid:
+    jupyter:
+      kernel: python3
+      timeout: 120
+  ---
+  ```
+
+  A Jupyter kernel and/or timeout can still be set in the first code chunk
+  for a given session, and will override the document-wide default.
+
+  It is also possible to set `live_output: <bool>` in the metadata.
+  Additional metadata settings will be added in future releases.
+
+* When a selected Jupyter kernel is ambiguous (for example, `python` on a
+  machine with multiple Python kernels), there is no longer an error message
+  by default.  Instead, if all potential matches have kernel names that
+  include a version number, and if only a single kernel has a version number
+  higher than the rest, then the kernel with the highest version number is
+  used.  Only version numbers of the form `major`, `major.minor`, and
+  `major.minor.patch` are considered in doing the comparison.  Any
+  alpha/beta/dev or similar status is ignored.
+
+* Fixed a bug that prevented Jupyter kernels from being used when the kernel
+  name, kernel display name, and kernel language were not all different from
+  each other.
+
+* Setting `jupyter_timeout` without `jupyter_kernel` on the first code chunk
+  in a session now causes the session to execute with the default kernel for
+  the session's language.  Previously, `jupyter_timeout` was ignored without
+  `jupyter_kernel`.
+
+* Sessions that do not specify execution information (language, executable,
+  Jupyter kernel, etc.) now result in an error message rather than causing
+  `codebraid` to exit with an error.
+
 * Code chunks with a named session but an invalid command are now treated as
   session rather than source chunks.  This provides better error messages and
   prevents execution of the named session since it involves errors.
