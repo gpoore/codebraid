@@ -1,19 +1,39 @@
 ---
 title: "Codebraid with Jupyter kernels"
+codebraid:
+  jupyter: true
 ---
 
 
 Using Codebraid with Jupyter kernels rather than the built-in code execution
-system is as simple as adding `jupyter_kernel=<kernel>` to the first code
-chunk of a session.  This document provides examples with the `python3`
-kernel.
+system is as simple as adding a Codebraid setting to the document YAML
+metadata.  For example, this document begins with the following metadata:
+```
+---
+title: "Codebraid with Jupyter kernels"
+codebraid:
+  jupyter: true
+---
+```
+In this case, Codebraid automatically selects a kernel based on code language.
+It is also possible to select a specific kernel.  For example,
+```
+---
+codebraid:
+  jupyter:
+    kernel: python3
+---
+```
+This would set a default kernel for the entire document.  The kernel can be
+overridden for an individual session by setting `jupyter_kernel=<kernel>` on
+the first code chunk of a session.
 
 
 ## [Matplotlib ](https://matplotlib.org/)
 
 Plots are included automatically.
 
-```{.python .cb-nb jupyter_kernel=python3 example=true}
+```{.python .cb-nb example=true}
 %matplotlib inline
 import matplotlib.pyplot as plt
 import numpy as np
@@ -45,7 +65,7 @@ SymPy equations are displayed as well.  This example runs in a separate
 session from the plots above.  Multiple Jupyter kernels can be used within a
 single document, and multiple independent sessions are possible per kernel.
 
-```{.python .cb-nb session=sympy name=sympy1 jupyter_kernel=python3 example=true}
+```{.python .cb-nb session=sympy name=sympy1 example=true}
 from sympy import *
 init_printing(use_latex='mathjax')
 x = Symbol('x')

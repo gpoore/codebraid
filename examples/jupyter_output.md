@@ -3,9 +3,28 @@ title: Codebraid with Jupyter kernels
 ---
 
 Using Codebraid with Jupyter kernels rather than the built-in code
-execution system is as simple as adding `jupyter_kernel=<kernel>` to the
-first code chunk of a session. This document provides examples with the
-`python3` kernel.
+execution system is as simple as adding a Codebraid setting to the
+document YAML metadata. For example, this document begins with the
+following metadata:
+
+    ---
+    title: "Codebraid with Jupyter kernels"
+    codebraid:
+      jupyter: true
+    ---
+
+In this case, Codebraid automatically selects a kernel based on code
+language. It is also possible to select a specific kernel. For example,
+
+    ---
+    codebraid:
+      jupyter:
+        kernel: python3
+    ---
+
+This would set a default kernel for the entire document. The kernel can
+be overridden for an individual session by setting
+`jupyter_kernel=<kernel>` on the first code chunk of a session.
 
 ## [Matplotlib](https://matplotlib.org/)
 
@@ -13,7 +32,7 @@ Plots are included automatically.
 
 ::: example
 ::: exampleMarkup
-    ```{.python .cb-nb jupyter_kernel=python3}
+    ```{.python .cb-nb}
     %matplotlib inline
     import matplotlib.pyplot as plt
     import numpy as np
@@ -71,7 +90,7 @@ plt.grid()
 ```
 
 ``` stderr
-~\AppData\Local\Temp/ipykernel_21764/293500280.py:1: RuntimeWarning: invalid value encountered in true_divide
+~\AppData\Local\Temp\ipykernel_9628\293500280.py:1: RuntimeWarning: invalid value encountered in true_divide
   plt.plot(x, np.sin(x)/x, label=r'$\sin(x)/x$')
 ```
 
@@ -88,7 +107,7 @@ per kernel.
 
 ::: example
 ::: exampleMarkup
-    ```{.python .cb-nb session=sympy name=sympy1 jupyter_kernel=python3}
+    ```{.python .cb-nb session=sympy name=sympy1}
     from sympy import *
     init_printing(use_latex='mathjax')
     x = Symbol('x')
