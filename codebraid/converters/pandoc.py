@@ -370,7 +370,10 @@ class PandocCodeChunk(CodeChunk):
     @property
     def code_hash(self):
         hasher = hashlib.sha1()
-        hasher.update(self.code_str.encode('utf8'))
+        if self.placeholder_code_lines:
+            hasher.update(self.placeholder_code_str.encode('utf8'))
+        else:
+            hasher.update(self.code_str.encode('utf8'))
         return hasher.hexdigest()
 
 
@@ -703,15 +706,12 @@ class PandocCodeChunk(CodeChunk):
                             else:
                                 raw_fmt = fmt
                             if fmt_text_display == 'raw':
-                                if fmt == 'markdown':
-                                    output_list.append(self._as_markdown_included_text(self.layout_output(output, 'raw', lines), inline=self.inline))
-                                else:
-                                    output_list.append(self._as_markdown_code(self.layout_output(output, 'raw', lines), inline=self.inline, raw=raw_fmt))
+                                output_list.append(self._as_markdown_included_text(self.layout_output(output, 'raw', lines), inline=self.inline))
                             elif fmt_text_display == 'verbatim':
                                 if lines:
-                                    output_list.append(self._as_markdown_code(self.layout_output(output, 'verbatim', lines), inline=self.inline, classes=fmt))
+                                    output_list.append(self._as_markdown_code(self.layout_output(output, 'verbatim', lines), inline=self.inline, classes=[fmt]))
                             elif fmt_text_display == 'verbatim_or_empty':
-                                output_list.append(self._as_markdown_code(self.layout_output(output, 'verbatim', lines), inline=self.inline, classes=fmt))
+                                output_list.append(self._as_markdown_code(self.layout_output(output, 'verbatim', lines), inline=self.inline, classes=[fmt]))
                             else:
                                 raise ValueError
                             break

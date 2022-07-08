@@ -57,6 +57,11 @@
   Jupyter kernel, etc.) now result in an error message rather than causing
   `codebraid` to exit with an error.
 
+* Fixed `--only-code-output` bugs that affected Codebraid Preview.
+  `.cb-paste` did not work due to a hashing bug, LaTeX rich output appeared
+  verbatim instead of being interpreted, and verbatim textual rich output did
+  not have the correct language class.
+
 * Code chunks with a named session but an invalid command are now treated as
   session rather than source chunks.  This provides better error messages and
   prevents execution of the named session since it involves errors.

@@ -780,6 +780,7 @@ class CodeChunk(object):
 
         # Check for len(code_lines) > 1 for inline later
         self._code_str = None
+        self._placeholder_code_str = None
         if isinstance(code, list):
             code_lines = code
         else:
@@ -875,9 +876,18 @@ class CodeChunk(object):
         code_str = self._code_str
         if code_str is not None:
             return code_str
-        code = '\n'.join(self.code_lines)
-        self._code_str = code
-        return code
+        code_str = '\n'.join(self.code_lines)
+        self._code_str = code_str
+        return code_str
+
+    @property
+    def placeholder_code_str(self):
+        placeholder_code_str = self._placeholder_code_str
+        if placeholder_code_str is not None:
+            return placeholder_code_str
+        placeholder_code_str = '\n'.join(self.placeholder_code_lines)
+        self._placeholder_code_str = placeholder_code_str
+        return placeholder_code_str
 
 
     def finalize_line_numbers(self, code_start_line_number):
