@@ -561,7 +561,7 @@ session is in use).
   `copy`.
 
   `expr` defaults to `raw` if a format is not specified.  `rich_output`
-  defaults to `latex|markdown|png|jpg|plain`.  All others default to
+  defaults to `latex|markdown|png|jpg|svg|plain`.  All others default to
   `verbatim`.
 
 #### Copying

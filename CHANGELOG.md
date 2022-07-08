@@ -44,6 +44,9 @@
   `major.minor.patch` are considered in doing the comparison.  Any
   alpha/beta/dev or similar status is ignored.
 
+* Fixed an encoding bug that prevented `svg` rich output from being displayed.
+  Added `svg` to the collection of rich output formats that are automatically displayed (#53).
+
 * Fixed a bug that prevented Jupyter kernels from being used when the kernel
   name, kernel display name, and kernel language were not all different from
   each other.

@@ -201,7 +201,10 @@ async def exec(session: Session, *, cache_key_path: pathlib.Path, progress: Prog
                             file_name = f'''{cc.options['name']}-{len(cc.rich_output)+1}.{file_extension}'''
                         session.files.append(file_name)
                         ro_path = cache_key_path / file_name
-                        ro_path.write_bytes(base64.b64decode(data))
+                        if file_extension == 'svg':
+                            ro_path.write_text(data, encoding='utf8')
+                        else:
+                            ro_path.write_bytes(base64.b64decode(data))
                         rich_output_files[mime_type] = ro_path.as_posix()
                     cc.rich_output.append(rich_output)
                     rich_output_text = kernel_msg_content['data'].get('text/plain')

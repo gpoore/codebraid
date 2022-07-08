@@ -343,7 +343,7 @@ class Options(dict):
                                    'code_line_numbers': True})
 
     # The defaultdict handles unknown commands that are represented as None
-    _default_rich_output = 'latex|markdown|png|jpg|plain'.split('|')
+    _default_rich_output = 'latex|markdown|png|jpg|svg|plain'.split('|')
     _default_inline_show = collections.defaultdict(lambda: ODict(),  # Unknown -> show nothing
                                                    {'code':  ODict([('code', 'verbatim')]),
                                                     'expr':  ODict([('expr', 'raw'),
