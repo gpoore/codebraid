@@ -342,7 +342,7 @@ class CodeProcessor(object):
             else:
                 origin_name = cc.origin_name
             cc.key = CodeKey(cc.options['lang'], code_collection_name, code_collection_type, origin_name)
-            if cc.options['inherited_lang']:
+            if cc.options['lang'] is None or cc.options['inherited_lang']:
                 cc.options['placeholder_lang'] = f'{placeholder_lang_num}'
                 placeholder_lang_num += 1
             if cc.execute:
