@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import base64
 import collections
+import pathlib
 import queue
 import re
+import subprocess
 import time
-import pathlib
 try:
     import jupyter_client
 except ImportError:
@@ -119,7 +120,7 @@ async def exec(session: Session, *, cache_key_path: pathlib.Path, progress: Prog
 
     kernel_manager = jupyter_client.AsyncKernelManager(kernel_name=kernel_name)
     try:
-        await kernel_manager.start_kernel()
+        await kernel_manager.start_kernel(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except jupyter_client.kernelspec.NoSuchKernel:
         msg = f'No Jupyter kernel was found for "{session.jupyter_kernel}"'
         session.errors.append(message.SysConfigError(msg))

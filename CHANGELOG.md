@@ -47,6 +47,11 @@
 * Fixed an encoding bug that prevented `svg` rich output from being displayed.
   Added `svg` to the collection of rich output formats that are automatically displayed (#53).
 
+* stdout and stderr from Jupyter kernel processes are no longer included in
+  Codebraid's stdout and stderr.  Some kernels such as IJulia write messages
+  to output streams during startup.  This was causing error messages in
+  Codebraid Preview and incorrect documents when Codebraid outputs to stdout.
+
 * Fixed a bug that prevented Jupyter kernels from being used when the kernel
   name, kernel display name, and kernel language were not all different from
   each other.
