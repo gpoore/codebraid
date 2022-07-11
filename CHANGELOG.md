@@ -1,7 +1,7 @@
 # Change Log
 
 
-# v0.10.1 (dev)
+# v0.10.1 (2022-07-11)
 
 * Fixed a bug that prevented multi-file documents from working with input
   formats other than Pandoc's Markdown (`markdown`).
