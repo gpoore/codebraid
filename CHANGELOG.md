@@ -1,7 +1,7 @@
 # Change Log
 
 
-# v0.10.0 (dev)
+# v0.10.0 (2022-07-11)
 
 * Added support for specifying document-wide settings in the YAML metadata.
   Codebraid settings must be under either a `codebraid` or `codebraid_` key in
