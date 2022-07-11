@@ -564,6 +564,12 @@ session is in use).
   defaults to `latex|markdown|png|jpg|svg|plain`.  All others default to
   `verbatim`.
 
+* `example`={bool} — Insert a code block containing the Markdown source of the
+  code chunk, followed by the rest of the output as normal.  This is only
+  valid for inline code if the code is in a paragraph by itself.  This option
+  is currently not compatible with `--only-code-output` and Codebraid Preview.
+  This option is intended primarily for documentation about Codebraid.
+
 #### Copying
 
 * `copy`={chunk name(s)} — Copy one or more named code chunks.  When `copy` is
