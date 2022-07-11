@@ -982,6 +982,7 @@ class PandocConverter(Converter):
                 else:
                     origin_string += '\n\n<!--codebraid.eof-->\n\n'
                 self.origins[origin_name] = origin_string
+        if not pandoc_file_scope and len(self.origins) > 1:
             self.concat_origin_string = ''.join(self.origins.values())
 
         self.from_format_pandoc_extensions = from_format_pandoc_extensions

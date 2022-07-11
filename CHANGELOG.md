@@ -1,6 +1,13 @@
 # Change Log
 
 
+# v0.10.1 (dev)
+
+* Fixed a bug that prevented multi-file documents from working with input
+  formats other than Pandoc's Markdown (`markdown`).
+
+
+
 # v0.10.0 (2022-07-11)
 
 * Added support for specifying document-wide settings in the YAML metadata.
