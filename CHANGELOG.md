@@ -3,6 +3,11 @@
 
 # v0.10.2 (dev)
 
+* Sessions that result in errors are now re-executed during subsequent builds
+  regardless of whether the session code is modified.  Previously,
+  re-execution was only triggered by code modification.  This addresses
+  situations such as import errors due to missing libraries (#57).
+
 * Markup and code can now be displayed `raw`.  Previously, only `verbatim` was
   permitted.
 

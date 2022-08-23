@@ -49,6 +49,7 @@ class CodeProcessor(object):
                  origin_paths_for_cache: Optional[List[pathlib.Path]],
                  codebraid_defaults: CodebraidDefaults,
                  only_code_output: bool,
+                 no_execute: bool,
                  progress: Progress):
         self.code_chunks = code_chunks
         self.cross_origin_sessions = cross_origin_sessions
@@ -64,6 +65,7 @@ class CodeProcessor(object):
         self.codebraid_defaults = codebraid_defaults
         self._only_code_output = only_code_output
         self._progress = progress
+        self._no_execute = no_execute
 
         self._old_cache_index: Optional[Dict] = None
         self._cache_key_path = cache_path / cache_key
@@ -497,6 +499,8 @@ class CodeProcessor(object):
             session_cache = saved_cache['cache'][session.hash]
         except KeyError:
             return False
+        if session_cache['session_status_prevent_exec'] and not self._no_execute:
+            return False
         for msg_name, msg_dict in session_cache['session_errors']:
             session.errors.append(message.message_name_to_class_map[msg_name](**msg_dict))
         for msg_name, msg_dict in session_cache['session_warnings']:
@@ -539,7 +543,7 @@ class CodeProcessor(object):
             'cache': {},
         }
         for session in self._session_hash_root_sets[update_session.hash_root]:
-            if session.status.prevent_caching:
+            if session.status.prevent_caching or (session.needs_exec and not session.did_exec):
                 continue
             session_code_chunks_cache = {}
             for index, chunk in enumerate(session.code_chunks):
@@ -560,6 +564,7 @@ class CodeProcessor(object):
                     # `str(index)` because keys for JSON cache are strings
                     session_code_chunks_cache[str(index)] = chunk_cache
             hash_root_cache['cache'][session.hash] = {
+                'session_status_prevent_exec': session.status.prevent_exec,
                 'session_errors': [(x.type, x.as_dict()) for x in session.errors if x.is_cacheable],
                 'session_warnings': [(x.type, x.as_dict()) for x in session.warnings if x.is_cacheable],
                 'session_files': session.files,

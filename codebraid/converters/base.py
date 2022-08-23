@@ -302,6 +302,7 @@ class Converter(object):
             codebraid_defaults=self.codebraid_defaults,
             progress=self._progress,
             only_code_output=self.only_code_output,
+            no_execute=self.no_execute,
         )
         self.code_processor.process()
 
