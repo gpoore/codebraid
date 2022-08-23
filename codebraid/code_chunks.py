@@ -687,7 +687,7 @@ class Options(dict):
                 if output in ('markup', 'copied_markup', 'code', 'repl'):
                     if format is None:
                         format = 'verbatim'
-                    elif format != 'verbatim':
+                    elif format not in ('verbatim', 'raw'):
                         self.code_chunk.errors.append(message.CanExecSourceError('Invalid "{0}" sub-value "{1}"'.format(key, output_and_format)))
                         continue
                     if output == 'copied_markup' and 'copy' not in self.custom_options:

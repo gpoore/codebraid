@@ -434,13 +434,28 @@ class PandocCodeChunk(CodeChunk):
         unformatted_nodes = []
         for output, format in self.options['show'].items():
             if output in ('markup', 'copied_markup'):
-                unformatted_nodes.append({'t': t_code, 'c': [['', ['markdown'], []], self.layout_output(output, format)]})
+                if format == 'verbatim':
+                    unformatted_nodes.append({'t': t_code, 'c': [['', ['markdown'], []], self.layout_output(output, format)]})
+                elif format == 'raw':
+                    unformatted_nodes.append({'t': t_raw, 'c': ['markdown', self.layout_output(output, format)]})
+                else:
+                    raise ValueError
             elif output == 'code':
-                unformatted_nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]})
+                if format == 'verbatim':
+                    unformatted_nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]})
+                elif format == 'raw':
+                    unformatted_nodes.append({'t': t_raw, 'c': ['markdown', self.layout_output(output, format)]})
+                else:
+                    raise ValueError
             elif output == 'repl':
                 if not self.repl_lines:
                     continue
-                unformatted_nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]})
+                if format == 'verbatim':
+                    unformatted_nodes.append({'t': t_code, 'c': [[self.pandoc_id, self.pandoc_classes, self.pandoc_kvpairs], self.layout_output(output, format)]})
+                elif format == 'raw':
+                    unformatted_nodes.append({'t': t_raw, 'c': ['markdown', self.layout_output(output, format)]})
+                else:
+                    raise ValueError
             elif output in ('expr', 'stdout', 'stderr'):
                 if output == 'stderr' and self.errors.has_stderr:
                     stderr_output_lines = self.stderr_lines.copy()
@@ -642,15 +657,30 @@ class PandocCodeChunk(CodeChunk):
             return output_list
         for output, format in self.options['show'].items():
             if output in ('markup', 'copied_markup'):
-                output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline, classes=['markdown']))
+                if format == 'verbatim':
+                    output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline, classes=['markdown']))
+                elif format == 'raw':
+                    output_list.append(self._as_markdown_included_text(self.layout_output(output, format), inline=self.inline))
+                else:
+                    raise ValueError
             elif output == 'code':
-                output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline,
-                                                          id=self.pandoc_id, classes=self.pandoc_classes, keyval=self.pandoc_kvpairs))
+                if format == 'verbatim':
+                    output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline,
+                                                            id=self.pandoc_id, classes=self.pandoc_classes, keyval=self.pandoc_kvpairs))
+                elif format == 'raw':
+                    output_list.append(self._as_markdown_included_text(self.layout_output(output, format), inline=self.inline))
+                else:
+                    raise ValueError
             elif output == 'repl':
                 if not self.repl_lines:
                     continue
-                output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline,
-                                                          id=self.pandoc_id, classes=self.pandoc_classes, keyval=self.pandoc_kvpairs))
+                if format == 'verbatim':
+                    output_list.append(self._as_markdown_code(self.layout_output(output, format), inline=self.inline,
+                                                            id=self.pandoc_id, classes=self.pandoc_classes, keyval=self.pandoc_kvpairs))
+                elif format == 'raw':
+                    output_list.append(self._as_markdown_included_text(self.layout_output(output, format), inline=self.inline))
+                else:
+                    raise ValueError
             elif output in ('expr', 'stdout', 'stderr'):
                 if output == 'stderr' and self.errors.has_stderr:
                     stderr_output_lines = self.stderr_lines.copy()

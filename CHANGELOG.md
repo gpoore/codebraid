@@ -1,6 +1,13 @@
 # Change Log
 
 
+# v0.10.2 (dev)
+
+* Markup and code can now be displayed `raw`.  Previously, only `verbatim` was
+  permitted.
+
+
+
 # v0.10.1 (2022-07-11)
 
 * Fixed a bug that prevented multi-file documents from working with input
