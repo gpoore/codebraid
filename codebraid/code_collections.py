@@ -175,7 +175,7 @@ class Session(CodeCollection):
         code_chunk.warnings.register_status(self.status)
         first_chunk_options = code_chunk.options['first_chunk_options']
         if code_chunk.index == 0:
-            if any(k.startswith('jupyter') for k in first_chunk_options) or 'jupyter' in self.codebraid_defaults:
+            if any(k.startswith('jupyter') for k in first_chunk_options) or self.codebraid_defaults.get('jupyter'):
                 self.repl = False
                 self.jupyter_kernel = first_chunk_options.get(
                     'jupyter_kernel',

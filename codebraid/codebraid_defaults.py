@@ -34,7 +34,7 @@ _codebraid_defaults_schema: dict[str, tuple[Callable[[str], bool], str]] = {
     'jupyter': (
         lambda x: (
             isinstance(x, bool) or
-            (isinstance(x, dict) and all(k in ('kernel', 'timeout') for k in x) and
+            (isinstance(x, dict) and x and all(k in ('kernel', 'timeout') for k in x) and
                 isinstance(x.get('kernel', ''), str) and isinstance(x.get('timeout', 0), int))
         ),
         'bool, or dict containing "kernel" (string) and/or "timeout" (int)'

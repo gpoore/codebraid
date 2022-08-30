@@ -11,6 +11,9 @@
 * Markup and code can now be displayed `raw`.  Previously, only `verbatim` was
   permitted.
 
+* Fixed a bug that caused Jupyter kernels to be used if there were any
+  Jupyter settings in the YAML metadata, including `jupyter: false`.
+
 
 
 # v0.10.1 (2022-07-11)
