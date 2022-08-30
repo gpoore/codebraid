@@ -1,7 +1,7 @@
 # Change Log
 
 
-# v0.10.2 (dev)
+# v0.10.2 (2022-08-30)
 
 * Sessions that result in errors are now re-executed during subsequent builds
   regardless of whether the session code is modified.  Previously,
