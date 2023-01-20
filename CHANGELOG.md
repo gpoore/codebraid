@@ -1,6 +1,12 @@
 # Change Log
 
 
+# v0.10.3 (2023-01-19)
+
+* Fixed bug in Pandoc version checking for Pandoc 3.0 compatibility.
+
+
+
 # v0.10.2 (2022-08-30)
 
 * Sessions that result in errors are now re-executed during subsequent builds
