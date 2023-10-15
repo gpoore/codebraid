@@ -7,7 +7,8 @@ simple as adding a class to your code blocks' attributes, and then running
 another format.  `codebraid` supports almost all of `pandoc`'s options and
 passes them to `pandoc` internally.  See
 [Codebraid Preview for VS Code](https://marketplace.visualstudio.com/items?itemName=gpoore.codebraid-preview)
-for editor support.
+for editor support.  See the [Codebraid website](https://codebraid.org/) for
+additional examples and documentation.
 
 Codebraid provides two options for executing code.  It includes a built-in
 code execution system that currently supports **Python 3.7+**, **Julia**,
