@@ -99,7 +99,7 @@ stderr by default. This code is compiled in its own session,
 :::
 
 ::: exampleOutput
-`` error[E0277]: cannot add `&str` to `{integer}`  --> <string>:1:7   | 1 |     1 + "a";   |       ^ no implementation for `{integer} + &str`   |   = help: the trait `Add<&str>` is not implemented for `{integer}`  error: aborting due to previous error  For more information about this error, try `rustc --explain E0277`. ``{.stderr
+`` error[E0277]: cannot add `&str` to `{integer}`  --> <string>:1:7   | 1 |     1 + "a";   |       ^ no implementation for `{integer} + &str`   |   = help: the trait `Add<&str>` is not implemented for `{integer}`   = help: the following other types implement trait `Add<Rhs>`:             <isize as Add>             <isize as Add<&isize>>             <i8 as Add>             <i8 as Add<&i8>>             <i16 as Add>             <i16 as Add<&i16>>             <i32 as Add>             <i32 as Add<&i32>>           and 48 others  error: aborting due to previous error  For more information about this error, try `rustc --explain E0277`. ``{.stderr
 .error}
 :::
 :::
@@ -249,6 +249,16 @@ error[E0277]: cannot add-assign `&str` to `{integer}`
    |            ^^ no implementation for `{integer} += &str`
    |
    = help: the trait `AddAssign<&str>` is not implemented for `{integer}`
+   = help: the following other types implement trait `AddAssign<Rhs>`:
+             <isize as AddAssign>
+             <isize as AddAssign<&isize>>
+             <i8 as AddAssign>
+             <i8 as AddAssign<&i8>>
+             <i16 as AddAssign>
+             <i16 as AddAssign<&i16>>
+             <i32 as AddAssign>
+             <i32 as AddAssign<&i32>>
+           and 20 others
 
 error: aborting due to previous error
 

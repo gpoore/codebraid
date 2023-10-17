@@ -57,7 +57,7 @@ that it does not impact other examples.
 :::
 
 ::: exampleOutput
-`Traceback (most recent call last):   File "<string>", line 1, in <module>     1 + "a" TypeError: unsupported operand type(s) for +: 'int' and 'str'`{.stderr
+`Traceback (most recent call last):   File "<string>", line 1, in <module>     1 + "a"     ~~^~~~~ TypeError: unsupported operand type(s) for +: 'int' and 'str'`{.stderr
 .error}
 :::
 :::

@@ -58,7 +58,7 @@ that it does not impact other examples.
 :::
 
 ::: exampleOutput
-`<string>:1 console.logs(1 + 2);         ^  TypeError: console.logs is not a function     at Object.<anonymous> (<string>:1:9)     at Module._compile (node:internal/modules/cjs/loader:1101:14)     at Object.Module._extensions..js (node:internal/modules/cjs/loader:1153:10)     at Module.load (node:internal/modules/cjs/loader:981:32)     at Function.Module._load (node:internal/modules/cjs/loader:822:12)     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:81:12)     at node:internal/main/run_main_module:17:47`{.stderr
+`<string>:1 console.logs(1 + 2);         ^  TypeError: console.logs is not a function     at Object.<anonymous> (<string>:1:9)     at Module._compile (node:internal/modules/cjs/loader:1254:14)     at Module._extensions..js (node:internal/modules/cjs/loader:1308:10)     at Module.load (node:internal/modules/cjs/loader:1117:32)     at Module._load (node:internal/modules/cjs/loader:958:12)     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:81:12)     at node:internal/main/run_main_module:23:47  Node.js v18.15.0`{.stderr
 .error}
 :::
 :::
@@ -155,14 +155,16 @@ x = 1 + ;
         ^
 
 SyntaxError: Unexpected token ';'
-    at Object.compileFunction (node:vm:352:18)
-    at wrapSafe (node:internal/modules/cjs/loader:1031:15)
-    at Module._compile (node:internal/modules/cjs/loader:1065:27)
-    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1153:10)
-    at Module.load (node:internal/modules/cjs/loader:981:32)
-    at Function.Module._load (node:internal/modules/cjs/loader:822:12)
+    at internalCompileFunction (node:internal/vm:73:18)
+    at wrapSafe (node:internal/modules/cjs/loader:1176:20)
+    at Module._compile (node:internal/modules/cjs/loader:1218:27)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1308:10)
+    at Module.load (node:internal/modules/cjs/loader:1117:32)
+    at Module._load (node:internal/modules/cjs/loader:958:12)
     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:81:12)
-    at node:internal/main/run_main_module:17:47
+    at node:internal/main/run_main_module:23:47
+
+Node.js v18.15.0
 ```
 :::
 :::

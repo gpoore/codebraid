@@ -90,7 +90,7 @@ plt.grid()
 ```
 
 ``` stderr
-~\AppData\Local\Temp\ipykernel_9628\293500280.py:1: RuntimeWarning: invalid value encountered in true_divide
+~\AppData\Local\Temp\ipykernel_15472\293500280.py:1: RuntimeWarning: invalid value encountered in divide
   plt.plot(x, np.sin(x)/x, label=r'$\sin(x)/x$')
 ```
 

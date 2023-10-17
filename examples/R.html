@@ -6,77 +6,85 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>Codebraid with R</title>
   <style>
-    code{white-space: pre-wrap;}
-    span.smallcaps{font-variant: small-caps;}
-    span.underline{text-decoration: underline;}
-    div.column{display: inline-block; vertical-align: top; width: 50%;}
-    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
-    ul.task-list{list-style: none;}
-    pre > code.sourceCode { white-space: pre; position: relative; }
-    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
-    pre > code.sourceCode > span:empty { height: 1.2em; }
-    .sourceCode { overflow: visible; }
-    code.sourceCode > span { color: inherit; text-decoration: inherit; }
-    div.sourceCode { margin: 1em 0; }
-    pre.sourceCode { margin: 0; }
-    @media screen {
-    div.sourceCode { overflow: auto; }
-    }
-    @media print {
-    pre > code.sourceCode { white-space: pre-wrap; }
-    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
-    }
-    pre.numberSource code
-      { counter-reset: source-line 0; }
-    pre.numberSource code > span
-      { position: relative; left: -4em; counter-increment: source-line; }
-    pre.numberSource code > span > a:first-child::before
-      { content: counter(source-line);
-        position: relative; left: -1em; text-align: right; vertical-align: baseline;
-        border: none; display: inline-block;
-        -webkit-touch-callout: none; -webkit-user-select: none;
-        -khtml-user-select: none; -moz-user-select: none;
-        -ms-user-select: none; user-select: none;
-        padding: 0 4px; width: 4em;
-        color: #aaaaaa;
-      }
-    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
-    div.sourceCode
-      {   }
-    @media screen {
-    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
-    }
-    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
-    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
-    code span.at { color: #7d9029; } /* Attribute */
-    code span.bn { color: #40a070; } /* BaseN */
-    code span.bu { } /* BuiltIn */
-    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
-    code span.ch { color: #4070a0; } /* Char */
-    code span.cn { color: #880000; } /* Constant */
-    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
-    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
-    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
-    code span.dt { color: #902000; } /* DataType */
-    code span.dv { color: #40a070; } /* DecVal */
-    code span.er { color: #ff0000; font-weight: bold; } /* Error */
-    code span.ex { } /* Extension */
-    code span.fl { color: #40a070; } /* Float */
-    code span.fu { color: #06287e; } /* Function */
-    code span.im { } /* Import */
-    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
-    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
-    code span.op { color: #666666; } /* Operator */
-    code span.ot { color: #007020; } /* Other */
-    code span.pp { color: #bc7a00; } /* Preprocessor */
-    code span.sc { color: #4070a0; } /* SpecialChar */
-    code span.ss { color: #bb6688; } /* SpecialString */
-    code span.st { color: #4070a0; } /* String */
-    code span.va { color: #19177c; } /* Variable */
-    code span.vs { color: #4070a0; } /* VerbatimString */
-    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
-    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
-  </style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
   <style type="text/css">body {display: block;text-align: left;max-width: 40rem;padding-left: 0.5rem;padding-right: 0.5rem;margin: auto;}pre.numberSource a.sourceLine {position: relative;left: -3em;}pre.numberSource a.sourceLine::before{content: attr(title);position: relative;left: -1em;text-align: right;vertical-align: baseline;border: none;pointer-events: all;display: inline-block;-webkit-touch-callout: none;-webkit-user-select: none;-khtml-user-select: none;-moz-user-select: none;-ms-user-select: none;user-select: none;padding: 0 4px;width: 3em;color: #aaaaaa;}pre.numberSource {margin-left: 2em;border-left: 1px solid #aaaaaa;padding-left: 4px;}div.exampleMarkup:before{content: "Markdown";font-family: monospace;display: block;height: 2em;font-size: 150%;}div.exampleMarkup {padding-top: 0.5em;padding-left: 0.5em;padding-right: 0.5em;margin-top: 2em;margin-bottom: 1em;background-color: honeydew;border-style: solid;border-width: 1px;border-color: limegreen;border-radius: 0.2em;}div.exampleOutput:before{content: "Output";font-family: monospace;display: block;font-size: 150%;}div.exampleOutput {color: black;padding-top: 0.5em;padding-left: 0.5em;padding-right: 0.5em;margin-top: 1em;margin-bottom: 2em;background-color: whitesmoke;border-style: solid;border-width: 1px;border-color: lightgray;border-radius: 0.2em;}div.sourceCode {padding: 0.5em;background-color: aliceblue;border-style: solid;border-width: 1px;border-color: lightskyblue;border-radius: 0.2em;}div.exampleOutput div.sourceCode:before{content: "code";font-family: monospace;display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stdout:before{content: "stdout";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stdout {color: black;padding: 0.5em;background-color: azure;border-style: solid;border-width: 1px;border-color: turquoise;border-radius: 0.2em;padding-left: 0.5em;}code.stdout {color: black;background-color: azure;border-style: solid;border-width: 1px;border-color: turquoise;}pre.stderr:before{content: "stderr";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.stderr {color: red;padding: 0.5em;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;border-radius: 0.2em;padding-left: 0.5em;}code.stderr {color: red;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;}pre.error:before{content: "Error";display: block;height: 2em;font-weight: bold;font-size: 120%;}pre.error {color: red;padding: 0.5em;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;border-radius: 0.2em;padding-left: 0.5em;}code.error {color: red;background-color: lavenderblush;border-style: solid;border-width: 1px;border-color: pink;}</style>
   <!--[if lt IE 9]>
     <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
@@ -232,7 +240,7 @@ cat(markdown)
 <span id="cb12-8"><a href="#cb12-8"></a>    <span class="st">&quot;{width=100% max-width=500px}&quot;</span>, <span class="at">sep=</span><span class="st">&quot;&quot;</span>)</span>
 <span id="cb12-9"><a href="#cb12-9"></a><span class="fu">cat</span>(markdown)</span></code></pre></div>
 <figure>
-<img src="data:image/png;base64,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" data-max-width="500px" style="width:100.0%" alt="The function y=\sin(x)" />
+<img src="data:image/png;base64,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" style="width:100.0%" data-max-width="500px" alt="The function y=\sin(x)" />
 <figcaption aria-hidden="true">The function <span class="math inline"><em>y</em> = sin (<em>x</em>)</span></figcaption>
 </figure>
 </div>

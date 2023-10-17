@@ -67,7 +67,7 @@ that it does not impact other examples.
 :::
 
 ::: exampleOutput
-`ERROR: LoadError: MethodError: no method matching +(::Int64, ::String) Closest candidates are:   +(::Any, ::Any, !Matched::Any, !Matched::Any...) at ~\AppData\Local\Programs\Julia\share\julia\base\operators.jl:655   +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at ~\AppData\Local\Programs\Julia\share\julia\base\int.jl:87   +(::Integer, !Matched::Ptr) at ~\AppData\Local\Programs\Julia\share\julia\base\pointer.jl:161   ... Stacktrace:  [1] top-level scope    @ <string>:1 in expression starting at <string>:1`{.stderr
+`ERROR: LoadError: MethodError: no method matching +(::Int64, ::String)  Closest candidates are:   +(::Any, ::Any, !Matched::Any, !Matched::Any...)    @ Base operators.jl:578   +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8}    @ Base int.jl:87   +(::Integer, !Matched::Ptr)    @ Base pointer.jl:169   ...  Stacktrace:  [1] top-level scope    @ <string>:1 in expression starting at <string>:1`{.stderr
 .error}
 :::
 :::
@@ -180,11 +180,16 @@ var += "a"
 
 ``` {.stderr .error}
 ERROR: LoadError: MethodError: no method matching +(::Int64, ::String)
+
 Closest candidates are:
-  +(::Any, ::Any, !Matched::Any, !Matched::Any...) at ~\AppData\Local\Programs\Julia\share\julia\base\operators.jl:655
-  +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8} at ~\AppData\Local\Programs\Julia\share\julia\base\int.jl:87
-  +(::Integer, !Matched::Ptr) at ~\AppData\Local\Programs\Julia\share\julia\base\pointer.jl:161
+  +(::Any, ::Any, !Matched::Any, !Matched::Any...)
+   @ Base operators.jl:578
+  +(::T, !Matched::T) where T<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8}
+   @ Base int.jl:87
+  +(::Integer, !Matched::Ptr)
+   @ Base pointer.jl:169
   ...
+
 Stacktrace:
  [1] top-level scope
    @ source.jl:4
