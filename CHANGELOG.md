@@ -1,6 +1,14 @@
 # Change Log
 
 
+# v0.11.0 (dev)
+
+* Switched packaging to `pyproject.toml`.
+
+* Added support for [GAP](https://www.gap-system.org/) (#51).
+
+
+
 # v0.10.3 (2023-01-19)
 
 * Fixed bug in Pandoc version checking for Pandoc 3.0 compatibility.

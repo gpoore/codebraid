@@ -1,0 +1,67 @@
+[build-system]
+requires = ['setuptools']
+
+
+[project]
+name = 'codebraid'
+description = 'Live code in Pandoc Markdown'
+readme = 'README.md'
+requires-python = '>= 3.7'
+authors = [
+    {name = 'Geoffrey M. Poore', email = 'gpoore@gmail.com'}
+]
+license = {file = 'LICENSE.txt'}
+dynamic = ['version']
+keywords = [
+    'dynamic documents',
+    'reproducible research',
+    'notebook',
+    'markdown',
+    'pandoc',
+    'LaTeX'
+]
+dependencies = [
+    'bespon >= 0.7.0',
+]
+# https://pypi.python.org/pypi?:action=list_classifiers
+classifiers = [
+    'Development Status :: 4 - Beta',
+    'Programming Language :: Python',
+    'Environment :: Console',
+    'Intended Audience :: Developers',
+    'Intended Audience :: Education',
+    'Intended Audience :: Science/Research',
+    'License :: OSI Approved :: BSD License',
+    'Operating System :: OS Independent',
+    'Topic :: Documentation',
+    'Topic :: Education',
+    'Topic :: Software Development',
+    'Topic :: Software Development :: Build Tools',
+    'Topic :: Software Development :: Documentation',
+    'Topic :: Text Processing',
+    'Topic :: Text Processing :: Markup',
+]
+
+
+[project.urls]
+homepage = 'https://codebraid.org/'
+repository = 'http://github.com/gpoore/codebraid'
+changelog = 'https://github.com/gpoore/codebraid/blob/master/CHANGELOG.md'
+
+
+[project.scripts]
+codebraid = 'codebraid.cmdline:main'
+
+
+[tool.setuptools]
+license-files = ['LICENSE*', 'CHANGELOG*']
+
+[tool.setuptools.dynamic]
+version = {attr = 'codebraid.__version__'}
+
+[tool.setuptools.package-data]
+'*' = ['*.bespon']
+
+
+[tool.ruff]
+line-length = 120
