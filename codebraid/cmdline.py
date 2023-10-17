@@ -14,8 +14,11 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import pathlib
 import sys
+# ruff: noqa: E402
+os.environ['PYDEVD_DISABLE_FILE_VALIDATION'] = '1'
 from . import converters
 from . import err
 from . import util

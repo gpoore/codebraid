@@ -3,6 +3,10 @@
 
 # v0.11.0 (dev)
 
+* Python 3.11 compatibility:  set `PYDEVD_DISABLE_FILE_VALIDATION=1` at
+  beginning of command-line application to prevent debugger frozen modules
+  warning.
+
 * Switched packaging to `pyproject.toml`.
 
 * Added support for [GAP](https://www.gap-system.org/) (#51).
