@@ -285,6 +285,7 @@ PANDOC_OPTIONS  = {
     '--resource-path': 1,
     '--request-header': 1,
     '--abbreviations': 1,
+    '--embed-resources': 0,
     '--self-contained': 0,
     '--html-q-tags': 0,
     '--ascii': 0,

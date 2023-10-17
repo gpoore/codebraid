@@ -3,6 +3,8 @@
 
 # v0.11.0 (dev)
 
+* Added support for Pandoc option `--embed-resources`.
+
 * Python 3.11 compatibility:  set `PYDEVD_DISABLE_FILE_VALIDATION=1` at
   beginning of command-line application to prevent debugger frozen modules
   warning.

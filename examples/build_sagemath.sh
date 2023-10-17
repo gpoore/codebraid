@@ -1,1 +1,1 @@
-codebraid pandoc -f markdown -t html --overwrite --standalone --self-contained --css example.css -o sagemath.html sagemath.cbmd
+codebraid pandoc -f markdown -t html --overwrite --standalone --embed-resources --css example.css -o sagemath.html sagemath.cbmd
