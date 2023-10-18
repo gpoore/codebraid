@@ -1,7 +1,7 @@
 # Change Log
 
 
-# v0.11.0 (dev)
+# v0.11.0 (2023-10-17)
 
 * Added support for Pandoc option `--embed-resources`.
 
